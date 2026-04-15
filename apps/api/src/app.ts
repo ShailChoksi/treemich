@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import Fastify from "fastify";
+import Fastify, { type FastifyReply } from "fastify";
 import { ZodError } from "zod";
 import { ImmichAuthenticationError } from "./integrations/immich/client.js";
 import { readCookie } from "./auth/request.js";
@@ -37,11 +37,26 @@ const isPrismaKnownRequestError = (error: unknown): error is { code: string; mes
   );
 };
 
+const hasStatusCode = (error: unknown): error is { statusCode: number; message: string } => {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as { statusCode?: unknown; message?: unknown };
+  return typeof candidate.statusCode === "number" && typeof candidate.message === "string";
+};
+
 const prismaStatusByCode: Record<string, number> = {
   P2002: 400,
   P2003: 409,
   P2025: 404
 };
+
+const sendAuthError = (reply: FastifyReply, error: TreemichAuthError | ImmichAuthenticationError) =>
+  reply.code(error.statusCode).send({
+    statusCode: error.statusCode,
+    error: error.message
+  });
 
 export const buildApp = (options: BuildAppOptions = {}) => {
   const app = Fastify({ logger: true });
@@ -76,7 +91,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
       request.auth = await app.services.authService.requireSession(readCookie(request));
     } catch (error) {
       if (error instanceof TreemichAuthError) {
-        return reply.code(error.statusCode).send({ error: error.message });
+        return sendAuthError(reply, error);
       }
       throw error;
     }
@@ -110,6 +125,10 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     }
 
     if (error instanceof TreemichAuthError || error instanceof ImmichAuthenticationError) {
+      return sendAuthError(reply, error);
+    }
+
+    if (hasStatusCode(error)) {
       return reply.code(error.statusCode).send({
         statusCode: error.statusCode,
         error: error.message

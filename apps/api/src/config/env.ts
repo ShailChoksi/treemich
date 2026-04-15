@@ -6,7 +6,6 @@ import { z } from "zod";
 
 const envFilePath = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../.env");
 config({ path: envFilePath });
-config();
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),

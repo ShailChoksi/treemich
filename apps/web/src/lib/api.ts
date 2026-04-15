@@ -1,19 +1,29 @@
 import type {
+  AuthState,
+  AuthUser,
   GenderValue as Gender,
   ImmichPerson as SharedImmichPerson,
+  LinkStatus,
   PhotoCluster,
   PhotoCooccurrenceEdge,
   PhotoCooccurrenceResponse,
   RelationshipRecord,
-  RelationshipType
+  RelationshipType,
+  SearchRelationshipsResponse,
+  TreemichPersonProfile
 } from "@treemich/shared";
 export type {
+  AuthState,
+  AuthUser,
   Gender,
+  LinkStatus,
   PhotoCluster,
   PhotoCooccurrenceEdge,
   PhotoCooccurrenceResponse,
   RelationshipRecord,
-  RelationshipType
+  RelationshipType,
+  SearchRelationshipsResponse,
+  TreemichPersonProfile
 };
 
 const treemichApi = import.meta.env.VITE_TREEMICH_API_URL ?? "/api";
@@ -25,49 +35,6 @@ export type ImmichPerson = SharedImmichPerson & {
   name: string;
   profile?: TreemichPersonProfile | null;
   hasRelationship?: boolean;
-};
-
-export type TreemichPersonProfile = {
-  immichPersonId: string;
-  gender: Gender;
-  birthDateOverride?: string | null;
-};
-
-export type AuthUser = {
-  id: string;
-  immichUserId: string;
-  email: string;
-  name: string;
-};
-
-export type LinkStatus = {
-  linked: boolean;
-  immichBaseUrl?: string;
-  immichEmail?: string;
-  immichName?: string;
-};
-
-export type AuthState = {
-  authenticated: boolean;
-  user?: AuthUser;
-  linkStatus?: LinkStatus;
-};
-
-type SearchMatch = {
-  person: ImmichPerson;
-  profile?: TreemichPersonProfile | null;
-};
-
-export type SearchRelationshipsResponse = {
-  parsed?: {
-    intent: string;
-    sourceName: string;
-    requiredGender?: "MALE" | "FEMALE";
-    relationshipType: RelationshipType;
-  };
-  sourceCandidates?: ImmichPerson[];
-  matches?: SearchMatch[];
-  message?: string;
 };
 
 const sleep = (delayMs: number) => new Promise((resolve) => window.setTimeout(resolve, delayMs));

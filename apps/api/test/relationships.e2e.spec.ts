@@ -300,7 +300,52 @@ describe("Treemich API routes", () => {
     expect(response.headers["set-cookie"]).toContain("treemich_session=session-token");
   });
 
-  it("requires auth for protected routes but still bypasses /health", async () => {
+  it("rate limits auth/login more strictly than the global API limit", async () => {
+    loginWithImmichMock.mockResolvedValue({
+      sessionToken: "session-token",
+      state: {
+        authenticated: true,
+        user: {
+          id: "user-1",
+          immichUserId: "immich-user-1",
+          email: "mike@example.com",
+          name: "Mike"
+        },
+        linkStatus: {
+          linked: true,
+          immichBaseUrl: "http://localhost:2283/api",
+          immichEmail: "mike@example.com",
+          immichName: "Mike"
+        }
+      }
+    });
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/auth/login",
+        payload: {
+          email: "mike@example.com",
+          password: "secret"
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+    }
+
+    const rateLimitedResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        email: "mike@example.com",
+        password: "secret"
+      }
+    });
+
+    expect(rateLimitedResponse.statusCode).toBe(429);
+  });
+
+  it("requires auth for protected routes with a consistent error shape but still bypasses /health", async () => {
     const { TreemichAuthError } = await import("../src/auth/service.js");
     requireSessionMock.mockRejectedValueOnce(new TreemichAuthError("Unauthorized"));
 
@@ -309,6 +354,10 @@ describe("Treemich API routes", () => {
       url: "/people"
     });
     expect(protectedResponse.statusCode).toBe(401);
+    expect(protectedResponse.json()).toEqual({
+      statusCode: 401,
+      error: "Unauthorized"
+    });
 
     const healthResponse = await app.inject({
       method: "GET",

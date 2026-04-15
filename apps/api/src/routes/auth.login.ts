@@ -7,11 +7,24 @@ const bodySchema = z.object({
   password: z.string().min(1)
 });
 
+const loginRateLimit = {
+  max: 5,
+  timeWindow: 60_000
+} as const;
+
 export const registerAuthLoginRoute = (app: FastifyInstance) => {
-  app.post("/auth/login", async (request, reply) => {
-    const body = bodySchema.parse(request.body);
-    const result = await app.services.authService.loginWithImmich(body.email, body.password);
-    setSessionCookie(reply, result.sessionToken);
-    return reply.code(200).send(result.state);
-  });
+  app.post(
+    "/auth/login",
+    {
+      config: {
+        rateLimit: loginRateLimit
+      }
+    },
+    async (request, reply) => {
+      const body = bodySchema.parse(request.body);
+      const result = await app.services.authService.loginWithImmich(body.email, body.password);
+      setSessionCookie(reply, result.sessionToken);
+      return reply.code(200).send(result.state);
+    }
+  );
 };

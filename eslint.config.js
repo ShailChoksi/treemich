@@ -8,6 +8,16 @@ module.exports = [
   },
   js.configs.recommended,
   {
+    files: ["eslint.config.js"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: {
+        module: "readonly",
+        require: "readonly"
+      }
+    }
+  },
+  {
     files: ["**/*.ts", "**/*.tsx"],
     languageOptions: {
       parser: tsParser,
@@ -18,7 +28,8 @@ module.exports = [
       "@typescript-eslint": tsPlugin
     },
     rules: {
-      ...tsPlugin.configs.recommended.rules
+      ...tsPlugin.configs.recommended.rules,
+      "no-undef": "off"
     }
   }
 ];
