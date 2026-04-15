@@ -106,29 +106,36 @@ export const PeopleGraph3D = ({
   });
   useGraphLifecycle({ thumbnailNodeIds, selectedPersonId, onSelectedPersonChange });
 
-  const { searchTerm, setSearchTerm, searchFeedback, setSearchFeedback, handleSearchSubmit } = useGraphSearch(
-    {
-      people,
-      focusPersonRequest,
-      setSelectedPersonId,
-      setFocusPersonId,
-      setPinnedPersonId,
-      setHoveredPersonId,
-      onSearchFallback: async (query) => {
-        const response = await searchRelationships(query);
-        const firstMatch = response.matches?.[0]?.person;
-        if (!firstMatch) {
-          return null;
-        }
-
-        return {
-          personId: firstMatch.id,
-          personName: firstMatch.name,
-          feedback: response.message ?? `Focused ${firstMatch.name} from search`
-        };
+  const {
+    searchTerm,
+    setSearchTerm,
+    searchFeedback,
+    setSearchFeedback,
+    highlightedPersonIds,
+    clearHighlights,
+    handleSearchSubmit
+  } = useGraphSearch({
+    people,
+    focusPersonRequest,
+    setSelectedPersonId,
+    setFocusPersonId,
+    setPinnedPersonId,
+    setHoveredPersonId,
+    onSearchFallback: async (query) => {
+      const response = await searchRelationships(query);
+      const allMatches = response.matches ?? [];
+      if (allMatches.length === 0) {
+        return null;
       }
+
+      const names = allMatches.map((m) => m.person.name);
+      const feedback = `Found ${allMatches.length} result${allMatches.length === 1 ? "" : "s"}: ${names.join(", ")}`;
+      return {
+        matches: allMatches.map((m) => ({ personId: m.person.id, personName: m.person.name })),
+        feedback: response.message ?? feedback
+      };
     }
-  );
+  });
   const { frameAllNodes, focusActiveNode, topDownView } = useGraphCameraControls({
     graphBounds,
     visiblePositionsById,
@@ -182,6 +189,7 @@ export const PeopleGraph3D = ({
       return;
     }
     clearSelection();
+    clearHighlights();
     setHoveredPersonId(null);
   };
 
@@ -228,6 +236,7 @@ export const PeopleGraph3D = ({
   const handleClearSearch = () => {
     setSearchTerm("");
     setSearchFeedback(null);
+    clearHighlights();
   };
 
   return (
@@ -267,6 +276,7 @@ export const PeopleGraph3D = ({
             selectedPersonId={selectedPersonId}
             showNodeActionButtons={!addRelativeIntent}
             hoveredPersonId={hoveredPersonId}
+            highlightedPersonIds={highlightedPersonIds}
             thumbnailNodeIds={thumbnailNodeIds}
             setHoveredPersonId={setHoveredPersonId}
             onNodeClick={handleNodeClick}

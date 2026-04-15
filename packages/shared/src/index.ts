@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { InterpreterIntent } from "./search/interpreter.js";
+import type { AgeFilter, InterpreterIntent } from "./search/interpreter.js";
 
 export const relationshipTypes = ["PARENT_OF", "CHILD_OF", "SPOUSE_OF", "SIBLING_OF"] as const;
 export type RelationshipType = (typeof relationshipTypes)[number];
@@ -74,7 +74,8 @@ export type SearchRelationshipsResponse = {
     intent: InterpreterIntent;
     sourceName: string;
     requiredGender?: "MALE" | "FEMALE";
-    relationshipType: RelationshipType;
+    hops: RelationshipType[];
+    ageFilter?: AgeFilter;
   };
   sourceCandidates?: ImmichPerson[];
   matches?: Array<{

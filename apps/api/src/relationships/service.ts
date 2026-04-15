@@ -1,4 +1,5 @@
 import { Gender, RelationshipType, type PersonProfile, type Relationship } from "@prisma/client";
+import type { RelationshipType as SharedRelationshipType } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import type { ImmichClient } from "../integrations/immich/client.js";
 import {
@@ -157,6 +158,23 @@ export class RelationshipService {
         type: relationshipType
       }
     });
+  }
+
+  async traverseRelationshipChain(
+    userId: string,
+    sourcePersonIds: string[],
+    hops: SharedRelationshipType[]
+  ): Promise<string[]> {
+    let currentIds = sourcePersonIds;
+    for (const hop of hops) {
+      const rows = await this.findTargetsByRelationship(userId, currentIds, hop as RelationshipType);
+      currentIds = [...new Set(rows.map((r) => r.fromPersonId))];
+      if (currentIds.length === 0) {
+        break;
+      }
+    }
+    const sourceSet = new Set(sourcePersonIds);
+    return currentIds.filter((id) => !sourceSet.has(id));
   }
 
   async getProfilesForPersonIds(userId: string, personIds: string[]) {

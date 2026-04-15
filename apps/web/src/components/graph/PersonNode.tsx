@@ -30,6 +30,7 @@ export type PersonNodeProps = {
   person: ImmichPerson;
   isSelected: boolean;
   isHovered: boolean;
+  isHighlighted: boolean;
   onClick: () => void;
   onHover: (hovered: boolean) => void;
 };
@@ -41,7 +42,21 @@ const truncateName = (name: string, maxLength = 22) => {
   return `${name.slice(0, maxLength - 1)}...`;
 };
 
-export const PersonNode = ({ person, isSelected, isHovered, onClick, onHover }: PersonNodeProps) => {
+const ringColor = (isSelected: boolean, isHovered: boolean, isHighlighted: boolean) => {
+  if (isSelected) return "#22d3ee";
+  if (isHighlighted) return "#a78bfa";
+  if (isHovered) return "#93c5fd";
+  return "#64748b";
+};
+
+export const PersonNode = ({
+  person,
+  isSelected,
+  isHovered,
+  isHighlighted,
+  onClick,
+  onHover
+}: PersonNodeProps) => {
   const thumbnailUrl = useMemo(() => personThumbnailUrl(person.id), [person.id]);
   const texture = useTexture(thumbnailUrl);
   useEffect(() => {
@@ -50,29 +65,29 @@ export const PersonNode = ({ person, isSelected, isHovered, onClick, onHover }: 
 
   return (
     <Billboard>
-      {isSelected ? (
+      {isSelected || isHighlighted ? (
         <mesh position={[0, 0, -0.04]} scale={1.16}>
           <circleGeometry args={[0.82, 28]} />
-          <meshBasicMaterial color="#22d3ee" transparent opacity={0.12} />
+          <meshBasicMaterial color={isSelected ? "#22d3ee" : "#a78bfa"} transparent opacity={0.12} />
         </mesh>
       ) : null}
       <mesh
         onClick={onClick}
         onPointerOver={() => onHover(true)}
         onPointerOut={() => onHover(false)}
-        scale={isSelected ? 1.08 : isHovered ? 0.86 : 0.82}
+        scale={isSelected ? 1.08 : isHighlighted ? 0.9 : isHovered ? 0.86 : 0.82}
       >
         <circleGeometry args={[0.72, 20]} />
         <meshBasicMaterial map={texture} />
       </mesh>
       <mesh position={[0, 0, -0.02]}>
-        <ringGeometry args={[0.75, isSelected ? 0.88 : 0.82, 20]} />
-        <meshBasicMaterial color={isSelected ? "#22d3ee" : isHovered ? "#93c5fd" : "#64748b"} />
+        <ringGeometry args={[0.75, isSelected ? 0.88 : isHighlighted ? 0.86 : 0.82, 20]} />
+        <meshBasicMaterial color={ringColor(isSelected, isHovered, isHighlighted)} />
       </mesh>
       <Text
         position={[0, -1.05, 0]}
         fontSize={isSelected ? 0.23 : 0.21}
-        color={isSelected ? "#f8fafc" : "#e2e8f0"}
+        color={isSelected ? "#f8fafc" : isHighlighted ? "#c4b5fd" : "#e2e8f0"}
         anchorX="center"
         anchorY="middle"
         outlineWidth={0.012}
@@ -84,31 +99,38 @@ export const PersonNode = ({ person, isSelected, isHovered, onClick, onHover }: 
   );
 };
 
-export const PersonNodeFallback = ({ person, isSelected, isHovered, onClick, onHover }: PersonNodeProps) => (
+export const PersonNodeFallback = ({
+  person,
+  isSelected,
+  isHovered,
+  isHighlighted,
+  onClick,
+  onHover
+}: PersonNodeProps) => (
   <Billboard>
-    {isSelected ? (
+    {isSelected || isHighlighted ? (
       <mesh position={[0, 0, -0.04]} scale={1.16}>
         <circleGeometry args={[0.82, 20]} />
-        <meshBasicMaterial color="#22d3ee" transparent opacity={0.12} />
+        <meshBasicMaterial color={isSelected ? "#22d3ee" : "#a78bfa"} transparent opacity={0.12} />
       </mesh>
     ) : null}
     <mesh
       onClick={onClick}
       onPointerOver={() => onHover(true)}
       onPointerOut={() => onHover(false)}
-      scale={isSelected ? 1.08 : isHovered ? 0.86 : 0.82}
+      scale={isSelected ? 1.08 : isHighlighted ? 0.9 : isHovered ? 0.86 : 0.82}
     >
       <circleGeometry args={[0.72, 16]} />
-      <meshBasicMaterial color={isSelected ? "#22d3ee" : isHovered ? "#93c5fd" : "#64748b"} />
+      <meshBasicMaterial color={ringColor(isSelected, isHovered, isHighlighted)} />
     </mesh>
     <mesh position={[0, 0, -0.02]}>
-      <ringGeometry args={[0.75, isSelected ? 0.88 : 0.82, 16]} />
-      <meshBasicMaterial color={isSelected ? "#22d3ee" : isHovered ? "#93c5fd" : "#64748b"} />
+      <ringGeometry args={[0.75, isSelected ? 0.88 : isHighlighted ? 0.86 : 0.82, 16]} />
+      <meshBasicMaterial color={ringColor(isSelected, isHovered, isHighlighted)} />
     </mesh>
     <Text
       position={[0, -1.05, 0]}
       fontSize={isSelected ? 0.23 : 0.21}
-      color={isSelected ? "#f8fafc" : "#e2e8f0"}
+      color={isSelected ? "#f8fafc" : isHighlighted ? "#c4b5fd" : "#e2e8f0"}
       anchorX="center"
       anchorY="middle"
       outlineWidth={0.012}
