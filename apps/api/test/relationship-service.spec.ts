@@ -92,6 +92,43 @@ describe("RelationshipService", () => {
     });
   });
 
+  it("creates symmetric direct and inverse records for friend relationships", async () => {
+    relationshipUpsertMock
+      .mockResolvedValueOnce({ id: "friend-direct-id" })
+      .mockResolvedValueOnce({ id: "friend-inverse-id" });
+
+    const { RelationshipService } = await import("../src/relationships/service.js");
+    const service = new RelationshipService();
+    const result = await service.upsertRelationship("user-1", "p1", "p2", "FRIEND_OF");
+
+    expect(relationshipUpsertMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        create: expect.objectContaining({
+          userId: "user-1",
+          fromPersonId: "p1",
+          toPersonId: "p2",
+          type: "FRIEND_OF"
+        })
+      })
+    );
+    expect(relationshipUpsertMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        create: expect.objectContaining({
+          userId: "user-1",
+          fromPersonId: "p2",
+          toPersonId: "p1",
+          type: "FRIEND_OF"
+        })
+      })
+    );
+    expect(result).toEqual({
+      direct: { id: "friend-direct-id" },
+      inverse: { id: "friend-inverse-id" }
+    });
+  });
+
   it("deletes direct and inverse edges for a typed delete", async () => {
     relationshipDeleteManyMock.mockResolvedValue({ count: 2 });
 

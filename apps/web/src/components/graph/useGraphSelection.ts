@@ -1,32 +1,38 @@
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 
 type UseGraphSelectionOptions = {
   selectedPersonId: string | null;
   setFocusPersonId: (personId: string | null) => void;
   setPinnedPersonId: (personId: string | null) => void;
+  onSelectedPersonChange?: (personId: string | null) => void;
 };
 
 export const useGraphSelection = ({
-  selectedPersonId: controlledSelectedPersonId,
+  selectedPersonId,
   setFocusPersonId,
-  setPinnedPersonId
+  setPinnedPersonId,
+  onSelectedPersonChange
 }: UseGraphSelectionOptions) => {
-  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(controlledSelectedPersonId);
+  const setSelectedPersonId = useCallback(
+    (personId: string | null) => {
+      onSelectedPersonChange?.(personId);
+    },
+    [onSelectedPersonChange]
+  );
 
-  useEffect(() => {
-    setSelectedPersonId(controlledSelectedPersonId);
-  }, [controlledSelectedPersonId]);
-
-  const clearSelection = () => {
-    setSelectedPersonId(null);
+  const clearSelection = useCallback(() => {
+    onSelectedPersonChange?.(null);
     setPinnedPersonId(null);
-  };
+  }, [onSelectedPersonChange, setPinnedPersonId]);
 
-  const handleNodeClick = (clickedPersonId: string) => {
-    setSelectedPersonId(clickedPersonId);
-    setFocusPersonId(clickedPersonId);
-    setPinnedPersonId(null);
-  };
+  const handleNodeClick = useCallback(
+    (clickedPersonId: string) => {
+      onSelectedPersonChange?.(clickedPersonId);
+      setFocusPersonId(clickedPersonId);
+      setPinnedPersonId(null);
+    },
+    [onSelectedPersonChange, setFocusPersonId, setPinnedPersonId]
+  );
 
   return {
     selectedPersonId,

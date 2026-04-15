@@ -89,6 +89,7 @@ export class ImmichClient {
   private readonly thumbnailCacheTtlMs = 10 * 60_000;
   private readonly maxThumbnailCacheEntries = 1000;
   private readonly metadataPageSize = 1000;
+  private readonly metadataRequestConcurrency = 3;
   private thumbnailCache = new Map<
     string,
     {
@@ -202,9 +203,33 @@ export class ImmichClient {
   }
 
   async listAssetsWithPeople(maxAssets = 50_000): Promise<ImmichAssetPeople[]> {
-    const allItems: unknown[] = [];
-    let page = 1;
-    while (allItems.length < maxAssets) {
+    const itemsByPage = new Map<number, unknown[]>();
+    const queuedPages = new Set<number>([1]);
+    const fetchedPages = new Set<number>();
+    const pageQueue: number[] = [1];
+    let bufferedItemCount = 0;
+    let queueIndex = 0;
+    let reachedTerminalPage = false;
+
+    const resolveNextPage = (currentPage: number, nextPageCandidate: string | number | null | undefined) => {
+      if (typeof nextPageCandidate === "number" && Number.isFinite(nextPageCandidate)) {
+        return nextPageCandidate > currentPage ? nextPageCandidate : null;
+      }
+      if (typeof nextPageCandidate === "string") {
+        const normalized = nextPageCandidate.trim();
+        if (!normalized) {
+          return null;
+        }
+        const numeric = Number.parseInt(normalized, 10);
+        if (!Number.isFinite(numeric)) {
+          return null;
+        }
+        return numeric > currentPage ? numeric : null;
+      }
+      return null;
+    };
+
+    const fetchPage = async (page: number) => {
       const body = {
         page,
         size: this.metadataPageSize,
@@ -222,22 +247,47 @@ export class ImmichClient {
 
       const json = (await response.json()) as ImmichAssetPeoplePageResponse;
       const pageItems = json.assets?.items ?? [];
-      allItems.push(...pageItems);
+      fetchedPages.add(page);
+      if (pageItems.length === 0) {
+        reachedTerminalPage = true;
+        return;
+      }
+
+      itemsByPage.set(page, pageItems);
+      bufferedItemCount += pageItems.length;
+      if (bufferedItemCount >= maxAssets) {
+        return;
+      }
 
       const nextPageCandidate = json.assets?.nextPage ?? json.nextPage;
-      const hasNumericNextPage = typeof nextPageCandidate === "number" && Number.isFinite(nextPageCandidate);
-      const hasStringNextPage = typeof nextPageCandidate === "string" && nextPageCandidate.trim().length > 0;
-      if (pageItems.length === 0 || (!hasNumericNextPage && !hasStringNextPage)) {
-        break;
+      const nextPage = resolveNextPage(page, nextPageCandidate);
+      if (nextPage === null) {
+        reachedTerminalPage = true;
+        return;
       }
-
-      if (hasNumericNextPage) {
-        page = nextPageCandidate;
-        continue;
+      if (queuedPages.has(nextPage) || fetchedPages.has(nextPage)) {
+        return;
       }
+      queuedPages.add(nextPage);
+      pageQueue.push(nextPage);
+    };
 
-      page += 1;
-    }
+    const workers = Array.from({ length: this.metadataRequestConcurrency }, async () => {
+      while (queueIndex < pageQueue.length && bufferedItemCount < maxAssets && !reachedTerminalPage) {
+        const page = pageQueue[queueIndex];
+        queueIndex += 1;
+        if (page === undefined) {
+          continue;
+        }
+        await fetchPage(page);
+      }
+    });
+    await Promise.all(workers);
+
+    const allItems = [...itemsByPage.entries()]
+      .sort(([leftPage], [rightPage]) => leftPage - rightPage)
+      .flatMap(([, items]) => items)
+      .slice(0, maxAssets);
 
     return allItems
       .map((item) => this.toAssetPeople(item))

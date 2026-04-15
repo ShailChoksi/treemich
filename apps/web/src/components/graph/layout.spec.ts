@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
-import { getLastNameKey, hashToNumber, positionPeople } from "./layout";
+import { buildParentChildIndex, getLastNameKey, hashToNumber, positionPeople } from "./layout";
 
 const getPositionById = (
   people: ImmichPerson[],
@@ -29,6 +29,25 @@ describe("layout utilities", () => {
     expect(getLastNameKey("  Anna   Marie Smith   ")).toBe("smith");
     expect(getLastNameKey("Anna")).toBe("_unknown");
     expect(getLastNameKey("")).toBe("_unknown");
+  });
+
+  it("buildParentChildIndex normalizes and deduplicates parent-child edges", () => {
+    const relationships: RelationshipRecord[] = [
+      { fromPersonId: "p1", toPersonId: "c1", type: "PARENT_OF" },
+      { fromPersonId: "c1", toPersonId: "p1", type: "CHILD_OF" },
+      { fromPersonId: "p2", toPersonId: "c1", type: "PARENT_OF" }
+    ];
+
+    const index = buildParentChildIndex(relationships);
+    expect(index.edges).toEqual(
+      expect.arrayContaining([
+        { parentId: "p1", childId: "c1" },
+        { parentId: "p2", childId: "c1" }
+      ])
+    );
+    expect(index.edges).toHaveLength(2);
+    expect(index.parentsByChild.get("c1")).toEqual(new Set(["p1", "p2"]));
+    expect(index.childrenByParent.get("p1")).toEqual(new Set(["c1"]));
   });
 });
 
@@ -106,6 +125,35 @@ describe("positionPeople", () => {
     expect(Math.abs(a![0] - b![0]) + Math.abs(a![2] - b![2])).toBeGreaterThan(1);
   });
 
+  it("spreads disconnected families apart in generation view", () => {
+    const people: ImmichPerson[] = [
+      { id: "p1", name: "Parent 1" },
+      { id: "c1", name: "Child 1" },
+      { id: "p2", name: "Parent 2" },
+      { id: "c2", name: "Child 2" },
+      { id: "p3", name: "Parent 3" },
+      { id: "c3", name: "Child 3" },
+      { id: "p4", name: "Parent 4" },
+      { id: "c4", name: "Child 4" },
+      { id: "p5", name: "Parent 5" },
+      { id: "c5", name: "Child 5" }
+    ];
+    const relationships: RelationshipRecord[] = [
+      { fromPersonId: "p1", toPersonId: "c1", type: "PARENT_OF" },
+      { fromPersonId: "p2", toPersonId: "c2", type: "PARENT_OF" },
+      { fromPersonId: "p3", toPersonId: "c3", type: "PARENT_OF" },
+      { fromPersonId: "p4", toPersonId: "c4", type: "PARENT_OF" },
+      { fromPersonId: "p5", toPersonId: "c5", type: "PARENT_OF" }
+    ];
+
+    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const parentSlots = ["p1", "p2", "p3", "p4", "p5"].map((id) => {
+      const position = positions.get(id);
+      return position ? `${position[0].toFixed(3)}|${position[2].toFixed(3)}` : "missing";
+    });
+    expect(new Set(parentSlots).size).toBe(5);
+  });
+
   it("positions a single person with finite coordinates", () => {
     const people: ImmichPerson[] = [{ id: "solo", name: "Solo Person" }];
     const positions = getPositionById(people, []);
@@ -139,6 +187,37 @@ describe("positionPeople", () => {
     expect(b).toBeDefined();
     expect(c).toBeDefined();
     expect(distance(a!, b!)).toBeLessThan(distance(a!, c!));
+  });
+
+  it("keeps bottom-generation nodes spaced enough to remain clickable", () => {
+    const people: ImmichPerson[] = [
+      { id: "mom", name: "Mary Family" },
+      { id: "dad", name: "Dan Family" },
+      { id: "child1", name: "Alex Family" },
+      { id: "child2", name: "Blair Family" },
+      { id: "child3", name: "Casey Family" },
+      { id: "child4", name: "Devon Family" }
+    ];
+    const relationships: RelationshipRecord[] = [
+      { fromPersonId: "mom", toPersonId: "dad", type: "SPOUSE_OF" },
+      { fromPersonId: "mom", toPersonId: "child1", type: "PARENT_OF" },
+      { fromPersonId: "mom", toPersonId: "child2", type: "PARENT_OF" },
+      { fromPersonId: "mom", toPersonId: "child3", type: "PARENT_OF" },
+      { fromPersonId: "dad", toPersonId: "child1", type: "PARENT_OF" },
+      { fromPersonId: "dad", toPersonId: "child2", type: "PARENT_OF" },
+      { fromPersonId: "dad", toPersonId: "child4", type: "PARENT_OF" }
+    ];
+
+    const positions = getPositionById(people, relationships);
+    const children = ["child1", "child2", "child3", "child4"]
+      .map((id) => positions.get(id))
+      .filter((position): position is [number, number, number] => Boolean(position));
+
+    expect(children).toHaveLength(4);
+    const uniqueXY = new Set(
+      children.map((position) => `${position[0].toFixed(3)}|${position[1].toFixed(3)}`)
+    );
+    expect(uniqueXY.size).toBe(children.length);
   });
 
   it("places people not present in cluster payload", () => {

@@ -14,7 +14,9 @@ const inverseMapping: Record<RelationshipType, RelationshipType> = {
   CHILD_OF: "PARENT_OF",
   PARENT_OF: "CHILD_OF",
   SIBLING_OF: "SIBLING_OF",
-  SPOUSE_OF: "SPOUSE_OF"
+  SPOUSE_OF: "SPOUSE_OF",
+  FRIEND_OF: "FRIEND_OF",
+  PET_OF: "PET_OF"
 };
 
 export class RelationshipService {

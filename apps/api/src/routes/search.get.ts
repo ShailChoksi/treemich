@@ -62,7 +62,7 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
       return reply.code(400).send(interpreted);
     }
 
-    const allPeople = await getImmichClientForRequest(request).listPeople();
+    const allPeople = await (await getImmichClientForRequest(request)).listPeople();
     const normalizedSourceName = interpreted.parsed.sourceName.trim().toLowerCase();
     const sourceCandidates = allPeople.filter((person) =>
       person.name.toLowerCase().includes(normalizedSourceName)

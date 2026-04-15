@@ -32,8 +32,8 @@ export const NodeActionButtons = ({ onOpen }: Props) => {
         <button
           type="button"
           className="node-action-btn"
-          title="Add sibling or spouse"
-          aria-label="Add sibling or spouse"
+          title="Add connection"
+          aria-label="Add connection"
           onMouseDown={stop}
           onClick={(event) => {
             stop(event);

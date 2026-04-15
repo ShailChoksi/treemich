@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ImmichPerson } from "../../lib/api";
 import { type NodePosition } from "./layout";
-import { pickNearest } from "./useGraphLayoutState";
+import { filterRelationshipsByLayer, pickNearest } from "./useGraphLayoutState";
 import { findPersonBySearchTerm, resolveFocusPersonRequest } from "./useGraphSearch";
 
 describe("pickNearest", () => {
@@ -14,6 +14,30 @@ describe("pickNearest", () => {
 
     const nearest = pickNearest(items, [0, 0, 0], 2);
     expect(nearest.map((item) => item.person.id)).toEqual(["c", "b"]);
+  });
+});
+
+describe("filterRelationshipsByLayer", () => {
+  it("keeps only relationship types from enabled layers", () => {
+    const filtered = filterRelationshipsByLayer(
+      [
+        { fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" },
+        { fromPersonId: "a", toPersonId: "c", type: "FRIEND_OF" },
+        { fromPersonId: "a", toPersonId: "d", type: "PET_OF" }
+      ],
+      {
+        parentChild: true,
+        spouse: false,
+        sibling: false,
+        friends: false,
+        pets: true
+      }
+    );
+
+    expect(filtered).toEqual([
+      { fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" },
+      { fromPersonId: "a", toPersonId: "d", type: "PET_OF" }
+    ]);
   });
 });
 

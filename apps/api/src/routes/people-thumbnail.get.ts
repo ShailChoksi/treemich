@@ -9,7 +9,7 @@ const paramsSchema = z.object({
 export const registerPeopleThumbnailGetRoute = (app: FastifyInstance) => {
   app.get("/people/:id/thumbnail", async (request, reply) => {
     const { id } = paramsSchema.parse(request.params);
-    const thumbnail = await getImmichClientForRequest(request).getPersonThumbnail(id);
+    const thumbnail = await (await getImmichClientForRequest(request)).getPersonThumbnail(id);
     return reply
       .header("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
       .type(thumbnail.contentType)
