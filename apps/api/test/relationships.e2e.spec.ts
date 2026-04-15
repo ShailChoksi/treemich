@@ -6,6 +6,7 @@ const upsertRelationshipMock = vi.fn();
 const deleteRelationshipMock = vi.fn();
 const upsertProfileMock = vi.fn();
 const findTargetsByRelationshipMock = vi.fn();
+const traverseRelationshipChainMock = vi.fn();
 const getProfilesForPersonIdsMock = vi.fn();
 const getConnectedPersonIdsMock = vi.fn();
 const listRelationshipsMock = vi.fn();
@@ -117,6 +118,7 @@ describe("Treemich API routes", () => {
         deleteRelationship: deleteRelationshipMock,
         upsertProfile: upsertProfileMock,
         findTargetsByRelationship: findTargetsByRelationshipMock,
+        traverseRelationshipChain: traverseRelationshipChainMock,
         getProfilesForPersonIds: getProfilesForPersonIdsMock,
         getConnectedPersonIds: getConnectedPersonIdsMock,
         listRelationships: listRelationshipsMock,
@@ -230,7 +232,7 @@ describe("Treemich API routes", () => {
   });
 
   it("searches relatives from NL query", async () => {
-    findTargetsByRelationshipMock.mockResolvedValueOnce([{ fromPersonId: "john-id" }]);
+    traverseRelationshipChainMock.mockResolvedValueOnce(["john-id"]);
     getProfilesForPersonIdsMock.mockResolvedValueOnce(new Map([["john-id", { gender: "MALE" }]]));
     listPeopleMock.mockResolvedValueOnce([
       { id: "john-id", name: "John" },
@@ -243,10 +245,287 @@ describe("Treemich API routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(findTargetsByRelationshipMock).toHaveBeenCalledWith("user-1", ["mike-id"], "CHILD_OF");
+    expect(traverseRelationshipChainMock).toHaveBeenCalledWith("user-1", ["mike-id"], ["CHILD_OF"]);
     const json = response.json();
     expect(json.matches).toHaveLength(1);
     expect(json.matches[0].person.name).toBe("John");
+  });
+
+  describe("search with multi-hop and filters", () => {
+    it("searches siblings with gender filter", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["sarah-id", "bob-id"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(
+        new Map([
+          ["sarah-id", { gender: "FEMALE" }],
+          ["bob-id", { gender: "MALE" }]
+        ])
+      );
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" },
+        { id: "sarah-id", name: "Sarah" },
+        { id: "bob-id", name: "Bob" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=sisters%20of%20Mike"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(traverseRelationshipChainMock).toHaveBeenCalledWith("user-1", ["mike-id"], ["SIBLING_OF"]);
+      const json = response.json();
+      expect(json.matches).toHaveLength(1);
+      expect(json.matches[0].person.name).toBe("Sarah");
+    });
+
+    it("searches uncles via 2-hop traversal", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["uncle-id", "aunt-id"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(
+        new Map([
+          ["uncle-id", { gender: "MALE" }],
+          ["aunt-id", { gender: "FEMALE" }]
+        ])
+      );
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" },
+        { id: "uncle-id", name: "Uncle Bob" },
+        { id: "aunt-id", name: "Aunt Lisa" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=uncle%20of%20Mike"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(traverseRelationshipChainMock).toHaveBeenCalledWith(
+        "user-1",
+        ["mike-id"],
+        ["PARENT_OF", "SIBLING_OF"]
+      );
+      const json = response.json();
+      expect(json.matches).toHaveLength(1);
+      expect(json.matches[0].person.name).toBe("Uncle Bob");
+    });
+
+    it("searches cousins via 3-hop traversal", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["cousin-1", "cousin-2"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(
+        new Map([
+          ["cousin-1", { gender: "FEMALE" }],
+          ["cousin-2", { gender: "MALE" }]
+        ])
+      );
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" },
+        { id: "cousin-1", name: "Emma" },
+        { id: "cousin-2", name: "Jack" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=cousins%20of%20Mike"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(traverseRelationshipChainMock).toHaveBeenCalledWith(
+        "user-1",
+        ["mike-id"],
+        ["PARENT_OF", "SIBLING_OF", "CHILD_OF"]
+      );
+      const json = response.json();
+      expect(json.matches).toHaveLength(2);
+    });
+
+    it("searches second cousins via 5-hop traversal", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["sc-1"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(new Map([["sc-1", { gender: "MALE" }]]));
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" },
+        { id: "sc-1", name: "Distant Dan" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=second%20cousins%20of%20Mike"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(traverseRelationshipChainMock).toHaveBeenCalledWith(
+        "user-1",
+        ["mike-id"],
+        ["PARENT_OF", "PARENT_OF", "SIBLING_OF", "CHILD_OF", "CHILD_OF"]
+      );
+      const json = response.json();
+      expect(json.matches).toHaveLength(1);
+    });
+
+    it("applies gender prefix filter", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["c-1", "c-2"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(
+        new Map([
+          ["c-1", { gender: "FEMALE" }],
+          ["c-2", { gender: "MALE" }]
+        ])
+      );
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" },
+        { id: "c-1", name: "Cousin Anna" },
+        { id: "c-2", name: "Cousin Mark" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=female%20cousins%20of%20Mike"
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.matches).toHaveLength(1);
+      expect(json.matches[0].person.name).toBe("Cousin Anna");
+    });
+
+    it("applies age filter and excludes people without birthdate", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["c-young", "c-old", "c-nodate"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(
+        new Map([
+          ["c-young", { gender: "MALE", birthDateOverride: "2010-06-15" }],
+          ["c-old", { gender: "FEMALE", birthDateOverride: "1980-01-01" }],
+          ["c-nodate", { gender: "MALE", birthDateOverride: null }]
+        ])
+      );
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" },
+        { id: "c-young", name: "Young Cousin" },
+        { id: "c-old", name: "Old Cousin" },
+        { id: "c-nodate", name: "No Date Cousin" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=cousins%20of%20Mike%20older%20than%2020"
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.matches).toHaveLength(1);
+      expect(json.matches[0].person.name).toBe("Old Cousin");
+    });
+
+    it("applies born-in-year filter", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["a-1", "a-2"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(
+        new Map([
+          ["a-1", { gender: "FEMALE", birthDateOverride: "2005-03-10" }],
+          ["a-2", { gender: "FEMALE", birthDateOverride: "1990-07-20" }]
+        ])
+      );
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" },
+        { id: "a-1", name: "Aunt 2005" },
+        { id: "a-2", name: "Aunt 1990" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=aunts%20of%20Mike%20born%20in%202005"
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.matches).toHaveLength(1);
+      expect(json.matches[0].person.name).toBe("Aunt 2005");
+    });
+
+    it("applies combined gender prefix and age suffix", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["sc-f-old", "sc-m-old", "sc-f-young"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(
+        new Map([
+          ["sc-f-old", { gender: "FEMALE", birthDateOverride: "1990-01-01" }],
+          ["sc-m-old", { gender: "MALE", birthDateOverride: "1985-01-01" }],
+          ["sc-f-young", { gender: "FEMALE", birthDateOverride: "2015-01-01" }]
+        ])
+      );
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" },
+        { id: "sc-f-old", name: "Older Female SC" },
+        { id: "sc-m-old", name: "Older Male SC" },
+        { id: "sc-f-young", name: "Younger Female SC" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=female%20second%20cousins%20of%20Mike%20older%20than%2020"
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.matches).toHaveLength(1);
+      expect(json.matches[0].person.name).toBe("Older Female SC");
+    });
+
+    it("returns empty matches when source person not found", async () => {
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=sisters%20of%20Nobody"
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.matches).toHaveLength(0);
+      expect(json.message).toContain("Nobody");
+    });
+
+    it("returns empty matches when traversal yields no results", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce([]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(new Map());
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=sisters%20of%20Mike"
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.matches).toHaveLength(0);
+    });
+
+    it("returns 400 for unsupported queries", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=friends%20of%20Mike"
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("falls back to immich birthDate when profile has no override", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["c-1"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(
+        new Map([["c-1", { gender: "MALE", birthDateOverride: null }]])
+      );
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" },
+        { id: "c-1", name: "Cousin With Immich Date", birthDate: "1990-05-15" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=cousins%20of%20Mike%20born%20in%201990"
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.matches).toHaveLength(1);
+      expect(json.matches[0].person.name).toBe("Cousin With Immich Date");
+    });
   });
 
   it("returns unauthenticated state from auth/me without a session", async () => {

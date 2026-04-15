@@ -49,7 +49,7 @@ export const GraphSearchOverlay = ({
           </button>
         ) : null}
       </form>
-      <p className="graph-search-helper">Search by name or try a relationship query like "son of Mike".</p>
+      <p className="graph-search-helper">Search by name or try: "sisters of Mike", "cousins of Sue", "uncle of Tom older than 40"</p>
       {searchFeedback ? (
         <p className="graph-search-feedback" aria-live="polite">
           {searchFeedback}

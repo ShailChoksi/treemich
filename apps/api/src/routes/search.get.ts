@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Gender } from "@prisma/client";
+import type { AgeFilter } from "@treemich/shared/search/interpreter";
 import { getRequiredAuth } from "../auth/request.js";
 import { RuleBasedInterpreter } from "../search/interpreter/ruleBasedInterpreter.js";
 import { getImmichClientForRequest } from "../services.js";
@@ -8,6 +9,46 @@ import { getImmichClientForRequest } from "../services.js";
 const querySchema = z.object({
   q: z.string().min(1)
 });
+
+function resolveBirthDate(
+  profile?: { birthDateOverride?: string | null } | null,
+  immichPerson?: { birthDate?: string | null }
+): Date | null {
+  const raw = profile?.birthDateOverride ?? immichPerson?.birthDate;
+  if (!raw) {
+    return null;
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function computeAge(birthDate: Date, now: Date): number {
+  let age = now.getFullYear() - birthDate.getFullYear();
+  const monthDiff = now.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age;
+}
+
+function matchesAgeFilter(birthDate: Date, filter: AgeFilter, now: Date): boolean {
+  switch (filter.kind) {
+    case "minAge":
+      return computeAge(birthDate, now) >= filter.years;
+    case "maxAge":
+      return computeAge(birthDate, now) < filter.years;
+    case "ageRange": {
+      const age = computeAge(birthDate, now);
+      return age >= filter.min && age <= filter.max;
+    }
+    case "bornAfter":
+      return birthDate.getFullYear() > filter.year;
+    case "bornBefore":
+      return birthDate.getFullYear() < filter.year;
+    case "bornInYear":
+      return birthDate.getFullYear() === filter.year;
+  }
+}
 
 export const registerSearchGetRoute = (app: FastifyInstance) => {
   const interpreter = new RuleBasedInterpreter();
@@ -36,18 +77,18 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
     }
 
     const sourceIds = sourceCandidates.map((person) => person.id);
-    const relationshipHits = (await app.services.relationshipService.findTargetsByRelationship(
+    const targetIds = await app.services.relationshipService.traverseRelationshipChain(
       auth.user.id,
       sourceIds,
-      interpreted.parsed.relationshipType
-    )) as Array<{ fromPersonId: string }>;
+      interpreted.parsed.hops
+    );
 
-    const targetIds = [...new Set(relationshipHits.map((item) => item.fromPersonId))];
     const profilesById = (await app.services.relationshipService.getProfilesForPersonIds(
       auth.user.id,
       targetIds
-    )) as Map<string, { gender: Gender }>;
+    )) as Map<string, { gender: Gender; birthDateOverride?: string | null }>;
     const peopleById = new Map(allPeople.map((person) => [person.id, person]));
+    const now = new Date();
 
     const matches = targetIds
       .map((personId) => {
@@ -55,12 +96,8 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
         if (!person) {
           return null;
         }
-
         const profile = profilesById.get(personId);
-        return {
-          person,
-          profile
-        };
+        return { person, profile };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)
       .filter((item) => {
@@ -68,6 +105,16 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
           return true;
         }
         return item.profile?.gender === interpreted.parsed.requiredGender;
+      })
+      .filter((item) => {
+        if (!interpreted.parsed.ageFilter) {
+          return true;
+        }
+        const birthDate = resolveBirthDate(item.profile, item.person);
+        if (!birthDate) {
+          return false;
+        }
+        return matchesAgeFilter(birthDate, interpreted.parsed.ageFilter, now);
       });
 
     return {

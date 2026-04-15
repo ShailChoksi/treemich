@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ImmichPerson } from "../../lib/api";
 
-type SearchFallbackResult = {
+type SearchFallbackMatch = {
   personId: string;
   personName: string;
+};
+
+type SearchFallbackResult = {
+  matches: SearchFallbackMatch[];
   feedback?: string | null;
 };
 
@@ -43,6 +47,11 @@ export const useGraphSearch = ({
 }: UseGraphSearchOptions) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
+  const [highlightedPersonIds, setHighlightedPersonIds] = useState<Set<string>>(new Set());
+
+  const clearHighlights = useCallback(() => {
+    setHighlightedPersonIds(new Set());
+  }, []);
 
   useEffect(() => {
     const focusPerson = resolveFocusPersonRequest(people, focusPersonRequest);
@@ -54,13 +63,15 @@ export const useGraphSearch = ({
     setPinnedPersonId(focusPerson.id);
     setHoveredPersonId(focusPerson.id);
     setSearchFeedback(`Focused ${focusPerson.name}`);
+    clearHighlights();
   }, [
     focusPersonRequest,
     people,
     setFocusPersonId,
     setHoveredPersonId,
     setPinnedPersonId,
-    setSelectedPersonId
+    setSelectedPersonId,
+    clearHighlights
   ]);
 
   useEffect(() => {
@@ -69,12 +80,13 @@ export const useGraphSearch = ({
     }
     const timeout = window.setTimeout(() => {
       setSearchFeedback(null);
-    }, 5000);
+    }, 8000);
     return () => window.clearTimeout(timeout);
   }, [searchFeedback]);
 
   const handleSearchSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    clearHighlights();
     const match = findPersonBySearchTerm(people, searchTerm);
     if (!searchTerm.trim()) {
       setSearchFeedback("Type a person name.");
@@ -96,16 +108,26 @@ export const useGraphSearch = ({
 
     try {
       const fallbackResult = await onSearchFallback(searchTerm);
-      if (!fallbackResult) {
+      if (!fallbackResult || fallbackResult.matches.length === 0) {
         setSearchFeedback(`No person found for "${searchTerm}"`);
         return;
       }
 
-      setSelectedPersonId(fallbackResult.personId);
-      setFocusPersonId(fallbackResult.personId);
-      setPinnedPersonId(fallbackResult.personId);
-      setHoveredPersonId(fallbackResult.personId);
-      setSearchFeedback(fallbackResult.feedback ?? `Focused ${fallbackResult.personName}`);
+      const firstMatch = fallbackResult.matches[0];
+      setSelectedPersonId(firstMatch.personId);
+      setFocusPersonId(firstMatch.personId);
+      setPinnedPersonId(firstMatch.personId);
+      setHoveredPersonId(firstMatch.personId);
+
+      const allIds = new Set(fallbackResult.matches.map((m) => m.personId));
+      setHighlightedPersonIds(allIds);
+
+      if (fallbackResult.feedback) {
+        setSearchFeedback(fallbackResult.feedback);
+      } else {
+        const names = fallbackResult.matches.map((m) => m.personName).join(", ");
+        setSearchFeedback(`Found ${fallbackResult.matches.length} result${fallbackResult.matches.length === 1 ? "" : "s"}: ${names}`);
+      }
     } catch (error) {
       setSearchFeedback(error instanceof Error ? error.message : "Search failed");
     }
@@ -116,6 +138,8 @@ export const useGraphSearch = ({
     setSearchTerm,
     searchFeedback,
     setSearchFeedback,
+    highlightedPersonIds,
+    clearHighlights,
     handleSearchSubmit
   };
 };

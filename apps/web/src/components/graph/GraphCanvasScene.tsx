@@ -29,6 +29,7 @@ type Props = {
   selectedPersonId: string | null;
   showNodeActionButtons: boolean;
   hoveredPersonId: string | null;
+  highlightedPersonIds: Set<string>;
   thumbnailNodeIds: Set<string>;
   setHoveredPersonId: (updater: (current: string | null) => string | null) => void;
   onNodeClick: (personId: string) => void;
@@ -78,6 +79,7 @@ export const GraphCanvasScene = ({
   selectedPersonId,
   showNodeActionButtons,
   hoveredPersonId,
+  highlightedPersonIds,
   thumbnailNodeIds,
   setHoveredPersonId,
   onNodeClick,
@@ -195,6 +197,7 @@ export const GraphCanvasScene = ({
       {displayVisiblePeople.map(({ person, displayPosition }) => {
         const isSelected = selectedPersonId === person.id;
         const isHovered = hoveredPersonId === person.id;
+        const isHighlighted = highlightedPersonIds.has(person.id);
         const showThumbnail = thumbnailNodeIds.has(person.id);
         const nodePosition = displayPosition;
         const onHover = (hovered: boolean) =>
@@ -213,6 +216,7 @@ export const GraphCanvasScene = ({
                 person={person}
                 isSelected={isSelected}
                 isHovered={isHovered}
+                isHighlighted={isHighlighted}
                 onClick={onClick}
                 onHover={onHover}
               />
@@ -229,6 +233,7 @@ export const GraphCanvasScene = ({
                   person={person}
                   isSelected={isSelected}
                   isHovered={isHovered}
+                  isHighlighted={isHighlighted}
                   onClick={onClick}
                   onHover={onHover}
                 />
@@ -238,6 +243,7 @@ export const GraphCanvasScene = ({
                 person={person}
                 isSelected={isSelected}
                 isHovered={isHovered}
+                isHighlighted={isHighlighted}
                 onClick={onClick}
                 onHover={onHover}
               />
