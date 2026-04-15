@@ -85,6 +85,9 @@ describe("Treemich API routes", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.NODE_ENV = "test";
+    process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:54321/treemich_test";
+    process.env.IMMICH_BASE_URL = "http://localhost:2283/api";
     process.env.TREEMICH_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     process.env.TREEMICH_SESSION_COOKIE_NAME = "treemich_session";
     queryRawMock.mockResolvedValue([1]);
