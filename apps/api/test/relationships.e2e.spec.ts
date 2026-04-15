@@ -465,9 +465,7 @@ describe("Treemich API routes", () => {
     });
 
     it("returns empty matches when source person not found", async () => {
-      listPeopleMock.mockResolvedValueOnce([
-        { id: "mike-id", name: "Mike" }
-      ]);
+      listPeopleMock.mockResolvedValueOnce([{ id: "mike-id", name: "Mike" }]);
 
       const response = await app.inject({
         method: "GET",
@@ -483,9 +481,7 @@ describe("Treemich API routes", () => {
     it("returns empty matches when traversal yields no results", async () => {
       traverseRelationshipChainMock.mockResolvedValueOnce([]);
       getProfilesForPersonIdsMock.mockResolvedValueOnce(new Map());
-      listPeopleMock.mockResolvedValueOnce([
-        { id: "mike-id", name: "Mike" }
-      ]);
+      listPeopleMock.mockResolvedValueOnce([{ id: "mike-id", name: "Mike" }]);
 
       const response = await app.inject({
         method: "GET",

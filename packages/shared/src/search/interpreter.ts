@@ -66,7 +66,12 @@ type MatcherEntry = {
 const matchers: MatcherEntry[] = [
   // --- single-hop: children ---
   { pattern: /^sons? of (.+)$/i, intent: "FIND_SONS", hops: ["CHILD_OF"], requiredGender: "MALE" },
-  { pattern: /^daughters? of (.+)$/i, intent: "FIND_DAUGHTERS", hops: ["CHILD_OF"], requiredGender: "FEMALE" },
+  {
+    pattern: /^daughters? of (.+)$/i,
+    intent: "FIND_DAUGHTERS",
+    hops: ["CHILD_OF"],
+    requiredGender: "FEMALE"
+  },
   { pattern: /^children of (.+)$/i, intent: "FIND_CHILDREN", hops: ["CHILD_OF"] },
 
   // --- single-hop: parents ---
@@ -83,28 +88,76 @@ const matchers: MatcherEntry[] = [
   { pattern: /^siblings? of (.+)$/i, intent: "FIND_SIBLINGS", hops: ["SIBLING_OF"] },
 
   // --- 2-hop: grandparents ---
-  { pattern: /^grandfather of (.+)$/i, intent: "FIND_GRANDFATHER", hops: ["PARENT_OF", "PARENT_OF"], requiredGender: "MALE" },
-  { pattern: /^grandmother of (.+)$/i, intent: "FIND_GRANDMOTHER", hops: ["PARENT_OF", "PARENT_OF"], requiredGender: "FEMALE" },
+  {
+    pattern: /^grandfather of (.+)$/i,
+    intent: "FIND_GRANDFATHER",
+    hops: ["PARENT_OF", "PARENT_OF"],
+    requiredGender: "MALE"
+  },
+  {
+    pattern: /^grandmother of (.+)$/i,
+    intent: "FIND_GRANDMOTHER",
+    hops: ["PARENT_OF", "PARENT_OF"],
+    requiredGender: "FEMALE"
+  },
   { pattern: /^grandparents? of (.+)$/i, intent: "FIND_GRANDPARENTS", hops: ["PARENT_OF", "PARENT_OF"] },
 
   // --- 2-hop: grandchildren ---
-  { pattern: /^grandsons? of (.+)$/i, intent: "FIND_GRANDSON", hops: ["CHILD_OF", "CHILD_OF"], requiredGender: "MALE" },
-  { pattern: /^granddaughters? of (.+)$/i, intent: "FIND_GRANDDAUGHTER", hops: ["CHILD_OF", "CHILD_OF"], requiredGender: "FEMALE" },
+  {
+    pattern: /^grandsons? of (.+)$/i,
+    intent: "FIND_GRANDSON",
+    hops: ["CHILD_OF", "CHILD_OF"],
+    requiredGender: "MALE"
+  },
+  {
+    pattern: /^granddaughters? of (.+)$/i,
+    intent: "FIND_GRANDDAUGHTER",
+    hops: ["CHILD_OF", "CHILD_OF"],
+    requiredGender: "FEMALE"
+  },
   { pattern: /^grandchildren of (.+)$/i, intent: "FIND_GRANDCHILDREN", hops: ["CHILD_OF", "CHILD_OF"] },
 
   // --- 2-hop: uncles/aunts ---
-  { pattern: /^uncles? of (.+)$/i, intent: "FIND_UNCLES", hops: ["PARENT_OF", "SIBLING_OF"], requiredGender: "MALE" },
-  { pattern: /^aunts? of (.+)$/i, intent: "FIND_AUNTS", hops: ["PARENT_OF", "SIBLING_OF"], requiredGender: "FEMALE" },
+  {
+    pattern: /^uncles? of (.+)$/i,
+    intent: "FIND_UNCLES",
+    hops: ["PARENT_OF", "SIBLING_OF"],
+    requiredGender: "MALE"
+  },
+  {
+    pattern: /^aunts? of (.+)$/i,
+    intent: "FIND_AUNTS",
+    hops: ["PARENT_OF", "SIBLING_OF"],
+    requiredGender: "FEMALE"
+  },
 
   // --- 2-hop: nieces/nephews ---
-  { pattern: /^nieces? of (.+)$/i, intent: "FIND_NIECES", hops: ["SIBLING_OF", "CHILD_OF"], requiredGender: "FEMALE" },
-  { pattern: /^nephews? of (.+)$/i, intent: "FIND_NEPHEWS", hops: ["SIBLING_OF", "CHILD_OF"], requiredGender: "MALE" },
+  {
+    pattern: /^nieces? of (.+)$/i,
+    intent: "FIND_NIECES",
+    hops: ["SIBLING_OF", "CHILD_OF"],
+    requiredGender: "FEMALE"
+  },
+  {
+    pattern: /^nephews? of (.+)$/i,
+    intent: "FIND_NEPHEWS",
+    hops: ["SIBLING_OF", "CHILD_OF"],
+    requiredGender: "MALE"
+  },
 
   // --- 3-hop: first cousins ---
-  { pattern: /^(?:first )?cousins? of (.+)$/i, intent: "FIND_COUSINS", hops: ["PARENT_OF", "SIBLING_OF", "CHILD_OF"] },
+  {
+    pattern: /^(?:first )?cousins? of (.+)$/i,
+    intent: "FIND_COUSINS",
+    hops: ["PARENT_OF", "SIBLING_OF", "CHILD_OF"]
+  },
 
   // --- 5-hop: second cousins ---
-  { pattern: /^second cousins? of (.+)$/i, intent: "FIND_SECOND_COUSINS", hops: ["PARENT_OF", "PARENT_OF", "SIBLING_OF", "CHILD_OF", "CHILD_OF"] },
+  {
+    pattern: /^second cousins? of (.+)$/i,
+    intent: "FIND_SECOND_COUSINS",
+    hops: ["PARENT_OF", "PARENT_OF", "SIBLING_OF", "CHILD_OF", "CHILD_OF"]
+  }
 ];
 
 const ageSuffixPatterns: Array<{ pattern: RegExp; toFilter: (...args: string[]) => AgeFilter | null }> = [

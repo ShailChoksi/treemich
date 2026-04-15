@@ -131,9 +131,7 @@ describe("RelationshipService", () => {
 
     it("chains two hops for uncle traversal", async () => {
       relationshipFindManyMock
-        .mockResolvedValueOnce([
-          { fromPersonId: "parent-1", toPersonId: "mike" }
-        ])
+        .mockResolvedValueOnce([{ fromPersonId: "parent-1", toPersonId: "mike" }])
         .mockResolvedValueOnce([
           { fromPersonId: "uncle-1", toPersonId: "parent-1" },
           { fromPersonId: "aunt-1", toPersonId: "parent-1" }
@@ -195,11 +193,7 @@ describe("RelationshipService", () => {
 
       const { RelationshipService } = await import("../src/relationships/service.js");
       const service = new RelationshipService();
-      const result = await service.traverseRelationshipChain(
-        "user-1",
-        ["mike"],
-        ["PARENT_OF", "SIBLING_OF"]
-      );
+      const result = await service.traverseRelationshipChain("user-1", ["mike"], ["PARENT_OF", "SIBLING_OF"]);
 
       expect(result).toEqual([]);
       expect(relationshipFindManyMock).toHaveBeenCalledTimes(1);
@@ -212,11 +206,7 @@ describe("RelationshipService", () => {
 
       const { RelationshipService } = await import("../src/relationships/service.js");
       const service = new RelationshipService();
-      const result = await service.traverseRelationshipChain(
-        "user-1",
-        ["mike"],
-        ["PARENT_OF", "SIBLING_OF"]
-      );
+      const result = await service.traverseRelationshipChain("user-1", ["mike"], ["PARENT_OF", "SIBLING_OF"]);
 
       expect(result).toEqual([]);
       expect(relationshipFindManyMock).toHaveBeenCalledTimes(2);
@@ -248,11 +238,7 @@ describe("RelationshipService", () => {
 
       const { RelationshipService } = await import("../src/relationships/service.js");
       const service = new RelationshipService();
-      const result = await service.traverseRelationshipChain(
-        "user-1",
-        ["mike"],
-        ["PARENT_OF", "SIBLING_OF"]
-      );
+      const result = await service.traverseRelationshipChain("user-1", ["mike"], ["PARENT_OF", "SIBLING_OF"]);
 
       expect(result).toEqual(["shared-uncle"]);
     });

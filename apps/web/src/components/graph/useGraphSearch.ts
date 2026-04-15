@@ -126,7 +126,9 @@ export const useGraphSearch = ({
         setSearchFeedback(fallbackResult.feedback);
       } else {
         const names = fallbackResult.matches.map((m) => m.personName).join(", ");
-        setSearchFeedback(`Found ${fallbackResult.matches.length} result${fallbackResult.matches.length === 1 ? "" : "s"}: ${names}`);
+        setSearchFeedback(
+          `Found ${fallbackResult.matches.length} result${fallbackResult.matches.length === 1 ? "" : "s"}: ${names}`
+        );
       }
     } catch (error) {
       setSearchFeedback(error instanceof Error ? error.message : "Search failed");

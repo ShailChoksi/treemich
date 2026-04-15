@@ -49,7 +49,14 @@ const ringColor = (isSelected: boolean, isHovered: boolean, isHighlighted: boole
   return "#64748b";
 };
 
-export const PersonNode = ({ person, isSelected, isHovered, isHighlighted, onClick, onHover }: PersonNodeProps) => {
+export const PersonNode = ({
+  person,
+  isSelected,
+  isHovered,
+  isHighlighted,
+  onClick,
+  onHover
+}: PersonNodeProps) => {
   const thumbnailUrl = useMemo(() => personThumbnailUrl(person.id), [person.id]);
   const texture = useTexture(thumbnailUrl);
   useEffect(() => {
@@ -92,7 +99,14 @@ export const PersonNode = ({ person, isSelected, isHovered, isHighlighted, onCli
   );
 };
 
-export const PersonNodeFallback = ({ person, isSelected, isHovered, isHighlighted, onClick, onHover }: PersonNodeProps) => (
+export const PersonNodeFallback = ({
+  person,
+  isSelected,
+  isHovered,
+  isHighlighted,
+  onClick,
+  onHover
+}: PersonNodeProps) => (
   <Billboard>
     {isSelected || isHighlighted ? (
       <mesh position={[0, 0, -0.04]} scale={1.16}>

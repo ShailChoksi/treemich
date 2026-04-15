@@ -23,18 +23,18 @@ Search for relatives using plain English in the search bar. Queries follow the p
 
 **Supported relationships:**
 
-| Query | Example |
-|---|---|
-| son/daughter/children of | `children of Mike` |
-| father/mother/parents of | `mother of Sarah` |
-| brother/sister/siblings of | `sisters of Mike` |
-| spouse of | `spouse of Anna` |
-| grandfather/grandmother/grandparents of | `grandparents of Tom` |
-| grandson/granddaughter/grandchildren of | `grandchildren of Sue` |
-| uncle/aunt of | `uncle of Mike` |
-| nephew/niece of | `nieces of Lisa` |
-| cousin/first cousin of | `cousins of Mike` |
-| second cousin of | `second cousins of Mike` |
+| Query                                   | Example                  |
+| --------------------------------------- | ------------------------ |
+| son/daughter/children of                | `children of Mike`       |
+| father/mother/parents of                | `mother of Sarah`        |
+| brother/sister/siblings of              | `sisters of Mike`        |
+| spouse of                               | `spouse of Anna`         |
+| grandfather/grandmother/grandparents of | `grandparents of Tom`    |
+| grandson/granddaughter/grandchildren of | `grandchildren of Sue`   |
+| uncle/aunt of                           | `uncle of Mike`          |
+| nephew/niece of                         | `nieces of Lisa`         |
+| cousin/first cousin of                  | `cousins of Mike`        |
+| second cousin of                        | `second cousins of Mike` |
 
 **Gender prefix** -- prepend `male` or `female` to any query:
 
@@ -82,11 +82,11 @@ cp .env.example .env
 
 Edit `.env` and set:
 
-| Variable | Required | Description |
-|---|---|---|
-| `IMMICH_BASE_URL` | Yes | Your Immich API URL. If Immich runs on the host machine, use `http://host.docker.internal:2283/api`. |
-| `TREEMICH_ENCRYPTION_KEY` | Yes | A random 64-character hex string. Generate one with `openssl rand -hex 32`. |
-| `WEB_ORIGIN` | No | Defaults to `http://localhost:8080`. Change if you expose Treemich on a different host/port. |
+| Variable                  | Required | Description                                                                                          |
+| ------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `IMMICH_BASE_URL`         | Yes      | Your Immich API URL. If Immich runs on the host machine, use `http://host.docker.internal:2283/api`. |
+| `TREEMICH_ENCRYPTION_KEY` | Yes      | A random 64-character hex string. Generate one with `openssl rand -hex 32`.                          |
+| `WEB_ORIGIN`              | No       | Defaults to `http://localhost:8080`. Change if you expose Treemich on a different host/port.         |
 
 ### 2. Start the stack
 
@@ -96,11 +96,11 @@ docker compose up --build -d
 
 This starts three containers:
 
-| Service | Container | Port | Description |
-|---|---|---|---|
-| `postgres` | treemich-postgres | 54321 | PostgreSQL 16 database |
-| `api` | treemich-api | 4000 | Fastify API server (runs migrations on startup) |
-| `web` | treemich-web | 8080 | Nginx serving the React app, proxying `/api` to the API |
+| Service    | Container         | Port  | Description                                             |
+| ---------- | ----------------- | ----- | ------------------------------------------------------- |
+| `postgres` | treemich-postgres | 54321 | PostgreSQL 16 database                                  |
+| `api`      | treemich-api      | 4000  | Fastify API server (runs migrations on startup)         |
+| `web`      | treemich-web      | 8080  | Nginx serving the React app, proxying `/api` to the API |
 
 ### 3. Open the app
 
@@ -158,19 +158,19 @@ This starts the API on `localhost:4000` and the web app on `localhost:5173` with
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `4000` | API server port |
-| `DATABASE_URL` | -- | PostgreSQL connection string |
-| `IMMICH_BASE_URL` | -- | Immich API base URL |
-| `IMMICH_PEOPLE_PAGE_SIZE` | `1000` | Page size when fetching people from Immich |
-| `TREEMICH_ENCRYPTION_KEY` | -- | 64-char hex key for encrypting stored Immich tokens |
-| `TREEMICH_SESSION_COOKIE_NAME` | `treemich_session` | Browser cookie name |
-| `TREEMICH_SESSION_TTL_MS` | `2592000000` (30 days) | Session lifetime |
-| `WEB_ORIGIN` | `http://localhost:5173` | CORS allowed origin |
-| `RATE_LIMIT_MAX` | `120` | Max API requests per time window |
-| `RATE_LIMIT_TIME_WINDOW_MS` | `60000` | Rate limit window in ms |
-| `VITE_TREEMICH_API_URL` | `/api` | Frontend API base URL (build-time) |
+| Variable                       | Default                 | Description                                         |
+| ------------------------------ | ----------------------- | --------------------------------------------------- |
+| `PORT`                         | `4000`                  | API server port                                     |
+| `DATABASE_URL`                 | --                      | PostgreSQL connection string                        |
+| `IMMICH_BASE_URL`              | --                      | Immich API base URL                                 |
+| `IMMICH_PEOPLE_PAGE_SIZE`      | `1000`                  | Page size when fetching people from Immich          |
+| `TREEMICH_ENCRYPTION_KEY`      | --                      | 64-char hex key for encrypting stored Immich tokens |
+| `TREEMICH_SESSION_COOKIE_NAME` | `treemich_session`      | Browser cookie name                                 |
+| `TREEMICH_SESSION_TTL_MS`      | `2592000000` (30 days)  | Session lifetime                                    |
+| `WEB_ORIGIN`                   | `http://localhost:5173` | CORS allowed origin                                 |
+| `RATE_LIMIT_MAX`               | `120`                   | Max API requests per time window                    |
+| `RATE_LIMIT_TIME_WINDOW_MS`    | `60000`                 | Rate limit window in ms                             |
+| `VITE_TREEMICH_API_URL`        | `/api`                  | Frontend API base URL (build-time)                  |
 
 ## Auth Model
 
@@ -180,20 +180,20 @@ This starts the API on `localhost:4000` and the web app on `localhost:5173` with
 
 ## API Endpoints
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/auth/login` | Sign in with Immich credentials |
-| `POST` | `/auth/logout` | End session |
-| `GET` | `/auth/me` | Current session state |
-| `GET` | `/auth/link-status` | Immich link status |
-| `GET` | `/people` | List Immich people with Treemich profiles |
-| `PATCH` | `/people/:id` | Update person profile (gender, birth date) |
-| `GET` | `/people/:id/thumbnail` | Person thumbnail image |
-| `POST` | `/people/:id/relationships` | Create a relationship |
-| `DELETE` | `/people/:id/relationships` | Delete a relationship |
-| `GET` | `/relationships` | List all relationships (paginated) |
-| `GET` | `/people/cooccurrence` | Photo co-occurrence data |
-| `GET` | `/search?q=...` | Natural-language relationship search |
+| Method   | Path                        | Description                                |
+| -------- | --------------------------- | ------------------------------------------ |
+| `POST`   | `/auth/login`               | Sign in with Immich credentials            |
+| `POST`   | `/auth/logout`              | End session                                |
+| `GET`    | `/auth/me`                  | Current session state                      |
+| `GET`    | `/auth/link-status`         | Immich link status                         |
+| `GET`    | `/people`                   | List Immich people with Treemich profiles  |
+| `PATCH`  | `/people/:id`               | Update person profile (gender, birth date) |
+| `GET`    | `/people/:id/thumbnail`     | Person thumbnail image                     |
+| `POST`   | `/people/:id/relationships` | Create a relationship                      |
+| `DELETE` | `/people/:id/relationships` | Delete a relationship                      |
+| `GET`    | `/relationships`            | List all relationships (paginated)         |
+| `GET`    | `/people/cooccurrence`      | Photo co-occurrence data                   |
+| `GET`    | `/search?q=...`             | Natural-language relationship search       |
 
 ### Example requests
 
