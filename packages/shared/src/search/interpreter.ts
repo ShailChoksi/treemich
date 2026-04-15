@@ -189,6 +189,16 @@ const ageSuffixPatterns: Array<{ pattern: RegExp; toFilter: (...args: string[]) 
 
 const genderPrefixPattern = /^(male|female)\s+/i;
 
+const possessivePattern = /^(.+?)'s?\s+(.+)$/i;
+
+function rewritePossessive(query: string): string {
+  const match = query.match(possessivePattern);
+  if (match?.[1] && match[2]) {
+    return `${match[2].trim()} of ${match[1].trim()}`;
+  }
+  return query;
+}
+
 function stripAgeFilter(query: string): { remaining: string; ageFilter?: AgeFilter } {
   for (const { pattern, toFilter } of ageSuffixPatterns) {
     const match = query.match(pattern);
@@ -222,6 +232,7 @@ const SUPPORTED_QUERIES = [
   "uncle/aunt of NAME",
   "nephew/niece of NAME",
   "cousin/first cousin/second cousin of NAME",
+  "NAME's uncle/sister/cousins (possessive form)",
   "Prefix with male/female for gender filter",
   "Suffix with age filter: older than N, under N, born in YYYY, etc."
 ].join(", ");
@@ -234,7 +245,8 @@ export class RuleBasedInterpreter implements QueryInterpreter {
     }
 
     const { remaining: withoutAge, ageFilter } = stripAgeFilter(normalized);
-    const { remaining: withoutGender, genderOverride } = stripGenderPrefix(withoutAge);
+    const rewritten = rewritePossessive(withoutAge);
+    const { remaining: withoutGender, genderOverride } = stripGenderPrefix(rewritten);
 
     for (const matcher of matchers) {
       const match = withoutGender.match(matcher.pattern);

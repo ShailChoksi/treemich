@@ -510,6 +510,60 @@ describe("RuleBasedInterpreter", () => {
     expect(result.parsed.ageFilter).toBeUndefined();
   });
 
+  // --- possessive form ---
+
+  it("parses possessive form: Mike's uncle", () => {
+    const result = interpreter.interpret("Mike's uncle");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_UNCLES");
+    expect(result.parsed.sourceName).toBe("Mike");
+    expect(result.parsed.hops).toEqual(["PARENT_OF", "SIBLING_OF"]);
+  });
+
+  it("parses possessive form: Person A's Uncle", () => {
+    const result = interpreter.interpret("Person A's Uncle");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_UNCLES");
+    expect(result.parsed.sourceName).toBe("Person A");
+    expect(result.parsed.hops).toEqual(["PARENT_OF", "SIBLING_OF"]);
+  });
+
+  it("parses possessive form: Sarah's sisters", () => {
+    const result = interpreter.interpret("Sarah's sisters");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_SISTERS");
+    expect(result.parsed.sourceName).toBe("Sarah");
+    expect(result.parsed.requiredGender).toBe("FEMALE");
+  });
+
+  it("parses possessive form: James' cousins", () => {
+    const result = interpreter.interpret("James' cousins");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_COUSINS");
+    expect(result.parsed.sourceName).toBe("James");
+  });
+
+  it("parses possessive form with age filter: Mike's cousins older than 20", () => {
+    const result = interpreter.interpret("Mike's cousins older than 20");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_COUSINS");
+    expect(result.parsed.sourceName).toBe("Mike");
+    expect(result.parsed.ageFilter).toEqual({ kind: "minAge", years: 20 });
+  });
+
+  it("parses possessive form: Mary Jane's grandchildren", () => {
+    const result = interpreter.interpret("Mary Jane's grandchildren");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_GRANDCHILDREN");
+    expect(result.parsed.sourceName).toBe("Mary Jane");
+  });
+
   // --- error / rejection cases ---
 
   it("rejects empty query", () => {
