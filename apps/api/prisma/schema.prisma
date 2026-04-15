@@ -93,7 +93,6 @@ model Relationship {
   fromPersonId String
   toPersonId String
   type       RelationshipType
-  confidence Float            @default(1)
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
   user       TreemichUser     @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import type { AuthState } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import { env } from "../config/env.js";
 import { createOpaqueToken, encryptSecret, hashToken } from "./crypto.js";
@@ -31,24 +32,6 @@ export type AuthenticatedRequestContext = {
   user: SessionWithUser["user"];
   linkedAccount: NonNullable<SessionWithUser["user"]["linkedAccount"]>;
   session: SessionWithUser;
-};
-
-export type PublicAuthUser = {
-  id: string;
-  immichUserId: string;
-  email: string;
-  name: string;
-};
-
-export type AuthState = {
-  authenticated: boolean;
-  user?: PublicAuthUser;
-  linkStatus?: {
-    linked: boolean;
-    immichBaseUrl?: string;
-    immichEmail?: string;
-    immichName?: string;
-  };
 };
 
 export class AuthService {
@@ -186,6 +169,18 @@ export class AuthService {
         tokenHash: hashToken(sessionToken)
       }
     });
+  }
+
+  async cleanupExpiredSessions(referenceTime = new Date()) {
+    const result = await prisma.treemichSession.deleteMany({
+      where: {
+        expiresAt: {
+          lte: referenceTime
+        }
+      }
+    });
+
+    return result.count;
   }
 
   private async resolveSession(sessionToken?: string | null): Promise<AuthenticatedRequestContext | null> {

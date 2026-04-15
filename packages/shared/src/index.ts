@@ -16,6 +16,12 @@ export type ImmichPerson = {
   thumbnailPath?: string | null;
 };
 
+export type TreemichPersonProfile = {
+  immichPersonId: string;
+  gender: GenderValue;
+  birthDateOverride?: string | null;
+};
+
 export type RelationshipRecord = {
   fromPersonId: string;
   toPersonId: string;
@@ -40,4 +46,39 @@ export type PhotoCooccurrenceResponse = {
   edges: PhotoCooccurrenceEdge[];
   computedAt: string;
   sourcePhotoCount: number;
+};
+
+export type AuthUser = {
+  id: string;
+  immichUserId: string;
+  email: string;
+  name: string;
+};
+
+export type LinkStatus = {
+  linked: boolean;
+  immichBaseUrl?: string;
+  immichEmail?: string;
+  immichName?: string;
+};
+
+export type AuthState = {
+  authenticated: boolean;
+  user?: AuthUser;
+  linkStatus?: LinkStatus;
+};
+
+export type SearchRelationshipsResponse = {
+  parsed?: {
+    intent: string;
+    sourceName: string;
+    requiredGender?: "MALE" | "FEMALE";
+    relationshipType: RelationshipType;
+  };
+  sourceCandidates?: ImmichPerson[];
+  matches?: Array<{
+    person: ImmichPerson;
+    profile?: TreemichPersonProfile | null;
+  }>;
+  message?: string;
 };

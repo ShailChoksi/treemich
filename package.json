@@ -12,7 +12,7 @@
     "dev:api": "npm run dev -w @treemich/api",
     "dev:web": "npm run dev -w @treemich/web",
     "test": "npm run test -w @treemich/api && npm run test -w @treemich/web",
-    "lint": "npm run lint -w @treemich/api && npm run lint -w @treemich/web && npm run lint -w @treemich/shared"
+    "lint": "eslint . --max-warnings=0 && npm run lint -w @treemich/api && npm run lint -w @treemich/web && npm run lint -w @treemich/shared"
   },
   "engines": {
     "node": ">=20.0.0"

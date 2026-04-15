@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { FastifyRequest } from "fastify";
 import { AuthService, type AuthenticatedRequestContext } from "./auth/service.js";
+import { TreemichAuthError } from "./auth/service.js";
 import { ImmichClientFactory } from "./integrations/immich/factory.js";
 import { RelationshipService } from "./relationships/service.js";
 
@@ -32,7 +33,7 @@ export const registerServices = (app: FastifyInstance, services: AppServices) =>
 
 export const getImmichClientForRequest = (request: FastifyRequest) => {
   if (!request.auth) {
-    throw new Error("Authenticated request required");
+    throw new TreemichAuthError("Unauthorized");
   }
 
   return request.server.services.immichClientFactory.getClient(request.auth.linkedAccount);

@@ -104,6 +104,23 @@ export class ImmichClient {
     this.peoplePageSize = options.peoplePageSize ?? 1000;
   }
 
+  clearExpiredCacheEntries(now = Date.now()) {
+    if (this.peopleCache && this.peopleCache.expiresAt <= now) {
+      this.peopleCache = undefined;
+    }
+
+    for (const [personId, cached] of this.thumbnailCache.entries()) {
+      if (cached.expiresAt <= now) {
+        this.thumbnailCache.delete(personId);
+      }
+    }
+  }
+
+  dispose() {
+    this.peopleCache = undefined;
+    this.thumbnailCache.clear();
+  }
+
   private buildHeaders(extraHeaders?: Record<string, string>) {
     return {
       authorization: `Bearer ${this.accessToken}`,
@@ -122,6 +139,8 @@ export class ImmichClient {
   }
 
   async listPeople(): Promise<ImmichPerson[]> {
+    this.clearExpiredCacheEntries();
+
     if (this.peopleCache && this.peopleCache.expiresAt > Date.now()) {
       return this.peopleCache.people;
     }
@@ -150,6 +169,8 @@ export class ImmichClient {
     contentType: string;
     data: Buffer;
   }> {
+    this.clearExpiredCacheEntries();
+
     const cached = this.thumbnailCache.get(personId);
     if (cached && cached.expiresAt > Date.now()) {
       // Refresh insertion order to keep this cache LRU-like.

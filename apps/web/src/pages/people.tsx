@@ -40,33 +40,37 @@ export const PeoplePage = () => {
 
   const refreshGraphData = async () => {
     setIsLoading(true);
-    const [peopleResponse, relationshipsResponse] = await Promise.all([getImmichPeople(), getRelationships()]);
-    setPeople(peopleResponse);
-    setRelationships(relationshipsResponse);
-    setLoadError(null);
-    setGenderByPersonId(
-      peopleResponse.reduce<Record<string, Gender>>((acc, person) => {
-        acc[person.id] = person.profile?.gender ?? "UNKNOWN";
-        return acc;
-      }, {})
-    );
-    setBirthDateByPersonId(
-      peopleResponse.reduce<Record<string, string>>((acc, person) => {
-        acc[person.id] = toDateInputValue(person.birthDate);
-        return acc;
-      }, {})
-    );
-    if (!selectedPersonId && peopleResponse[0]) {
-      setSelectedPersonId(peopleResponse[0].id);
+    try {
+      const [peopleResponse, relationshipsResponse] = await Promise.all([getImmichPeople(), getRelationships()]);
+      setPeople(peopleResponse);
+      setRelationships(relationshipsResponse);
+      setLoadError(null);
+      setGenderByPersonId(
+        peopleResponse.reduce<Record<string, Gender>>((acc, person) => {
+          acc[person.id] = person.profile?.gender ?? "UNKNOWN";
+          return acc;
+        }, {})
+      );
+      setBirthDateByPersonId(
+        peopleResponse.reduce<Record<string, string>>((acc, person) => {
+          acc[person.id] = toDateInputValue(person.birthDate);
+          return acc;
+        }, {})
+      );
+      if (!selectedPersonId && peopleResponse[0]) {
+        setSelectedPersonId(peopleResponse[0].id);
+      }
+    } catch (error: unknown) {
+      setLoadError(getErrorMessage(error));
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   useEffect(() => {
     refreshGraphData().catch((error: unknown) => {
-      setLoadError(getErrorMessage(error));
       setStatus(getErrorMessage(error));
-      setIsLoading(false);
     });
   }, []);
 
