@@ -1,0 +1,28 @@
+{
+  "name": "treemich",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @treemich/api && npm run build -w @treemich/web",
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev -w @treemich/api",
+    "dev:web": "npm run dev -w @treemich/web",
+    "test": "npm run test -w @treemich/api && npm run test -w @treemich/web",
+    "lint": "npm run lint -w @treemich/api && npm run lint -w @treemich/web && npm run lint -w @treemich/shared"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@typescript-eslint/eslint-plugin": "^8.46.1",
+    "@typescript-eslint/parser": "^8.46.1",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.37.0",
+    "prettier": "^3.6.2"
+  }
+}

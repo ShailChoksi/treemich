@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
+}
+
+enum RelationshipType {
+  PARENT_OF
+  CHILD_OF
+  SPOUSE_OF
+  SIBLING_OF
+}
+
+model TreemichUser {
+  id             String              @id @default(cuid())
+  immichBaseUrl  String
+  immichUserId   String
+  immichEmail    String
+  immichName     String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  linkedAccount  LinkedImmichAccount?
+  sessions       TreemichSession[]
+  profiles       PersonProfile[]
+  relationships  Relationship[]
+
+  @@unique([immichBaseUrl, immichUserId])
+  @@unique([immichBaseUrl, immichEmail])
+}
+
+model LinkedImmichAccount {
+  id                  String       @id @default(cuid())
+  userId              String       @unique
+  immichBaseUrl       String
+  immichUserId        String
+  immichEmail         String
+  immichName          String
+  encryptedAccessToken String
+  accessTokenIv       String
+  accessTokenTag      String
+  accessTokenExpiresAt DateTime?
+  lastValidatedAt     DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  user                TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([immichBaseUrl, immichUserId])
+}
+
+model TreemichSession {
+  id         String       @id @default(cuid())
+  userId     String
+  tokenHash  String       @unique
+  expiresAt  DateTime
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  user       TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PersonProfile {
+  id                  String         @id @default(cuid())
+  userId              String
+  immichPersonId      String
+  gender              Gender         @default(UNKNOWN)
+  birthDateOverride   String?
+  displayNameOverride String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  user                TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromRelationships   Relationship[] @relation("FromPerson")
+  toRelationships     Relationship[] @relation("ToPerson")
+
+  @@unique([userId, immichPersonId])
+  @@index([userId])
+}
+
+model Relationship {
+  id         String           @id @default(cuid())
+  userId     String
+  fromPersonId String
+  toPersonId String
+  type       RelationshipType
+  confidence Float            @default(1)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  user       TreemichUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromPerson PersonProfile    @relation("FromPerson", fields: [userId, fromPersonId], references: [userId, immichPersonId], onDelete: Cascade)
+  toPerson   PersonProfile    @relation("ToPerson", fields: [userId, toPersonId], references: [userId, immichPersonId], onDelete: Cascade)
+
+  @@unique([userId, fromPersonId, toPersonId, type])
+  @@index([userId, fromPersonId])
+  @@index([userId, toPersonId])
+}

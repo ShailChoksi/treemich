@@ -1,0 +1,8 @@
+{
+  "watch": ["src", "prisma/schema.prisma"],
+  "ext": "ts,prisma,json",
+  "ignore": ["dist", "node_modules", "coverage"],
+  "exec": "tsx src/server.ts",
+  "legacyWatch": true,
+  "delay": "250"
+}
