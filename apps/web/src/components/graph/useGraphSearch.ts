@@ -113,7 +113,7 @@ export const useGraphSearch = ({
         return;
       }
 
-      const firstMatch = fallbackResult.matches[0];
+      const firstMatch = fallbackResult.matches[0]!;
       setSelectedPersonId(firstMatch.personId);
       setFocusPersonId(firstMatch.personId);
       setPinnedPersonId(firstMatch.personId);
