@@ -61,8 +61,8 @@ describe("photo co-occurrence helpers", () => {
         ])
       },
       {
-      minSharedPhotos: 1,
-      minScore: 0.5
+        minSharedPhotos: 1,
+        minScore: 0.5
       }
     );
 

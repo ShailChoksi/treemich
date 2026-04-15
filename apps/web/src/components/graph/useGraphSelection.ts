@@ -1,12 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type UseGraphSelectionOptions = {
+  selectedPersonId: string | null;
   setFocusPersonId: (personId: string | null) => void;
   setPinnedPersonId: (personId: string | null) => void;
 };
 
-export const useGraphSelection = ({ setFocusPersonId, setPinnedPersonId }: UseGraphSelectionOptions) => {
-  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+export const useGraphSelection = ({
+  selectedPersonId: controlledSelectedPersonId,
+  setFocusPersonId,
+  setPinnedPersonId
+}: UseGraphSelectionOptions) => {
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(controlledSelectedPersonId);
+
+  useEffect(() => {
+    setSelectedPersonId(controlledSelectedPersonId);
+  }, [controlledSelectedPersonId]);
 
   const clearSelection = () => {
     setSelectedPersonId(null);

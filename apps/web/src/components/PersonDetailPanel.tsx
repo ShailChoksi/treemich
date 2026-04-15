@@ -25,7 +25,11 @@ type Props = {
   onProfileSave: () => void;
   isSavingProfile: boolean;
   onFocusPerson: (personId: string) => void;
-  onUpdateRelationship: (relationship: RelationshipRecord, relatedPersonId: string, relationshipType: RelationshipType) => Promise<void>;
+  onUpdateRelationship: (
+    relationship: RelationshipRecord,
+    relatedPersonId: string,
+    relationshipType: RelationshipType
+  ) => Promise<void>;
   onDeleteRelationship: (relationship: RelationshipRecord, relatedPersonId: string) => Promise<void>;
   isSavingRelationship: boolean;
 };
@@ -37,7 +41,11 @@ const relationshipLabel: Record<RelationshipRecord["type"], string> = {
   SIBLING_OF: "Sibling"
 };
 
-const relationshipEditorLabel = (relationshipType: RelationshipType, personName: string, relatedName: string) => {
+const relationshipEditorLabel = (
+  relationshipType: RelationshipType,
+  personName: string,
+  relatedName: string
+) => {
   if (relationshipType === "PARENT_OF") {
     return `${personName} is parent of ${relatedName}`;
   }
@@ -50,7 +58,11 @@ const relationshipEditorLabel = (relationshipType: RelationshipType, personName:
   return `${personName} is sibling of ${relatedName}`;
 };
 
-const getAllowedRelationshipOptions = (relationshipType: RelationshipType, personName: string, relatedName: string) => {
+const getAllowedRelationshipOptions = (
+  relationshipType: RelationshipType,
+  personName: string,
+  relatedName: string
+) => {
   const relationshipOptions: Array<{ value: RelationshipType; label: string }> = [
     { value: "PARENT_OF", label: relationshipEditorLabel("PARENT_OF", personName, relatedName) },
     { value: "CHILD_OF", label: relationshipEditorLabel("CHILD_OF", personName, relatedName) },
@@ -58,10 +70,14 @@ const getAllowedRelationshipOptions = (relationshipType: RelationshipType, perso
     { value: "SIBLING_OF", label: relationshipEditorLabel("SIBLING_OF", personName, relatedName) }
   ];
   if (relationshipType === "PARENT_OF" || relationshipType === "CHILD_OF") {
-    return relationshipOptions.filter((option) => option.value === "PARENT_OF" || option.value === "CHILD_OF");
+    return relationshipOptions.filter(
+      (option) => option.value === "PARENT_OF" || option.value === "CHILD_OF"
+    );
   }
 
-  return relationshipOptions.filter((option) => option.value === "SPOUSE_OF" || option.value === "SIBLING_OF");
+  return relationshipOptions.filter(
+    (option) => option.value === "SPOUSE_OF" || option.value === "SIBLING_OF"
+  );
 };
 
 const formatBirthDate = (birthDate?: string | null) => {
@@ -125,8 +141,12 @@ export const PersonDetailPanel = ({
         return;
       }
 
-      const displayRelationshipType = isSource ? inverseRelationshipType(relationship.type) : relationship.type;
-      const editableRelationshipType = isSource ? relationship.type : inverseRelationshipType(relationship.type);
+      const displayRelationshipType = isSource
+        ? inverseRelationshipType(relationship.type)
+        : relationship.type;
+      const editableRelationshipType = isSource
+        ? relationship.type
+        : inverseRelationshipType(relationship.type);
       const itemKey = `${relatedId}:${editableRelationshipType}`;
       if (itemsByKey.has(itemKey)) {
         return;
@@ -145,12 +165,15 @@ export const PersonDetailPanel = ({
 
     return [...itemsByKey.values()].sort(
       (left, right) =>
-        left.relationshipLabel.localeCompare(right.relationshipLabel) || left.relatedName.localeCompare(right.relatedName)
+        left.relationshipLabel.localeCompare(right.relationshipLabel) ||
+        left.relatedName.localeCompare(right.relatedName)
     );
   }, [people, person, relationships]);
 
-  const activeRelationship = relatives.find((relationship) => relationship.key === editingRelationshipKey) ?? null;
-  const pendingDeleteRelationship = relatives.find((relationship) => relationship.key === pendingDeleteKey) ?? null;
+  const activeRelationship =
+    relatives.find((relationship) => relationship.key === editingRelationshipKey) ?? null;
+  const pendingDeleteRelationship =
+    relatives.find((relationship) => relationship.key === pendingDeleteKey) ?? null;
   const allowedRelationshipOptions = activeRelationship
     ? getAllowedRelationshipOptions(
         activeRelationship.editableRelationshipType,
@@ -189,7 +212,11 @@ export const PersonDetailPanel = ({
       return;
     }
 
-    await onUpdateRelationship(activeRelationship.record, activeRelationship.relatedId, editingRelationshipType);
+    await onUpdateRelationship(
+      activeRelationship.record,
+      activeRelationship.relatedId,
+      editingRelationshipType
+    );
     setEditingRelationshipKey(null);
   };
 
@@ -211,7 +238,9 @@ export const PersonDetailPanel = ({
               <h3>{person.name}</h3>
               <div className="person-detail-meta">
                 <span className="person-detail-meta-item">Immich birth date: {sourceBirthDate}</span>
-                <span className="person-detail-meta-item">{relatives.length} relative{relatives.length === 1 ? "" : "s"}</span>
+                <span className="person-detail-meta-item">
+                  {relatives.length} relative{relatives.length === 1 ? "" : "s"}
+                </span>
               </div>
             </div>
           </div>
@@ -224,7 +253,10 @@ export const PersonDetailPanel = ({
             <div className="person-detail-form-grid">
               <label className="field-group">
                 <span className="field-label">Gender</span>
-                <select value={genderValue} onChange={(event) => onGenderChange(event.target.value as Gender)}>
+                <select
+                  value={genderValue}
+                  onChange={(event) => onGenderChange(event.target.value as Gender)}
+                >
                   {genders.map((gender) => (
                     <option key={gender} value={gender}>
                       {formatGenderLabel(gender)}
@@ -234,7 +266,11 @@ export const PersonDetailPanel = ({
               </label>
               <label className="field-group">
                 <span className="field-label">Birth date override</span>
-                <input type="date" value={birthDateValue} onChange={(event) => onBirthDateChange(event.target.value)} />
+                <input
+                  type="date"
+                  value={birthDateValue}
+                  onChange={(event) => onBirthDateChange(event.target.value)}
+                />
               </label>
             </div>
             <p className="hint">
@@ -242,7 +278,11 @@ export const PersonDetailPanel = ({
                 ? `Override shown in Treemich: ${formatBirthDate(birthDateValue)}`
                 : "No override set. Treemich will use the birth date from Immich when available."}
             </p>
-            <button className="person-detail-primary-action" onClick={onProfileSave} disabled={isSavingProfile}>
+            <button
+              className="person-detail-primary-action"
+              onClick={onProfileSave}
+              disabled={isSavingProfile}
+            >
               {isSavingProfile ? "Saving..." : "Save profile"}
             </button>
           </div>
@@ -264,7 +304,11 @@ export const PersonDetailPanel = ({
                           src={personThumbnailUrl(relative.relatedId)}
                           alt={relative.relatedName}
                         />
-                        <button type="button" className="text-link-button relative-name-button" onClick={() => onFocusPerson(relative.relatedId)}>
+                        <button
+                          type="button"
+                          className="text-link-button relative-name-button"
+                          onClick={() => onFocusPerson(relative.relatedId)}
+                        >
                           {relative.relatedName}
                         </button>
                         <span className="relative-pill">{relative.relationshipLabel}</span>
@@ -314,12 +358,11 @@ export const PersonDetailPanel = ({
               </div>
               <div className="person-detail-inline-summary">
                 <span className="relative-pill">{activeRelationship.relationshipLabel}</span>
-                <span className="hint">
-                  Editing link with {activeRelationship.relatedName}
-                </span>
+                <span className="hint">Editing link with {activeRelationship.relatedName}</span>
               </div>
               <p className="hint">
-                {activeRelationship.editableRelationshipType === "PARENT_OF" || activeRelationship.editableRelationshipType === "CHILD_OF"
+                {activeRelationship.editableRelationshipType === "PARENT_OF" ||
+                activeRelationship.editableRelationshipType === "CHILD_OF"
                   ? "Parent and child links can be swapped."
                   : "Spouse and sibling links can be swapped."}
               </p>
@@ -339,12 +382,20 @@ export const PersonDetailPanel = ({
               <div className="add-relative-actions">
                 <button
                   type="button"
-                  disabled={isSavingRelationship || editingRelationshipType === activeRelationship.editableRelationshipType}
+                  disabled={
+                    isSavingRelationship ||
+                    editingRelationshipType === activeRelationship.editableRelationshipType
+                  }
                   onClick={() => void handleRelationshipSave()}
                 >
                   {isSavingRelationship ? "Saving..." : "Save relationship"}
                 </button>
-                <button type="button" className="secondary-button" onClick={stopEditingRelationship} disabled={isSavingRelationship}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={stopEditingRelationship}
+                  disabled={isSavingRelationship}
+                >
                   Cancel
                 </button>
               </div>

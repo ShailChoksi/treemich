@@ -1,10 +1,5 @@
 import { useMemo } from "react";
-import type {
-  ImmichPerson,
-  PhotoCluster,
-  PhotoCooccurrenceEdge,
-  RelationshipRecord
-} from "../../lib/api";
+import type { ImmichPerson, PhotoCluster, PhotoCooccurrenceEdge, RelationshipRecord } from "../../lib/api";
 import {
   defaultFamilyViewStyle,
   distanceSquared,
@@ -97,15 +92,20 @@ export const useGraphLayoutState = ({
     [familyViewStyle, people, photoClusters, relationships, selectedPersonId, viewMode]
   );
   const peopleById = useMemo(() => new Map(people.map((person) => [person.id, person])), [people]);
-  const positionedById = useMemo(() => new Map(positionedPeople.map((item) => [item.person.id, item])), [positionedPeople]);
+  const positionedById = useMemo(
+    () => new Map(positionedPeople.map((item) => [item.person.id, item])),
+    [positionedPeople]
+  );
 
   const selectedPerson = useMemo(
-    () => (selectedPersonId ? peopleById.get(selectedPersonId) ?? null : null),
+    () => (selectedPersonId ? (peopleById.get(selectedPersonId) ?? null) : null),
     [peopleById, selectedPersonId]
   );
   const prioritizedNodeIds = useMemo(() => {
     return new Set(
-      [selectedPersonId, hoveredPersonId, focusPersonId, pinnedPersonId].filter((value): value is string => Boolean(value))
+      [selectedPersonId, hoveredPersonId, focusPersonId, pinnedPersonId].filter((value): value is string =>
+        Boolean(value)
+      )
     );
   }, [focusPersonId, hoveredPersonId, pinnedPersonId, selectedPersonId]);
 
@@ -231,8 +231,13 @@ export const useGraphLayoutState = ({
   }, [displayVisiblePeople]);
   const visibleRelationshipLines = useMemo(() => {
     if (viewMode === "photo") {
-      const lines: Array<{ key: string; from: NodePosition; to: NodePosition; kind: RelationshipKind; opacity?: number }> =
-        [];
+      const lines: Array<{
+        key: string;
+        from: NodePosition;
+        to: NodePosition;
+        kind: RelationshipKind;
+        opacity?: number;
+      }> = [];
       for (const edge of photoEdges) {
         const from = visiblePositionsById.get(edge.personAId);
         const to = visiblePositionsById.get(edge.personBId);
@@ -251,8 +256,13 @@ export const useGraphLayoutState = ({
     }
 
     const seen = new Set<string>();
-    const lines: Array<{ key: string; from: NodePosition; to: NodePosition; kind: RelationshipKind; opacity?: number }> =
-      [];
+    const lines: Array<{
+      key: string;
+      from: NodePosition;
+      to: NodePosition;
+      kind: RelationshipKind;
+      opacity?: number;
+    }> = [];
     for (const relationship of relationships) {
       const first = relationship.fromPersonId;
       const second = relationship.toPersonId;

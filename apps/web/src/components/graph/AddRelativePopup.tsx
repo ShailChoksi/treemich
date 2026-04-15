@@ -56,7 +56,9 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
     <>
       <div className="add-relative-backdrop" onClick={onCancel} />
       <div className="add-relative-popup" role="dialog" aria-modal="true" aria-label={slotTitle[slot]}>
-        <h3>{slotTitle[slot]} of {selectedPersonFirstName}</h3>
+        <h3>
+          {slotTitle[slot]} of {selectedPersonFirstName}
+        </h3>
         <form className="stack add-relative-form" onSubmit={handleSubmit}>
           <label className="field-group">
             <span className="field-label">Name</span>
@@ -90,7 +92,12 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
             <button type="submit" className="add-relative-submit" disabled={busy || !personName.trim()}>
               {busy ? "Adding..." : "Add"}
             </button>
-            <button type="button" className="secondary-button add-relative-cancel" onClick={onCancel} disabled={busy}>
+            <button
+              type="button"
+              className="secondary-button add-relative-cancel"
+              onClick={onCancel}
+              disabled={busy}
+            >
               Cancel
             </button>
           </div>

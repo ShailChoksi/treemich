@@ -35,7 +35,10 @@ export type AuthenticatedRequestContext = {
 };
 
 export class AuthService {
-  async loginWithImmich(email: string, password: string): Promise<{
+  async loginWithImmich(
+    email: string,
+    password: string
+  ): Promise<{
     sessionToken: string;
     state: AuthState;
   }> {
@@ -224,12 +227,13 @@ export class AuthService {
       return;
     }
 
-    const [existingProfileCount, existingRelationshipCount, legacyProfileCount, legacyRelationshipCount] = await Promise.all([
-      prisma.personProfile.count({ where: { userId } }),
-      prisma.relationship.count({ where: { userId } }),
-      prisma.personProfile.count({ where: { userId: legacySharedUserId } }),
-      prisma.relationship.count({ where: { userId: legacySharedUserId } })
-    ]);
+    const [existingProfileCount, existingRelationshipCount, legacyProfileCount, legacyRelationshipCount] =
+      await Promise.all([
+        prisma.personProfile.count({ where: { userId } }),
+        prisma.relationship.count({ where: { userId } }),
+        prisma.personProfile.count({ where: { userId: legacySharedUserId } }),
+        prisma.relationship.count({ where: { userId: legacySharedUserId } })
+      ]);
 
     if (existingProfileCount > 0 || existingRelationshipCount > 0) {
       return;

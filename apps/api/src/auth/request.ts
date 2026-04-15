@@ -22,7 +22,11 @@ export const readCookie = (request: FastifyRequest, cookieName = sessionCookieNa
       continue;
     }
 
-    return decodeURIComponent(valueParts.join("="));
+    try {
+      return decodeURIComponent(valueParts.join("="));
+    } catch {
+      return null;
+    }
   }
 
   return null;

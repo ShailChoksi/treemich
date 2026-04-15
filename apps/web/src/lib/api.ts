@@ -50,7 +50,11 @@ const withSession = (init?: RequestInit): RequestInit => ({
   ...(init ?? {})
 });
 
-const fetchWithRetry = async (input: RequestInfo | URL, init?: RequestInit, options?: { retries?: number; baseDelayMs?: number }) => {
+const fetchWithRetry = async (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  options?: { retries?: number; baseDelayMs?: number }
+) => {
   const retries = options?.retries ?? startupRetryAttempts;
   const baseDelayMs = options?.baseDelayMs ?? startupRetryDelayMs;
   let lastError: unknown;
@@ -93,21 +97,27 @@ const ensureOk = async (response: Response, fallbackMessage: string) => {
 };
 
 export const login = async (email: string, password: string): Promise<AuthState> => {
-  const response = await fetch(`${treemichApi}/auth/login`, withSession({
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ email, password })
-  }));
+  const response = await fetch(
+    `${treemichApi}/auth/login`,
+    withSession({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, password })
+    })
+  );
   await ensureOk(response, "Login failed");
   return (await response.json()) as AuthState;
 };
 
 export const logout = async () => {
-  const response = await fetch(`${treemichApi}/auth/logout`, withSession({
-    method: "POST"
-  }));
+  const response = await fetch(
+    `${treemichApi}/auth/logout`,
+    withSession({
+      method: "POST"
+    })
+  );
   await ensureOk(response, "Logout failed");
   return response.json() as Promise<{ success: boolean }>;
 };
@@ -137,14 +147,20 @@ export const getImmichPeople = async (): Promise<ImmichPerson[]> => {
   return json.people ?? [];
 };
 
-export const updatePersonProfile = async (personId: string, profile: { gender?: Gender; birthDate?: string | null }) => {
-  const response = await fetch(`${treemichApi}/people/${personId}`, withSession({
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(profile)
-  }));
+export const updatePersonProfile = async (
+  personId: string,
+  profile: { gender?: Gender; birthDate?: string | null }
+) => {
+  const response = await fetch(
+    `${treemichApi}/people/${personId}`,
+    withSession({
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(profile)
+    })
+  );
   await ensureOk(response, "Failed to update profile");
   return (await response.json()) as TreemichPersonProfile;
 };
@@ -154,13 +170,16 @@ export const createRelationship = async (
   toPersonId: string,
   relationshipType: RelationshipType
 ) => {
-  const response = await fetch(`${treemichApi}/people/${fromPersonId}/relationships`, withSession({
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ toPersonId, relationshipType })
-  }));
+  const response = await fetch(
+    `${treemichApi}/people/${fromPersonId}/relationships`,
+    withSession({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ toPersonId, relationshipType })
+    })
+  );
   await ensureOk(response, "Failed to create relationship");
   return response.json();
 };
@@ -177,10 +196,13 @@ export const deleteRelationship = async (
     query.set("type", relationshipType);
   }
 
-  const response = await fetch(`${treemichApi}/people/${fromPersonId}/relationships?${query.toString()}`, withSession({
-    method: "DELETE",
-    headers: {}
-  }));
+  const response = await fetch(
+    `${treemichApi}/people/${fromPersonId}/relationships?${query.toString()}`,
+    withSession({
+      method: "DELETE",
+      headers: {}
+    })
+  );
   await ensureOk(response, "Failed to delete relationship");
   return response.json();
 };

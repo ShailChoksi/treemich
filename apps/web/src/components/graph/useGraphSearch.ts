@@ -81,6 +81,8 @@ export const useGraphSearch = ({
       return;
     }
     if (match) {
+      setSelectedPersonId(match.id);
+      setFocusPersonId(match.id);
       setPinnedPersonId(match.id);
       setHoveredPersonId(match.id);
       setSearchFeedback(`Moved ${match.name} into view`);

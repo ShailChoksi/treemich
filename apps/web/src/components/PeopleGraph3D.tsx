@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { searchRelationships, type ImmichPerson, type RelationshipRecord, type RelationshipType } from "../lib/api";
+import {
+  searchRelationships,
+  type ImmichPerson,
+  type RelationshipRecord,
+  type RelationshipType
+} from "../lib/api";
 import { type NodePosition } from "./graph/layout";
 import { AddRelativePopup } from "./graph/AddRelativePopup";
 import { useThumbnailLoader } from "./graph/useThumbnailLoader";
@@ -24,13 +29,18 @@ import { GraphViewModeSelector } from "./graph/GraphViewModeSelector";
 type Props = {
   people: ImmichPerson[];
   relationships: RelationshipRecord[];
+  selectedPersonId: string | null;
   status: string | null;
   isLoading: boolean;
   isSavingRelationship: boolean;
   loadError: string | null;
   focusPersonRequest: string | null;
   onSelectedPersonChange?: (personId: string | null) => void;
-  onCreateRelationship: (sourcePersonId: string, targetPersonId: string, relationshipType: RelationshipType) => Promise<void>;
+  onCreateRelationship: (
+    sourcePersonId: string,
+    targetPersonId: string,
+    relationshipType: RelationshipType
+  ) => Promise<void>;
 };
 
 const DEFAULT_RENDER_LIMIT = 120;
@@ -43,6 +53,7 @@ type AddRelativeIntent = {
 export const PeopleGraph3D = ({
   people,
   relationships,
+  selectedPersonId: parentSelectedPersonId,
   status,
   isLoading,
   isSavingRelationship,
@@ -63,23 +74,30 @@ export const PeopleGraph3D = ({
   const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
 
   const { selectedPersonId, setSelectedPersonId, clearSelection, handleNodeClick } = useGraphSelection({
+    selectedPersonId: parentSelectedPersonId,
     setFocusPersonId,
     setPinnedPersonId
   });
-  const { selectedPerson, prioritizedNodeIds, displayVisiblePeople, visiblePositionsById, graphBounds, visibleRelationshipLines } =
-    useGraphLayoutState({
+  const {
+    selectedPerson,
+    prioritizedNodeIds,
+    displayVisiblePeople,
+    visiblePositionsById,
+    graphBounds,
+    visibleRelationshipLines
+  } = useGraphLayoutState({
     people,
     relationships,
-      photoEdges: [],
-      photoClusters: [],
-      viewMode: "family",
-      familyViewStyle,
-      selectedPersonId,
-      hoveredPersonId,
-      focusPersonId,
-      pinnedPersonId,
-      renderLimit: DEFAULT_RENDER_LIMIT
-    });
+    photoEdges: [],
+    photoClusters: [],
+    viewMode: "family",
+    familyViewStyle,
+    selectedPersonId,
+    hoveredPersonId,
+    focusPersonId,
+    pinnedPersonId,
+    renderLimit: DEFAULT_RENDER_LIMIT
+  });
   const { thumbnailNodeIds } = useThumbnailLoader({
     peopleIds: people.map((person) => person.id),
     prioritizedNodeIds,
@@ -88,27 +106,29 @@ export const PeopleGraph3D = ({
   });
   useGraphLifecycle({ thumbnailNodeIds, selectedPersonId, onSelectedPersonChange });
 
-  const { searchTerm, setSearchTerm, searchFeedback, setSearchFeedback, handleSearchSubmit } = useGraphSearch({
-    people,
-    focusPersonRequest,
-    setSelectedPersonId,
-    setFocusPersonId,
-    setPinnedPersonId,
-    setHoveredPersonId,
-    onSearchFallback: async (query) => {
-      const response = await searchRelationships(query);
-      const firstMatch = response.matches?.[0]?.person;
-      if (!firstMatch) {
-        return null;
-      }
+  const { searchTerm, setSearchTerm, searchFeedback, setSearchFeedback, handleSearchSubmit } = useGraphSearch(
+    {
+      people,
+      focusPersonRequest,
+      setSelectedPersonId,
+      setFocusPersonId,
+      setPinnedPersonId,
+      setHoveredPersonId,
+      onSearchFallback: async (query) => {
+        const response = await searchRelationships(query);
+        const firstMatch = response.matches?.[0]?.person;
+        if (!firstMatch) {
+          return null;
+        }
 
-      return {
-        personId: firstMatch.id,
-        personName: firstMatch.name,
-        feedback: response.message ?? `Focused ${firstMatch.name} from search`
-      };
+        return {
+          personId: firstMatch.id,
+          personName: firstMatch.name,
+          feedback: response.message ?? `Focused ${firstMatch.name} from search`
+        };
+      }
     }
-  });
+  );
   const { frameAllNodes, focusActiveNode, topDownView } = useGraphCameraControls({
     graphBounds,
     visiblePositionsById,

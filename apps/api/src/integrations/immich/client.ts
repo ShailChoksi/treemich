@@ -270,7 +270,9 @@ export class ImmichClient {
           ? candidate.faces
           : [];
 
-    const personIds = [...new Set(rawPeople.map((entry) => this.extractPersonId(entry)).filter((id): id is string => !!id))];
+    const personIds = [
+      ...new Set(rawPeople.map((entry) => this.extractPersonId(entry)).filter((id): id is string => !!id))
+    ];
     if (personIds.length < 2) {
       return null;
     }
@@ -295,7 +297,11 @@ export class ImmichClient {
       person?: { id?: unknown };
     };
 
-    return this.toStringId(candidate.id) ?? this.toStringId(candidate.personId) ?? this.toStringId(candidate.person?.id);
+    return (
+      this.toStringId(candidate.id) ??
+      this.toStringId(candidate.personId) ??
+      this.toStringId(candidate.person?.id)
+    );
   }
 
   private toStringId(value: unknown): string | null {

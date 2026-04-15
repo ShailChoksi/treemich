@@ -7,8 +7,14 @@ export const registerPeopleGetRoute = (app: FastifyInstance) => {
     const auth = getRequiredAuth(request);
     const people = await getImmichClientForRequest(request).listPeople();
     const personIds = people.map((person) => person.id);
-    const profilesById = await app.services.relationshipService.getProfilesForPersonIds(auth.user.id, personIds);
-    const connectedIds = await app.services.relationshipService.getConnectedPersonIds(auth.user.id, personIds);
+    const profilesById = await app.services.relationshipService.getProfilesForPersonIds(
+      auth.user.id,
+      personIds
+    );
+    const connectedIds = await app.services.relationshipService.getConnectedPersonIds(
+      auth.user.id,
+      personIds
+    );
 
     return {
       people: people.map((person) => ({

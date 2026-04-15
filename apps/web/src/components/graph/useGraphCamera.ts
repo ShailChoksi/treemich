@@ -13,7 +13,10 @@ export const useGraphCamera = ({ frameAllNodes, focusActiveNode, topDownView }: 
         return;
       }
       const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+      ) {
         return;
       }
       if (event.key === "f" || event.key === "F") {

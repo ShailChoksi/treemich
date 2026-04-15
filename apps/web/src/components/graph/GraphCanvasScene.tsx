@@ -115,8 +115,7 @@ export const GraphCanvasScene = ({
 
         const context =
           // three@0.180 requires WebGL2, so only request webgl2 contexts.
-          canvas.getContext("webgl2") ??
-          canvas.getContext("webgl2", contextAttributes);
+          canvas.getContext("webgl2") ?? canvas.getContext("webgl2", contextAttributes);
 
         if (!context) {
           throw new Error(

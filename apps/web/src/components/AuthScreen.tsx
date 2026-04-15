@@ -20,7 +20,9 @@ export const AuthScreen = ({ busy, error, onSubmit }: Props) => {
       <section className="card auth-card stack">
         <div className="stack">
           <h1>Sign in to Treemich</h1>
-          <p className="hint">Use the same Immich email and password for the server configured in Treemich.</p>
+          <p className="hint">
+            Use the same Immich email and password for the server configured in Treemich.
+          </p>
         </div>
         <form className="stack" onSubmit={(event) => void handleSubmit(event)}>
           <label className="field-group">

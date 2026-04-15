@@ -12,9 +12,13 @@ export const registerPeopleCooccurrenceGetRoute = (app: FastifyInstance) => {
   app.get("/people/cooccurrence", async (request) => {
     const auth = getRequiredAuth(request);
     const query = querySchema.parse(request.query);
-    return app.services.relationshipService.getPhotoCooccurrence(auth.user.id, getImmichClientForRequest(request), {
-      minSharedPhotos: query.minSharedPhotos,
-      minScore: query.minScore
-    });
+    return app.services.relationshipService.getPhotoCooccurrence(
+      auth.user.id,
+      getImmichClientForRequest(request),
+      {
+        minSharedPhotos: query.minSharedPhotos,
+        minScore: query.minScore
+      }
+    );
   });
 };

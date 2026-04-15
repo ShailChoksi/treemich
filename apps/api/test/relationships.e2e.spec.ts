@@ -266,6 +266,25 @@ describe("Treemich API routes", () => {
     expect(response.headers["set-cookie"]).toContain("treemich_session=");
   });
 
+  it("ignores malformed session cookies instead of crashing auth/me", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: {
+        cookie: "treemich_session=%ZZ"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(getAuthStateMock).toHaveBeenCalledWith(null);
+    expect(response.json()).toEqual({
+      authenticated: false,
+      linkStatus: {
+        linked: false
+      }
+    });
+  });
+
   it("creates a session on auth/login", async () => {
     loginWithImmichMock.mockResolvedValueOnce({
       sessionToken: "session-token",

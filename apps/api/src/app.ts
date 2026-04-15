@@ -25,7 +25,9 @@ type BuildAppOptions = {
   services?: AppServices;
 };
 
-const isPrismaKnownRequestError = (error: unknown): error is { code: string; message: string; name: string } => {
+const isPrismaKnownRequestError = (
+  error: unknown
+): error is { code: string; message: string; name: string } => {
   if (!error || typeof error !== "object") {
     return false;
   }
@@ -66,7 +68,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.decorateRequest("auth", null);
 
   app.register(cors, {
-    origin: env.NODE_ENV === "production" ? env.WEB_ORIGIN ?? false : true,
+    origin: env.NODE_ENV === "production" ? (env.WEB_ORIGIN ?? false) : true,
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   });

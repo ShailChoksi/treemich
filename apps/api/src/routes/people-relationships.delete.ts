@@ -18,7 +18,12 @@ export const registerPeopleRelationshipsDeleteRoute = (app: FastifyInstance) => 
     const { id } = paramsSchema.parse(request.params);
     const query = querySchema.parse(request.query);
 
-    const deleted = await app.services.relationshipService.deleteRelationship(auth.user.id, id, query.toPersonId, query.type);
+    const deleted = await app.services.relationshipService.deleteRelationship(
+      auth.user.id,
+      id,
+      query.toPersonId,
+      query.type
+    );
     return {
       deletedCount: deleted.count
     };

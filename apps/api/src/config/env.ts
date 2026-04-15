@@ -18,7 +18,11 @@ const envSchema = z.object({
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, "TREEMICH_ENCRYPTION_KEY must be a 64-character hex string"),
   TREEMICH_SESSION_COOKIE_NAME: z.string().min(1).default("treemich_session"),
-  TREEMICH_SESSION_TTL_MS: z.coerce.number().int().positive().default(1000 * 60 * 60 * 24 * 30),
+  TREEMICH_SESSION_TTL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(1000 * 60 * 60 * 24 * 30),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
   RATE_LIMIT_TIME_WINDOW_MS: z.coerce.number().int().positive().default(60_000)
 });
