@@ -84,7 +84,11 @@ export const GraphViewModeSelector = ({ value, onChange, filterVisibility, onTog
             className={`graph-edge-legend-item ${filterVisibility[item.filter] ? "" : "graph-edge-legend-item-off"}`}
             role="listitem"
           >
-            <span className="graph-edge-legend-swatch" style={{ backgroundColor: item.color }} aria-hidden="true" />
+            <span
+              className="graph-edge-legend-swatch"
+              style={{ backgroundColor: item.color }}
+              aria-hidden="true"
+            />
             {item.label}
           </span>
         ))}

@@ -49,10 +49,11 @@ type SessionResolutionOptions = {
   includeLinkedAccount?: boolean;
 };
 
-type ResolvedSessionContext<TOptions extends SessionResolutionOptions | undefined> =
-  TOptions extends { includeLinkedAccount: true }
-    ? LinkedAuthenticatedRequestContext
-    : AuthenticatedRequestContext;
+type ResolvedSessionContext<TOptions extends SessionResolutionOptions | undefined> = TOptions extends {
+  includeLinkedAccount: true;
+}
+  ? LinkedAuthenticatedRequestContext
+  : AuthenticatedRequestContext;
 
 type CachedContext = AuthenticatedRequestContext | LinkedAuthenticatedRequestContext | null;
 
@@ -107,7 +108,10 @@ class SessionContextCache {
 export class AuthService {
   private readonly sessionCacheTtlMs = 30_000;
   private readonly maxSessionCacheEntries = 500;
-  private readonly sessionCache = new SessionContextCache(this.sessionCacheTtlMs, this.maxSessionCacheEntries);
+  private readonly sessionCache = new SessionContextCache(
+    this.sessionCacheTtlMs,
+    this.maxSessionCacheEntries
+  );
 
   async loginWithImmich(
     email: string,

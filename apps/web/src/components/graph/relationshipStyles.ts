@@ -1,12 +1,6 @@
 import type { RelationshipType } from "../../lib/api";
 
-export type RelationshipKind =
-  | "PARENT_CHILD"
-  | "SPOUSE"
-  | "SIBLING"
-  | "FRIEND"
-  | "PET"
-  | "CO_OCCURRENCE";
+export type RelationshipKind = "PARENT_CHILD" | "SPOUSE" | "SIBLING" | "FRIEND" | "PET" | "CO_OCCURRENCE";
 export type GraphFilter = "parentChild" | "spouse" | "sibling" | "friends" | "pets";
 export type GraphFilterVisibility = Record<GraphFilter, boolean>;
 

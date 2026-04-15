@@ -198,11 +198,7 @@ const collectConnectedComponents = (undirected: Map<string, Set<string>>) => {
   return components;
 };
 
-const buildComponentCenters = (
-  components: string[][],
-  componentGapX: number,
-  componentGapZ: number
-) => {
+const buildComponentCenters = (components: string[][], componentGapX: number, componentGapZ: number) => {
   const componentLayoutColumns = Math.max(1, Math.ceil(Math.sqrt(components.length)));
   const componentSpanByIndex = components.map((component) => {
     const nodeCount = Math.max(component.length, 1);
@@ -320,7 +316,9 @@ const personNameById = (peopleById: Map<string, ImmichPerson>, personId: string)
   peopleById.get(personId)?.name ?? personId;
 
 const sortPersonIdsByName = (ids: Iterable<string>, peopleById: Map<string, ImmichPerson>) =>
-  [...ids].sort((left, right) => personNameById(peopleById, left).localeCompare(personNameById(peopleById, right)));
+  [...ids].sort((left, right) =>
+    personNameById(peopleById, left).localeCompare(personNameById(peopleById, right))
+  );
 
 const pickPrimaryParent = (
   parentIds: string[],
@@ -758,7 +756,13 @@ const buildTreePositions = (
     });
     const rootIds = roots.length > 0 ? roots : [component[0]];
 
-    const depthById = assignDepthsForComponent(component, componentSet, rootIds, childrenByParent, parentsByChild);
+    const depthById = assignDepthsForComponent(
+      component,
+      componentSet,
+      rootIds,
+      childrenByParent,
+      parentsByChild
+    );
 
     const parentsInComponentByChild = new Map<string, string[]>();
     for (const childId of component) {
@@ -817,7 +821,10 @@ const buildTreePositions = (
       return cursor;
     };
 
-    const sortedRoots = sortPersonIdsByName(new Set(rootIds.filter((id): id is string => Boolean(id))), peopleById);
+    const sortedRoots = sortPersonIdsByName(
+      new Set(rootIds.filter((id): id is string => Boolean(id))),
+      peopleById
+    );
 
     let forestCursor = 0;
     for (const rootId of sortedRoots) {

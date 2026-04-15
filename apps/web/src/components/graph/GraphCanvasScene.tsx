@@ -1,5 +1,5 @@
 import { Line, OrbitControls } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, type RootState } from "@react-three/fiber";
 import { useCallback } from "react";
 import { MOUSE, PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -82,8 +82,10 @@ export const GraphCanvasScene = ({
     [onNodeClick]
   );
   const handleCanvasCreated = useCallback(
-    ({ camera }: { camera: PerspectiveCamera }) => {
-      cameraRef.current = camera;
+    (state: RootState) => {
+      if (state.camera instanceof PerspectiveCamera) {
+        cameraRef.current = state.camera;
+      }
     },
     [cameraRef]
   );

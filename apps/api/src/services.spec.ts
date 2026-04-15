@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { getImmichClientForRequest } from "./services.js";
 
 describe("getImmichClientForRequest", () => {
+  type RequestForImmichClient = Parameters<typeof getImmichClientForRequest>[0];
+
   it("uses linked auth context directly when already present", async () => {
     const linkedAccount = {
       id: "link-1",
@@ -53,7 +55,7 @@ describe("getImmichClientForRequest", () => {
       }
     };
 
-    const resolvedClient = await getImmichClientForRequest(request as any);
+    const resolvedClient = await getImmichClientForRequest(request as unknown as RequestForImmichClient);
     expect(resolvedClient).toBe(client);
     expect(request.server.services.authService.requireLinkedSession).not.toHaveBeenCalled();
     expect(request.server.services.immichClientFactory.getClient).toHaveBeenCalledWith(linkedAccount);
@@ -115,7 +117,7 @@ describe("getImmichClientForRequest", () => {
       }
     };
 
-    const resolvedClient = await getImmichClientForRequest(request as any);
+    const resolvedClient = await getImmichClientForRequest(request as unknown as RequestForImmichClient);
     expect(resolvedClient).toBe(client);
     expect(requireLinkedSession).toHaveBeenCalledWith("test-token");
     expect(request.auth).toEqual(linkedAuthContext);

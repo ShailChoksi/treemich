@@ -2,7 +2,20 @@ import { useCallback, useRef, type MutableRefObject } from "react";
 import { Vector3 } from "three";
 import type { NodePosition } from "../layout";
 
-type OrbitChangeEvent = { target?: { object?: { position?: Vector3 } } } | undefined;
+const getOrbitCameraPosition = (event: unknown): Vector3 | null => {
+  if (!event || typeof event !== "object") {
+    return null;
+  }
+  const candidate = event as {
+    target?: {
+      object?: {
+        position?: unknown;
+      };
+    };
+  };
+  const position = candidate.target?.object?.position;
+  return position instanceof Vector3 ? position : null;
+};
 
 type UseOrbitPositionSyncOptions = {
   lastCameraSampleRef: MutableRefObject<Vector3>;
@@ -16,11 +29,8 @@ export const useOrbitPositionSync = ({
   const lastCameraStateUpdateMsRef = useRef(0);
 
   const handleOrbitChange = useCallback(
-    (event: OrbitChangeEvent) => {
-      if (!event) {
-        return;
-      }
-      const position = event.target?.object?.position;
+    (event: unknown) => {
+      const position = getOrbitCameraPosition(event);
       if (!position) {
         return;
       }
@@ -42,11 +52,8 @@ export const useOrbitPositionSync = ({
   );
 
   const handleOrbitEnd = useCallback(
-    (event: OrbitChangeEvent) => {
-      if (!event) {
-        return;
-      }
-      const position = event.target?.object?.position;
+    (event: unknown) => {
+      const position = getOrbitCameraPosition(event);
       if (!position) {
         return;
       }

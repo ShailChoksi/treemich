@@ -214,7 +214,9 @@ describe("positionPeople", () => {
       .filter((position): position is [number, number, number] => Boolean(position));
 
     expect(children).toHaveLength(4);
-    const uniqueXY = new Set(children.map((position) => `${position[0].toFixed(3)}|${position[1].toFixed(3)}`));
+    const uniqueXY = new Set(
+      children.map((position) => `${position[0].toFixed(3)}|${position[1].toFixed(3)}`)
+    );
     expect(uniqueXY.size).toBe(children.length);
   });
 

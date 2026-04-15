@@ -92,9 +92,7 @@ const getAllowedRelationshipOptions = (
   }
 
   if (relationshipType === "FRIEND_OF" || relationshipType === "PET_OF") {
-    return relationshipOptions.filter(
-      (option) => option.value === "FRIEND_OF" || option.value === "PET_OF"
-    );
+    return relationshipOptions.filter((option) => option.value === "FRIEND_OF" || option.value === "PET_OF");
   }
 
   return relationshipOptions;

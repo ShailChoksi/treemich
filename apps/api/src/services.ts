@@ -36,15 +36,18 @@ export const registerServices = (app: FastifyInstance, services: AppServices) =>
   app.decorate("services", services);
 };
 
+const hasLinkedAccountContext = (
+  auth: AuthenticatedRequestContext
+): auth is LinkedAuthenticatedRequestContext => "linkedAccount" in auth && auth.linkedAccount != null;
+
 export const getImmichClientForRequest = async (request: FastifyRequest) => {
   if (!request.auth) {
     throw new TreemichAuthError("Unauthorized");
   }
 
-  const authWithLinkedAccount: LinkedAuthenticatedRequestContext =
-    "linkedAccount" in request.auth
-      ? request.auth
-      : await request.server.services.authService.requireLinkedSession(readCookie(request));
+  const authWithLinkedAccount: LinkedAuthenticatedRequestContext = hasLinkedAccountContext(request.auth)
+    ? request.auth
+    : await request.server.services.authService.requireLinkedSession(readCookie(request));
   request.auth = authWithLinkedAccount;
 
   return request.server.services.immichClientFactory.getClient(authWithLinkedAccount.linkedAccount);

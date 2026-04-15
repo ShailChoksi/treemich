@@ -149,9 +149,7 @@ export const useGraphLayoutState = ({
       return positionedPeople;
     }
 
-    return positionedPeople.filter((item) =>
-      visibleIdsFromRelationships.has(item.person.id)
-    );
+    return positionedPeople.filter((item) => visibleIdsFromRelationships.has(item.person.id));
   }, [filteredRelationships.length, positionedPeople, viewMode, visibleIdsFromRelationships]);
 
   const visiblePeople = useMemo(() => {
@@ -434,7 +432,8 @@ export const useGraphLayoutState = ({
       const kind = relationshipKindForType(relationship.type);
       if (
         kind === "PARENT_CHILD" &&
-        (resolvedParentChildPairs.has(`${first}|${second}`) || resolvedParentChildPairs.has(`${second}|${first}`))
+        (resolvedParentChildPairs.has(`${first}|${second}`) ||
+          resolvedParentChildPairs.has(`${second}|${first}`))
       ) {
         continue;
       }

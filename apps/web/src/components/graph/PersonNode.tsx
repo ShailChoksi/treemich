@@ -1,12 +1,6 @@
 import { Billboard, Text, useTexture } from "@react-three/drei";
 import { memo, useEffect, useMemo } from "react";
-import {
-  CircleGeometry,
-  RingGeometry,
-  SRGBColorSpace,
-  type BufferGeometry,
-  type Texture
-} from "three";
+import { CircleGeometry, RingGeometry, SRGBColorSpace, type BufferGeometry, type Texture } from "three";
 import type { ImmichPerson } from "../../lib/api";
 import { personThumbnailUrl } from "../../lib/api";
 

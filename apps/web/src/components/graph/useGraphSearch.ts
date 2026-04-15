@@ -88,65 +88,68 @@ export const useGraphSearch = ({
     return () => window.clearTimeout(timeout);
   }, [searchFeedback]);
 
-  const handleSearchSubmit = useCallback(async (event: React.FormEvent) => {
-    event.preventDefault();
-    clearHighlights();
-    const match = findPersonBySearchTerm(people, searchTerm);
-    if (!searchTerm.trim()) {
-      setSearchFeedback("Type a person name.");
-      return;
-    }
-    if (match) {
-      setSelectedPersonId(match.id);
-      setFocusPersonId(match.id);
-      setPinnedPersonId(match.id);
-      setHoveredPersonId(match.id);
-      setSearchFeedback(`Moved ${match.name} into view`);
-      return;
-    }
+  const handleSearchSubmit = useCallback(
+    async (event: React.FormEvent) => {
+      event.preventDefault();
+      clearHighlights();
+      const match = findPersonBySearchTerm(people, searchTerm);
+      if (!searchTerm.trim()) {
+        setSearchFeedback("Type a person name.");
+        return;
+      }
+      if (match) {
+        setSelectedPersonId(match.id);
+        setFocusPersonId(match.id);
+        setPinnedPersonId(match.id);
+        setHoveredPersonId(match.id);
+        setSearchFeedback(`Moved ${match.name} into view`);
+        return;
+      }
 
-    if (!onSearchFallback) {
-      setSearchFeedback(`No person found for "${searchTerm}"`);
-      return;
-    }
-
-    try {
-      const fallbackResult = await onSearchFallback(searchTerm);
-      if (!fallbackResult || fallbackResult.matches.length === 0) {
+      if (!onSearchFallback) {
         setSearchFeedback(`No person found for "${searchTerm}"`);
         return;
       }
 
-      const firstMatch = fallbackResult.matches[0]!;
-      setSelectedPersonId(firstMatch.personId);
-      setFocusPersonId(firstMatch.personId);
-      setPinnedPersonId(firstMatch.personId);
-      setHoveredPersonId(firstMatch.personId);
+      try {
+        const fallbackResult = await onSearchFallback(searchTerm);
+        if (!fallbackResult || fallbackResult.matches.length === 0) {
+          setSearchFeedback(`No person found for "${searchTerm}"`);
+          return;
+        }
 
-      const allIds = new Set(fallbackResult.matches.map((m) => m.personId));
-      setHighlightedPersonIds(allIds);
+        const firstMatch = fallbackResult.matches[0]!;
+        setSelectedPersonId(firstMatch.personId);
+        setFocusPersonId(firstMatch.personId);
+        setPinnedPersonId(firstMatch.personId);
+        setHoveredPersonId(firstMatch.personId);
 
-      if (fallbackResult.feedback) {
-        setSearchFeedback(fallbackResult.feedback);
-      } else {
-        const names = fallbackResult.matches.map((m) => m.personName).join(", ");
-        setSearchFeedback(
-          `Found ${fallbackResult.matches.length} result${fallbackResult.matches.length === 1 ? "" : "s"}: ${names}`
-        );
+        const allIds = new Set(fallbackResult.matches.map((m) => m.personId));
+        setHighlightedPersonIds(allIds);
+
+        if (fallbackResult.feedback) {
+          setSearchFeedback(fallbackResult.feedback);
+        } else {
+          const names = fallbackResult.matches.map((m) => m.personName).join(", ");
+          setSearchFeedback(
+            `Found ${fallbackResult.matches.length} result${fallbackResult.matches.length === 1 ? "" : "s"}: ${names}`
+          );
+        }
+      } catch (error) {
+        setSearchFeedback(error instanceof Error ? error.message : "Search failed");
       }
-    } catch (error) {
-      setSearchFeedback(error instanceof Error ? error.message : "Search failed");
-    }
-  }, [
-    clearHighlights,
-    onSearchFallback,
-    people,
-    searchTerm,
-    setFocusPersonId,
-    setHoveredPersonId,
-    setPinnedPersonId,
-    setSelectedPersonId
-  ]);
+    },
+    [
+      clearHighlights,
+      onSearchFallback,
+      people,
+      searchTerm,
+      setFocusPersonId,
+      setHoveredPersonId,
+      setPinnedPersonId,
+      setSelectedPersonId
+    ]
+  );
 
   return {
     searchTerm,

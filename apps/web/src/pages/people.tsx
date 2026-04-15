@@ -151,60 +151,61 @@ export const PeoplePage = () => {
     }
   }, [birthDateByPersonId, genderByPersonId, selectedPerson]);
 
-  const onCreateRelationship = useCallback(async (
-    sourcePersonId: string,
-    targetPersonId: string,
-    relationshipType: RelationshipType
-  ) => {
-    setIsSavingRelationship(true);
-    try {
-      await createRelationship(sourcePersonId, targetPersonId, relationshipType);
-      await refreshGraphData();
-      setStatus("Relationship saved");
-    } catch (error: unknown) {
-      setStatus(getErrorMessage(error));
-      throw error;
-    } finally {
-      setIsSavingRelationship(false);
-    }
-  }, [refreshGraphData]);
+  const onCreateRelationship = useCallback(
+    async (sourcePersonId: string, targetPersonId: string, relationshipType: RelationshipType) => {
+      setIsSavingRelationship(true);
+      try {
+        await createRelationship(sourcePersonId, targetPersonId, relationshipType);
+        await refreshGraphData();
+        setStatus("Relationship saved");
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      } finally {
+        setIsSavingRelationship(false);
+      }
+    },
+    [refreshGraphData]
+  );
 
-  const onDeleteExistingRelationship = useCallback(async (relationship: RelationshipRecord) => {
-    setIsSavingRelationship(true);
-    try {
-      await deleteRelationship(relationship.fromPersonId, relationship.toPersonId, relationship.type);
-      await refreshGraphData();
-      setStatus("Relationship deleted");
-    } catch (error: unknown) {
-      setStatus(getErrorMessage(error));
-      throw error;
-    } finally {
-      setIsSavingRelationship(false);
-    }
-  }, [refreshGraphData]);
+  const onDeleteExistingRelationship = useCallback(
+    async (relationship: RelationshipRecord) => {
+      setIsSavingRelationship(true);
+      try {
+        await deleteRelationship(relationship.fromPersonId, relationship.toPersonId, relationship.type);
+        await refreshGraphData();
+        setStatus("Relationship deleted");
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      } finally {
+        setIsSavingRelationship(false);
+      }
+    },
+    [refreshGraphData]
+  );
 
-  const onUpdateExistingRelationship = useCallback(async (
-    relationship: RelationshipRecord,
-    relatedPersonId: string,
-    relationshipType: RelationshipType
-  ) => {
-    if (!selectedPerson) {
-      throw new Error("Select a person first.");
-    }
+  const onUpdateExistingRelationship = useCallback(
+    async (relationship: RelationshipRecord, relatedPersonId: string, relationshipType: RelationshipType) => {
+      if (!selectedPerson) {
+        throw new Error("Select a person first.");
+      }
 
-    setIsSavingRelationship(true);
-    try {
-      await deleteRelationship(relationship.fromPersonId, relationship.toPersonId, relationship.type);
-      await createRelationship(selectedPerson.id, relatedPersonId, relationshipType);
-      await refreshGraphData();
-      setStatus("Relationship updated");
-    } catch (error: unknown) {
-      setStatus(getErrorMessage(error));
-      throw error;
-    } finally {
-      setIsSavingRelationship(false);
-    }
-  }, [refreshGraphData, selectedPerson]);
+      setIsSavingRelationship(true);
+      try {
+        await deleteRelationship(relationship.fromPersonId, relationship.toPersonId, relationship.type);
+        await createRelationship(selectedPerson.id, relatedPersonId, relationshipType);
+        await refreshGraphData();
+        setStatus("Relationship updated");
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      } finally {
+        setIsSavingRelationship(false);
+      }
+    },
+    [refreshGraphData, selectedPerson]
+  );
 
   const handleGenderChange = useCallback(
     (gender: Gender) => {
