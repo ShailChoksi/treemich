@@ -155,6 +155,25 @@ describe("Treemich API routes", () => {
     expect(upsertRelationshipMock).toHaveBeenCalledWith("user-1", "p1", "p2", "CHILD_OF");
   });
 
+  it("creates friend relationship edge", async () => {
+    upsertRelationshipMock.mockResolvedValueOnce({
+      direct: { id: "r-friend-1" },
+      inverse: { id: "r-friend-2" }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people/p1/relationships",
+      payload: {
+        toPersonId: "p2",
+        relationshipType: "FRIEND_OF"
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(upsertRelationshipMock).toHaveBeenCalledWith("user-1", "p1", "p2", "FRIEND_OF");
+  });
+
   it("deletes relationship edge", async () => {
     deleteRelationshipMock.mockResolvedValueOnce({ count: 2 });
 
@@ -165,6 +184,19 @@ describe("Treemich API routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(deleteRelationshipMock).toHaveBeenCalledWith("user-1", "p1", "p2", "CHILD_OF");
+    expect(response.json().deletedCount).toBe(2);
+  });
+
+  it("deletes pet relationship edge", async () => {
+    deleteRelationshipMock.mockResolvedValueOnce({ count: 2 });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/people/p1/relationships?toPersonId=p3&type=PET_OF"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(deleteRelationshipMock).toHaveBeenCalledWith("user-1", "p1", "p3", "PET_OF");
     expect(response.json().deletedCount).toBe(2);
   });
 

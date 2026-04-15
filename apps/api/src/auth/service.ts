@@ -5,7 +5,11 @@ import { env } from "../config/env.js";
 import { createOpaqueToken, encryptSecret, hashToken } from "./crypto.js";
 import { loginToImmich } from "../integrations/immich/client.js";
 
-const authSessionInclude = {
+const authSessionIncludeLight = {
+  user: true
+} as const satisfies Prisma.TreemichSessionInclude;
+
+const authSessionIncludeFull = {
   user: {
     include: {
       linkedAccount: true
@@ -13,8 +17,12 @@ const authSessionInclude = {
   }
 } as const satisfies Prisma.TreemichSessionInclude;
 
-type SessionWithUser = Prisma.TreemichSessionGetPayload<{
-  include: typeof authSessionInclude;
+type SessionWithUserLight = Prisma.TreemichSessionGetPayload<{
+  include: typeof authSessionIncludeLight;
+}>;
+
+type SessionWithUserFull = Prisma.TreemichSessionGetPayload<{
+  include: typeof authSessionIncludeFull;
 }>;
 
 const legacySharedUserId = "legacy-shared-user";
@@ -29,12 +37,78 @@ export class TreemichAuthError extends Error {
 }
 
 export type AuthenticatedRequestContext = {
-  user: SessionWithUser["user"];
-  linkedAccount: NonNullable<SessionWithUser["user"]["linkedAccount"]>;
-  session: SessionWithUser;
+  user: SessionWithUserLight["user"];
+  session: SessionWithUserLight;
 };
 
+export type LinkedAuthenticatedRequestContext = AuthenticatedRequestContext & {
+  linkedAccount: NonNullable<SessionWithUserFull["user"]["linkedAccount"]>;
+};
+
+type SessionResolutionOptions = {
+  includeLinkedAccount?: boolean;
+};
+
+type ResolvedSessionContext<TOptions extends SessionResolutionOptions | undefined> =
+  TOptions extends { includeLinkedAccount: true }
+    ? LinkedAuthenticatedRequestContext
+    : AuthenticatedRequestContext;
+
+type CachedContext = AuthenticatedRequestContext | LinkedAuthenticatedRequestContext | null;
+
+class SessionContextCache {
+  private readonly cache = new Map<string, { expiresAt: number; context: CachedContext }>();
+
+  constructor(
+    private readonly ttlMs: number,
+    private readonly maxEntries: number
+  ) {}
+
+  private key(tokenHash: string, includeLinkedAccount: boolean) {
+    return `${includeLinkedAccount ? "full" : "light"}:${tokenHash}`;
+  }
+
+  get(tokenHash: string, includeLinkedAccount: boolean) {
+    const cacheKey = this.key(tokenHash, includeLinkedAccount);
+    const cached = this.cache.get(cacheKey);
+    if (!cached) {
+      return undefined;
+    }
+    if (cached.expiresAt <= Date.now()) {
+      this.cache.delete(cacheKey);
+      return undefined;
+    }
+    this.cache.delete(cacheKey);
+    this.cache.set(cacheKey, cached);
+    return cached.context;
+  }
+
+  set(tokenHash: string, includeLinkedAccount: boolean, context: CachedContext) {
+    const cacheKey = this.key(tokenHash, includeLinkedAccount);
+    this.cache.set(cacheKey, {
+      expiresAt: Date.now() + this.ttlMs,
+      context
+    });
+    while (this.cache.size > this.maxEntries) {
+      const oldestKey = this.cache.keys().next().value;
+      if (!oldestKey) {
+        break;
+      }
+      this.cache.delete(oldestKey);
+    }
+  }
+
+  clearByTokenHash(tokenHash: string) {
+    this.cache.delete(this.key(tokenHash, false));
+    this.cache.delete(this.key(tokenHash, true));
+  }
+}
+
 export class AuthService {
+  private readonly sessionCacheTtlMs = 30_000;
+  private readonly maxSessionCacheEntries = 500;
+  private readonly sessionCache = new SessionContextCache(this.sessionCacheTtlMs, this.maxSessionCacheEntries);
+
   async loginWithImmich(
     email: string,
     password: string
@@ -127,7 +201,7 @@ export class AuthService {
   }
 
   async getAuthState(sessionToken?: string | null): Promise<AuthState> {
-    const context = await this.resolveSession(sessionToken);
+    const context = await this.resolveSession(sessionToken, { includeLinkedAccount: true });
     if (!context) {
       return {
         authenticated: false,
@@ -154,12 +228,19 @@ export class AuthService {
     };
   }
 
-  async requireSession(sessionToken?: string | null) {
-    const context = await this.resolveSession(sessionToken);
+  async requireSession<TOptions extends SessionResolutionOptions | undefined = undefined>(
+    sessionToken?: string | null,
+    options?: TOptions
+  ): Promise<ResolvedSessionContext<TOptions>> {
+    const context = await this.resolveSession(sessionToken, options);
     if (!context) {
       throw new TreemichAuthError("Unauthorized");
     }
-    return context;
+    return context as ResolvedSessionContext<TOptions>;
+  }
+
+  async requireLinkedSession(sessionToken?: string | null): Promise<LinkedAuthenticatedRequestContext> {
+    return this.requireSession(sessionToken, { includeLinkedAccount: true });
   }
 
   async logout(sessionToken?: string | null) {
@@ -167,9 +248,11 @@ export class AuthService {
       return;
     }
 
+    const tokenHash = hashToken(sessionToken);
+    this.sessionCache.clearByTokenHash(tokenHash);
     await prisma.treemichSession.deleteMany({
       where: {
-        tokenHash: hashToken(sessionToken)
+        tokenHash
       }
     });
   }
@@ -186,23 +269,35 @@ export class AuthService {
     return result.count;
   }
 
-  private async resolveSession(sessionToken?: string | null): Promise<AuthenticatedRequestContext | null> {
+  private async resolveSession<TOptions extends SessionResolutionOptions | undefined = undefined>(
+    sessionToken?: string | null,
+    options?: TOptions
+  ): Promise<ResolvedSessionContext<TOptions> | null> {
     if (!sessionToken) {
       return null;
     }
 
+    const tokenHash = hashToken(sessionToken);
+    const includeLinkedAccount = options?.includeLinkedAccount ?? false;
+    const cached = this.sessionCache.get(tokenHash, includeLinkedAccount);
+    if (cached !== undefined) {
+      return cached as ResolvedSessionContext<TOptions> | null;
+    }
+
     const session = await prisma.treemichSession.findUnique({
       where: {
-        tokenHash: hashToken(sessionToken)
+        tokenHash
       },
-      include: authSessionInclude
+      include: includeLinkedAccount ? authSessionIncludeFull : authSessionIncludeLight
     });
 
     if (!session) {
+      this.sessionCache.set(tokenHash, includeLinkedAccount, null);
       return null;
     }
 
     if (session.expiresAt.getTime() <= Date.now()) {
+      this.sessionCache.clearByTokenHash(tokenHash);
       await prisma.treemichSession.delete({
         where: {
           id: session.id
@@ -211,15 +306,20 @@ export class AuthService {
       return null;
     }
 
-    if (!session.user.linkedAccount) {
+    const linkedAccount = "linkedAccount" in session.user ? session.user.linkedAccount : undefined;
+    if (includeLinkedAccount && !linkedAccount) {
       throw new TreemichAuthError("Immich account is not linked");
     }
 
-    return {
+    const baseContext: AuthenticatedRequestContext = {
       user: session.user,
-      linkedAccount: session.user.linkedAccount,
       session
     };
+    const context = includeLinkedAccount
+      ? ({ ...baseContext, linkedAccount: linkedAccount! } as LinkedAuthenticatedRequestContext)
+      : baseContext;
+    this.sessionCache.set(tokenHash, includeLinkedAccount, context);
+    return context as ResolvedSessionContext<TOptions>;
   }
 
   private async claimLegacyData(userId: string) {

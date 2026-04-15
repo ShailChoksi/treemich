@@ -13,7 +13,7 @@ type Props = {
 
 const slotTitle: Record<AddRelativeSlot, string> = {
   parent: "Add Parent",
-  siblingOrSpouse: "Add Sibling or Spouse",
+  siblingOrSpouse: "Add Connection",
   child: "Add Child"
 };
 
@@ -84,6 +84,8 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
               >
                 <option value="SIBLING_OF">Sibling</option>
                 <option value="SPOUSE_OF">Spouse</option>
+                <option value="FRIEND_OF">Friend</option>
+                <option value="PET_OF">Pet</option>
               </select>
             </label>
           ) : null}

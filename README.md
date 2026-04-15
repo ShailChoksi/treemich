@@ -6,9 +6,9 @@ Immich remains the system of record for photos, faces, and people. Treemich adds
 
 ## Features
 
-- **Family tree management** -- create parent/child, sibling, and spouse relationships between Immich people.
+- **Relationship management** -- create parent/child, sibling, spouse, friend, and pet links between Immich people.
 - **Per-person profiles** -- set gender and birth date overrides on any Immich person.
-- **3D graph visualization** -- interactive Three.js graph with multiple layout modes (generation tree, centered map, hybrid, cleaned 3D).
+- **3D graph visualization** -- interactive Three.js graph with multiple layout modes (generation tree, centered map, hybrid, cleaned 3D) plus layer toggles for Family/Friends/Pets.
 - **Natural-language search** -- query relationships in plain English with multi-hop graph traversal.
 - **Photo co-occurrence** -- discover which people appear together in photos.
 - **Per-user privacy** -- all relationship data is scoped to the authenticated Treemich user.
@@ -213,6 +213,8 @@ curl -X POST http://localhost:4000/people/PERSON_ID/relationships \
   -H 'Cookie: treemich_session=SESSION_TOKEN' \
   -d '{"toPersonId":"OTHER_PERSON_ID","relationshipType":"CHILD_OF"}'
 ```
+
+Relationship types supported by create/delete endpoints: `PARENT_OF`, `CHILD_OF`, `SPOUSE_OF`, `SIBLING_OF`, `FRIEND_OF`, `PET_OF`.
 
 **Search for relatives:**
 

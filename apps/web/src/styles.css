@@ -276,6 +276,64 @@ body {
   color: #e2e8f0;
 }
 
+.graph-layer-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.graph-layer-toggles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.graph-layer-toggles input[type="checkbox"] {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: #38bdf8;
+}
+
+.graph-edge-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin-top: 2px;
+}
+
+.graph-edge-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: rgba(30, 41, 59, 0.52);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.graph-edge-legend-item-off {
+  opacity: 0.48;
+}
+
+.graph-edge-legend-item-off .graph-edge-legend-swatch {
+  filter: grayscale(0.55);
+}
+
+.graph-edge-legend-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 8px;
+}
+
 .node-action-btn {
   width: 32px;
   height: 32px;

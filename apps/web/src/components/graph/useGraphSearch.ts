@@ -14,6 +14,7 @@ type SearchFallbackResult = {
 type UseGraphSearchOptions = {
   people: ImmichPerson[];
   focusPersonRequest: string | null;
+  clearFocusPersonRequest: () => void;
   setSelectedPersonId: (personId: string | null) => void;
   setFocusPersonId: (personId: string | null) => void;
   setPinnedPersonId: (personId: string | null) => void;
@@ -39,6 +40,7 @@ export const resolveFocusPersonRequest = (people: ImmichPerson[], focusPersonReq
 export const useGraphSearch = ({
   people,
   focusPersonRequest,
+  clearFocusPersonRequest,
   setSelectedPersonId,
   setFocusPersonId,
   setPinnedPersonId,
@@ -64,6 +66,7 @@ export const useGraphSearch = ({
     setHoveredPersonId(focusPerson.id);
     setSearchFeedback(`Focused ${focusPerson.name}`);
     clearHighlights();
+    clearFocusPersonRequest();
   }, [
     focusPersonRequest,
     people,
@@ -71,7 +74,8 @@ export const useGraphSearch = ({
     setHoveredPersonId,
     setPinnedPersonId,
     setSelectedPersonId,
-    clearHighlights
+    clearHighlights,
+    clearFocusPersonRequest
   ]);
 
   useEffect(() => {
@@ -84,7 +88,7 @@ export const useGraphSearch = ({
     return () => window.clearTimeout(timeout);
   }, [searchFeedback]);
 
-  const handleSearchSubmit = async (event: React.FormEvent) => {
+  const handleSearchSubmit = useCallback(async (event: React.FormEvent) => {
     event.preventDefault();
     clearHighlights();
     const match = findPersonBySearchTerm(people, searchTerm);
@@ -133,7 +137,16 @@ export const useGraphSearch = ({
     } catch (error) {
       setSearchFeedback(error instanceof Error ? error.message : "Search failed");
     }
-  };
+  }, [
+    clearHighlights,
+    onSearchFallback,
+    people,
+    searchTerm,
+    setFocusPersonId,
+    setHoveredPersonId,
+    setPinnedPersonId,
+    setSelectedPersonId
+  ]);
 
   return {
     searchTerm,

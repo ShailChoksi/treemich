@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType } from "../lib/api";
 import {
   createRelationship,
@@ -31,6 +31,17 @@ const toDateInputValue = (value?: string | null) => {
   return parsed.toISOString().slice(0, 10);
 };
 
+const sortPeopleStable = (people: ImmichPerson[]) =>
+  [...people].sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
+
+const sortRelationshipsStable = (relationships: RelationshipRecord[]) =>
+  [...relationships].sort(
+    (left, right) =>
+      left.fromPersonId.localeCompare(right.fromPersonId) ||
+      left.toPersonId.localeCompare(right.toPersonId) ||
+      left.type.localeCompare(right.type)
+  );
+
 export const PeoplePage = () => {
   const [people, setPeople] = useState<ImmichPerson[]>([]);
   const [relationships, setRelationships] = useState<RelationshipRecord[]>([]);
@@ -44,44 +55,44 @@ export const PeoplePage = () => {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingRelationship, setIsSavingRelationship] = useState(false);
 
-  const refreshGraphData = async () => {
+  const refreshGraphData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [peopleResponse, relationshipsResponse] = await Promise.all([
         getImmichPeople(),
         getRelationships()
       ]);
-      setPeople(peopleResponse);
-      setRelationships(relationshipsResponse);
+      const sortedPeople = sortPeopleStable(peopleResponse);
+      const sortedRelationships = sortRelationshipsStable(relationshipsResponse);
+      setPeople(sortedPeople);
+      setRelationships(sortedRelationships);
       setLoadError(null);
       setGenderByPersonId(
-        peopleResponse.reduce<Record<string, Gender>>((acc, person) => {
+        sortedPeople.reduce<Record<string, Gender>>((acc, person) => {
           acc[person.id] = person.profile?.gender ?? "UNKNOWN";
           return acc;
         }, {})
       );
       setBirthDateByPersonId(
-        peopleResponse.reduce<Record<string, string>>((acc, person) => {
+        sortedPeople.reduce<Record<string, string>>((acc, person) => {
           acc[person.id] = toDateInputValue(person.birthDate);
           return acc;
         }, {})
       );
-      if (!selectedPersonId && peopleResponse[0]) {
-        setSelectedPersonId(peopleResponse[0].id);
-      }
+      setSelectedPersonId((current) => current ?? sortedPeople[0]?.id ?? null);
     } catch (error: unknown) {
       setLoadError(getErrorMessage(error));
       throw error;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshGraphData().catch((error: unknown) => {
       setStatus(getErrorMessage(error));
     });
-  }, []);
+  }, [refreshGraphData]);
 
   useEffect(() => {
     if (!status) {
@@ -98,13 +109,14 @@ export const PeoplePage = () => {
     [people, selectedPersonId]
   );
 
-  const focusPersonInGraph = (personId: string) => {
-    setGraphFocusPersonId(null);
-    window.setTimeout(() => setGraphFocusPersonId(personId), 0);
-    setSelectedPersonId(personId);
-  };
+  const clearGraphFocus = useCallback(() => setGraphFocusPersonId(null), []);
 
-  const onProfileSave = async () => {
+  const focusPersonInGraph = useCallback((personId: string) => {
+    setGraphFocusPersonId(personId);
+    setSelectedPersonId(personId);
+  }, []);
+
+  const onProfileSave = useCallback(async () => {
     if (!selectedPerson) {
       return;
     }
@@ -112,23 +124,37 @@ export const PeoplePage = () => {
     const selectedBirthDate = birthDateByPersonId[selectedPerson.id] || null;
     setIsSavingProfile(true);
     try {
-      await updatePersonProfile(selectedPerson.id, {
+      const savedProfile = await updatePersonProfile(selectedPerson.id, {
         gender: selectedGender,
         birthDate: selectedBirthDate
       });
-      await refreshGraphData();
+      setPeople((current) =>
+        current.map((person) =>
+          person.id === selectedPerson.id
+            ? {
+                ...person,
+                profile: savedProfile,
+                birthDate: selectedBirthDate ?? person.birthDate
+              }
+            : person
+        )
+      );
+      setGenderByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: savedProfile.gender
+      }));
       setStatus("Profile saved");
     } catch (error: unknown) {
       setStatus(getErrorMessage(error));
     } finally {
       setIsSavingProfile(false);
     }
-  };
+  }, [birthDateByPersonId, genderByPersonId, selectedPerson]);
 
-  const onCreateRelationship = async (
+  const onCreateRelationship = useCallback(async (
     sourcePersonId: string,
     targetPersonId: string,
-    relationshipType: "PARENT_OF" | "CHILD_OF" | "SPOUSE_OF" | "SIBLING_OF"
+    relationshipType: RelationshipType
   ) => {
     setIsSavingRelationship(true);
     try {
@@ -141,9 +167,9 @@ export const PeoplePage = () => {
     } finally {
       setIsSavingRelationship(false);
     }
-  };
+  }, [refreshGraphData]);
 
-  const onDeleteExistingRelationship = async (relationship: RelationshipRecord) => {
+  const onDeleteExistingRelationship = useCallback(async (relationship: RelationshipRecord) => {
     setIsSavingRelationship(true);
     try {
       await deleteRelationship(relationship.fromPersonId, relationship.toPersonId, relationship.type);
@@ -155,9 +181,9 @@ export const PeoplePage = () => {
     } finally {
       setIsSavingRelationship(false);
     }
-  };
+  }, [refreshGraphData]);
 
-  const onUpdateExistingRelationship = async (
+  const onUpdateExistingRelationship = useCallback(async (
     relationship: RelationshipRecord,
     relatedPersonId: string,
     relationshipType: RelationshipType
@@ -178,7 +204,33 @@ export const PeoplePage = () => {
     } finally {
       setIsSavingRelationship(false);
     }
-  };
+  }, [refreshGraphData, selectedPerson]);
+
+  const handleGenderChange = useCallback(
+    (gender: Gender) => {
+      if (!selectedPerson || !isGender(gender)) {
+        return;
+      }
+      setGenderByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: gender
+      }));
+    },
+    [selectedPerson]
+  );
+
+  const handleBirthDateChange = useCallback(
+    (birthDate: string) => {
+      if (!selectedPerson) {
+        return;
+      }
+      setBirthDateByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: birthDate
+      }));
+    },
+    [selectedPerson]
+  );
 
   return (
     <main className="people-layout">
@@ -192,6 +244,7 @@ export const PeoplePage = () => {
           isSavingRelationship={isSavingRelationship}
           loadError={loadError}
           focusPersonRequest={graphFocusPersonId}
+          onFocusPersonConsumed={clearGraphFocus}
           onSelectedPersonChange={setSelectedPersonId}
           onCreateRelationship={onCreateRelationship}
         />
@@ -204,25 +257,9 @@ export const PeoplePage = () => {
           relationships={relationships}
           genders={genders}
           genderValue={selectedPerson ? (genderByPersonId[selectedPerson.id] ?? "UNKNOWN") : "UNKNOWN"}
-          onGenderChange={(gender) => {
-            if (!selectedPerson || !isGender(gender)) {
-              return;
-            }
-            setGenderByPersonId((current) => ({
-              ...current,
-              [selectedPerson.id]: gender
-            }));
-          }}
+          onGenderChange={handleGenderChange}
           birthDateValue={selectedPerson ? (birthDateByPersonId[selectedPerson.id] ?? "") : ""}
-          onBirthDateChange={(birthDate) => {
-            if (!selectedPerson) {
-              return;
-            }
-            setBirthDateByPersonId((current) => ({
-              ...current,
-              [selectedPerson.id]: birthDate
-            }));
-          }}
+          onBirthDateChange={handleBirthDateChange}
           onProfileSave={onProfileSave}
           isSavingProfile={isSavingProfile}
           onFocusPerson={focusPersonInGraph}

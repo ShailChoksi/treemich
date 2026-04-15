@@ -5,16 +5,12 @@ import { getImmichClientForRequest } from "../services.js";
 export const registerPeopleGetRoute = (app: FastifyInstance) => {
   app.get("/people", async (request) => {
     const auth = getRequiredAuth(request);
-    const people = await getImmichClientForRequest(request).listPeople();
+    const people = await (await getImmichClientForRequest(request)).listPeople();
     const personIds = people.map((person) => person.id);
-    const profilesById = await app.services.relationshipService.getProfilesForPersonIds(
-      auth.user.id,
-      personIds
-    );
-    const connectedIds = await app.services.relationshipService.getConnectedPersonIds(
-      auth.user.id,
-      personIds
-    );
+    const [profilesById, connectedIds] = await Promise.all([
+      app.services.relationshipService.getProfilesForPersonIds(auth.user.id, personIds),
+      app.services.relationshipService.getConnectedPersonIds(auth.user.id, personIds)
+    ]);
 
     return {
       people: people.map((person) => ({

@@ -14,7 +14,7 @@ export const registerPeopleCooccurrenceGetRoute = (app: FastifyInstance) => {
     const query = querySchema.parse(request.query);
     return app.services.relationshipService.getPhotoCooccurrence(
       auth.user.id,
-      getImmichClientForRequest(request),
+      await getImmichClientForRequest(request),
       {
         minSharedPhotos: query.minSharedPhotos,
         minScore: query.minScore

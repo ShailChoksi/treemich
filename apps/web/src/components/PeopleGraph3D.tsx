@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
@@ -16,7 +16,11 @@ import { useGraphSelection } from "./graph/useGraphSelection";
 import { GraphCanvasScene } from "./graph/GraphCanvasScene";
 import { GraphSearchOverlay } from "./graph/GraphSearchOverlay";
 import type { AddRelativeSlot } from "./graph/NodeActionButtons";
-import { relationshipStyleByKind } from "./graph/relationshipStyles";
+import {
+  defaultGraphFilterVisibility,
+  relationshipStyleByKind,
+  type GraphFilter
+} from "./graph/relationshipStyles";
 import { defaultFamilyViewStyle, type FamilyViewStyle } from "./graph/layout";
 import { useGraphLayoutState } from "./graph/useGraphLayoutState";
 import { useGraphCameraControls } from "./graph/useGraphCameraControls";
@@ -35,6 +39,7 @@ type Props = {
   isSavingRelationship: boolean;
   loadError: string | null;
   focusPersonRequest: string | null;
+  onFocusPersonConsumed: () => void;
   onSelectedPersonChange?: (personId: string | null) => void;
   onCreateRelationship: (
     sourcePersonId: string,
@@ -44,13 +49,15 @@ type Props = {
 };
 
 const DEFAULT_RENDER_LIMIT = 120;
+const EMPTY_PHOTO_EDGES: [] = [];
+const EMPTY_PHOTO_CLUSTERS: [] = [];
 
 type AddRelativeIntent = {
   slot: AddRelativeSlot;
   selectedPersonId: string;
 };
 
-export const PeopleGraph3D = ({
+const PeopleGraph3DComponent = ({
   people,
   relationships,
   selectedPersonId: parentSelectedPersonId,
@@ -59,6 +66,7 @@ export const PeopleGraph3D = ({
   isSavingRelationship,
   loadError,
   focusPersonRequest,
+  onFocusPersonConsumed,
   onSelectedPersonChange,
   onCreateRelationship
 }: Props) => {
@@ -68,6 +76,7 @@ export const PeopleGraph3D = ({
   const [cameraPosition, setCameraPosition] = useState<NodePosition>([0, 2, 18]);
   const [addRelativeIntent, setAddRelativeIntent] = useState<AddRelativeIntent | null>(null);
   const [familyViewStyle, setFamilyViewStyle] = useState<FamilyViewStyle>(defaultFamilyViewStyle);
+  const [filterVisibility, setFilterVisibility] = useState(defaultGraphFilterVisibility);
   const lastCameraSampleRef = useRef(new Vector3(0, 2, 18));
   const hasInitializedCameraRef = useRef(false);
   const cameraRef = useRef<PerspectiveCamera | null>(null);
@@ -76,7 +85,8 @@ export const PeopleGraph3D = ({
   const { selectedPersonId, setSelectedPersonId, clearSelection, handleNodeClick } = useGraphSelection({
     selectedPersonId: parentSelectedPersonId,
     setFocusPersonId,
-    setPinnedPersonId
+    setPinnedPersonId,
+    onSelectedPersonChange
   });
   const {
     selectedPerson,
@@ -88,23 +98,41 @@ export const PeopleGraph3D = ({
   } = useGraphLayoutState({
     people,
     relationships,
-    photoEdges: [],
-    photoClusters: [],
+    photoEdges: EMPTY_PHOTO_EDGES,
+    photoClusters: EMPTY_PHOTO_CLUSTERS,
     viewMode: "family",
     familyViewStyle,
+    filterVisibility,
     selectedPersonId,
     hoveredPersonId,
     focusPersonId,
     pinnedPersonId,
     renderLimit: DEFAULT_RENDER_LIMIT
   });
+  const peopleIds = useMemo(() => people.map((person) => person.id), [people]);
+
   const { thumbnailNodeIds } = useThumbnailLoader({
-    peopleIds: people.map((person) => person.id),
+    peopleIds,
     prioritizedNodeIds,
     displayVisiblePeople,
     cameraPosition
   });
-  useGraphLifecycle({ thumbnailNodeIds, selectedPersonId, onSelectedPersonChange });
+  useGraphLifecycle({ thumbnailNodeIds });
+
+  const handleSearchFallback = useCallback(async (query: string) => {
+    const response = await searchRelationships(query);
+    const allMatches = response.matches ?? [];
+    if (allMatches.length === 0) {
+      return null;
+    }
+
+    const names = allMatches.map((match) => match.person.name);
+    const feedback = `Found ${allMatches.length} result${allMatches.length === 1 ? "" : "s"}: ${names.join(", ")}`;
+    return {
+      matches: allMatches.map((match) => ({ personId: match.person.id, personName: match.person.name })),
+      feedback: response.message ?? feedback
+    };
+  }, []);
 
   const {
     searchTerm,
@@ -117,24 +145,12 @@ export const PeopleGraph3D = ({
   } = useGraphSearch({
     people,
     focusPersonRequest,
+    clearFocusPersonRequest: onFocusPersonConsumed,
     setSelectedPersonId,
     setFocusPersonId,
     setPinnedPersonId,
     setHoveredPersonId,
-    onSearchFallback: async (query) => {
-      const response = await searchRelationships(query);
-      const allMatches = response.matches ?? [];
-      if (allMatches.length === 0) {
-        return null;
-      }
-
-      const names = allMatches.map((m) => m.person.name);
-      const feedback = `Found ${allMatches.length} result${allMatches.length === 1 ? "" : "s"}: ${names.join(", ")}`;
-      return {
-        matches: allMatches.map((m) => ({ personId: m.person.id, personName: m.person.name })),
-        feedback: response.message ?? feedback
-      };
-    }
+    onSearchFallback: handleSearchFallback
   });
   const { frameAllNodes, focusActiveNode, topDownView } = useGraphCameraControls({
     graphBounds,
@@ -239,6 +255,13 @@ export const PeopleGraph3D = ({
     clearHighlights();
   };
 
+  const handleToggleFilter = (filter: GraphFilter) => {
+    setFilterVisibility((current) => ({
+      ...current,
+      [filter]: !current[filter]
+    }));
+  };
+
   return (
     <section className="card graph-card">
       <div className="graph-surface">
@@ -250,7 +273,12 @@ export const PeopleGraph3D = ({
           people={people}
           searchFeedback={searchFeedback}
         />
-        <GraphViewModeSelector value={familyViewStyle} onChange={setFamilyViewStyle} />
+        <GraphViewModeSelector
+          value={familyViewStyle}
+          onChange={setFamilyViewStyle}
+          filterVisibility={filterVisibility}
+          onToggleFilter={handleToggleFilter}
+        />
         <GraphSurfaceOverlays isLoading={isLoading} loadError={loadError} />
         {addRelativeIntent && selectedPerson ? (
           <AddRelativePopup
@@ -293,3 +321,5 @@ export const PeopleGraph3D = ({
     </section>
   );
 };
+
+export const PeopleGraph3D = memo(PeopleGraph3DComponent);

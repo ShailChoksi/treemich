@@ -1,6 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import type { FastifyRequest } from "fastify";
-import { AuthService, type AuthenticatedRequestContext } from "./auth/service.js";
+import { readCookie } from "./auth/request.js";
+import {
+  AuthService,
+  type AuthenticatedRequestContext,
+  type LinkedAuthenticatedRequestContext
+} from "./auth/service.js";
 import { TreemichAuthError } from "./auth/service.js";
 import { ImmichClientFactory } from "./integrations/immich/factory.js";
 import { RelationshipService } from "./relationships/service.js";
@@ -31,10 +36,16 @@ export const registerServices = (app: FastifyInstance, services: AppServices) =>
   app.decorate("services", services);
 };
 
-export const getImmichClientForRequest = (request: FastifyRequest) => {
+export const getImmichClientForRequest = async (request: FastifyRequest) => {
   if (!request.auth) {
     throw new TreemichAuthError("Unauthorized");
   }
 
-  return request.server.services.immichClientFactory.getClient(request.auth.linkedAccount);
+  const authWithLinkedAccount: LinkedAuthenticatedRequestContext =
+    "linkedAccount" in request.auth
+      ? request.auth
+      : await request.server.services.authService.requireLinkedSession(readCookie(request));
+  request.auth = authWithLinkedAccount;
+
+  return request.server.services.immichClientFactory.getClient(authWithLinkedAccount.linkedAccount);
 };

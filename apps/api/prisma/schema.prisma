@@ -19,6 +19,8 @@ enum RelationshipType {
   CHILD_OF
   SPOUSE_OF
   SIBLING_OF
+  FRIEND_OF
+  PET_OF
 }
 
 model TreemichUser {
@@ -102,4 +104,5 @@ model Relationship {
   @@unique([userId, fromPersonId, toPersonId, type])
   @@index([userId, fromPersonId])
   @@index([userId, toPersonId])
+  @@index([userId, id])
 }

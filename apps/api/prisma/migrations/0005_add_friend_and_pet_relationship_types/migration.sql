@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "RelationshipType" ADD VALUE IF NOT EXISTS 'FRIEND_OF';
+ALTER TYPE "RelationshipType" ADD VALUE IF NOT EXISTS 'PET_OF';

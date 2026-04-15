@@ -1,7 +1,14 @@
 import { z } from "zod";
 import type { AgeFilter, InterpreterIntent } from "./search/interpreter.js";
 
-export const relationshipTypes = ["PARENT_OF", "CHILD_OF", "SPOUSE_OF", "SIBLING_OF"] as const;
+export const relationshipTypes = [
+  "PARENT_OF",
+  "CHILD_OF",
+  "SPOUSE_OF",
+  "SIBLING_OF",
+  "FRIEND_OF",
+  "PET_OF"
+] as const;
 export type RelationshipType = (typeof relationshipTypes)[number];
 
 export const genderValues = ["MALE", "FEMALE", "OTHER", "UNKNOWN"] as const;

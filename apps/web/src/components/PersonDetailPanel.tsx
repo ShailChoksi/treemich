@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType } from "../lib/api";
 import { personThumbnailUrl } from "../lib/api";
 import { inverseRelationshipType } from "./graph/layout";
@@ -38,7 +38,9 @@ const relationshipLabel: Record<RelationshipRecord["type"], string> = {
   PARENT_OF: "Parent",
   CHILD_OF: "Child",
   SPOUSE_OF: "Spouse",
-  SIBLING_OF: "Sibling"
+  SIBLING_OF: "Sibling",
+  FRIEND_OF: "Friend",
+  PET_OF: "Pet"
 };
 
 const relationshipEditorLabel = (
@@ -55,6 +57,12 @@ const relationshipEditorLabel = (
   if (relationshipType === "SPOUSE_OF") {
     return `${personName} is spouse of ${relatedName}`;
   }
+  if (relationshipType === "FRIEND_OF") {
+    return `${personName} is friend of ${relatedName}`;
+  }
+  if (relationshipType === "PET_OF") {
+    return `${personName} has pet ${relatedName}`;
+  }
   return `${personName} is sibling of ${relatedName}`;
 };
 
@@ -67,7 +75,9 @@ const getAllowedRelationshipOptions = (
     { value: "PARENT_OF", label: relationshipEditorLabel("PARENT_OF", personName, relatedName) },
     { value: "CHILD_OF", label: relationshipEditorLabel("CHILD_OF", personName, relatedName) },
     { value: "SPOUSE_OF", label: relationshipEditorLabel("SPOUSE_OF", personName, relatedName) },
-    { value: "SIBLING_OF", label: relationshipEditorLabel("SIBLING_OF", personName, relatedName) }
+    { value: "SIBLING_OF", label: relationshipEditorLabel("SIBLING_OF", personName, relatedName) },
+    { value: "FRIEND_OF", label: relationshipEditorLabel("FRIEND_OF", personName, relatedName) },
+    { value: "PET_OF", label: relationshipEditorLabel("PET_OF", personName, relatedName) }
   ];
   if (relationshipType === "PARENT_OF" || relationshipType === "CHILD_OF") {
     return relationshipOptions.filter(
@@ -75,9 +85,19 @@ const getAllowedRelationshipOptions = (
     );
   }
 
-  return relationshipOptions.filter(
-    (option) => option.value === "SPOUSE_OF" || option.value === "SIBLING_OF"
-  );
+  if (relationshipType === "SPOUSE_OF" || relationshipType === "SIBLING_OF") {
+    return relationshipOptions.filter(
+      (option) => option.value === "SPOUSE_OF" || option.value === "SIBLING_OF"
+    );
+  }
+
+  if (relationshipType === "FRIEND_OF" || relationshipType === "PET_OF") {
+    return relationshipOptions.filter(
+      (option) => option.value === "FRIEND_OF" || option.value === "PET_OF"
+    );
+  }
+
+  return relationshipOptions;
 };
 
 const formatBirthDate = (birthDate?: string | null) => {
@@ -99,7 +119,7 @@ const formatBirthDate = (birthDate?: string | null) => {
 
 const formatGenderLabel = (gender: Gender) => gender.charAt(0) + gender.slice(1).toLowerCase();
 
-export const PersonDetailPanel = ({
+const PersonDetailPanelComponent = ({
   person,
   people,
   relationships,
@@ -364,7 +384,10 @@ export const PersonDetailPanel = ({
                 {activeRelationship.editableRelationshipType === "PARENT_OF" ||
                 activeRelationship.editableRelationshipType === "CHILD_OF"
                   ? "Parent and child links can be swapped."
-                  : "Spouse and sibling links can be swapped."}
+                  : activeRelationship.editableRelationshipType === "SPOUSE_OF" ||
+                      activeRelationship.editableRelationshipType === "SIBLING_OF"
+                    ? "Spouse and sibling links can be swapped."
+                    : "Friend and pet links can be swapped."}
               </p>
               <label className="field-group">
                 <span className="field-label">Relationship type</span>
@@ -447,3 +470,5 @@ export const PersonDetailPanel = ({
     </section>
   );
 };
+
+export const PersonDetailPanel = memo(PersonDetailPanelComponent);
