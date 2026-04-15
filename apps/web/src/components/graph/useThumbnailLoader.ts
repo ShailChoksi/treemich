@@ -12,11 +12,7 @@ type PositionedPerson = {
   displayPosition: NodePosition;
 };
 
-const pickNearestIds = (
-  items: PositionedPerson[],
-  origin: NodePosition,
-  limit: number
-) => {
+const pickNearestIds = (items: PositionedPerson[], origin: NodePosition, limit: number) => {
   if (limit <= 0 || items.length === 0) {
     return [];
   }

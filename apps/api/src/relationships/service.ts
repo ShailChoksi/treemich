@@ -18,6 +18,7 @@ const inverseMapping: Record<RelationshipType, RelationshipType> = {
 
 export class RelationshipService {
   private readonly photoCooccurrenceCacheTtlMs = 90_000;
+  private readonly maxPhotoCooccurrenceCacheEntries = 100;
   private readonly photoCooccurrenceStatsCache = new Map<
     string,
     {
@@ -25,6 +26,27 @@ export class RelationshipService {
       stats: PhotoCooccurrenceStats;
     }
   >();
+
+  private evictExpiredPhotoCooccurrenceStats(now: number) {
+    for (const [userId, entry] of this.photoCooccurrenceStatsCache.entries()) {
+      if (entry.expiresAt > now) {
+        continue;
+      }
+
+      this.photoCooccurrenceStatsCache.delete(userId);
+    }
+  }
+
+  private evictOverflowPhotoCooccurrenceStats() {
+    while (this.photoCooccurrenceStatsCache.size > this.maxPhotoCooccurrenceCacheEntries) {
+      const oldestUserId = this.photoCooccurrenceStatsCache.keys().next().value;
+      if (!oldestUserId) {
+        break;
+      }
+
+      this.photoCooccurrenceStatsCache.delete(oldestUserId);
+    }
+  }
 
   async upsertProfile(
     userId: string,
@@ -123,7 +145,11 @@ export class RelationshipService {
     });
   }
 
-  async findTargetsByRelationship(userId: string, sourcePersonIds: string[], relationshipType: RelationshipType) {
+  async findTargetsByRelationship(
+    userId: string,
+    sourcePersonIds: string[],
+    relationshipType: RelationshipType
+  ) {
     return prisma.relationship.findMany({
       where: {
         userId,
@@ -201,7 +227,12 @@ export class RelationshipService {
     };
   }
 
-  async deleteRelationship(userId: string, fromPersonId: string, toPersonId: string, relationshipType?: RelationshipType) {
+  async deleteRelationship(
+    userId: string,
+    fromPersonId: string,
+    toPersonId: string,
+    relationshipType?: RelationshipType
+  ) {
     if (!relationshipType) {
       return prisma.relationship.deleteMany({
         where: {
@@ -246,18 +277,25 @@ export class RelationshipService {
     options: BuildPhotoCooccurrenceOptions
   ): Promise<PhotoCooccurrenceResult> {
     const now = Date.now();
-    const cached = this.photoCooccurrenceStatsCache.get(userId);
-    const stats =
-      cached && cached.expiresAt > now
-        ? cached.stats
-        : buildPhotoCooccurrenceStats(await immichClient.listAssetsWithPeople());
+    this.evictExpiredPhotoCooccurrenceStats(now);
 
-    if (!cached || cached.expiresAt <= now) {
+    const cached = this.photoCooccurrenceStatsCache.get(userId);
+    if (cached) {
+      this.photoCooccurrenceStatsCache.delete(userId);
       this.photoCooccurrenceStatsCache.set(userId, {
         expiresAt: now + this.photoCooccurrenceCacheTtlMs,
-        stats
+        stats: cached.stats
       });
+
+      return buildPhotoCooccurrenceResult(cached.stats, options);
     }
+
+    const stats = buildPhotoCooccurrenceStats(await immichClient.listAssetsWithPeople());
+    this.photoCooccurrenceStatsCache.set(userId, {
+      expiresAt: now + this.photoCooccurrenceCacheTtlMs,
+      stats
+    });
+    this.evictOverflowPhotoCooccurrenceStats();
 
     return buildPhotoCooccurrenceResult(stats, options);
   }

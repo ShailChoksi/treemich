@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { InterpreterIntent } from "./search/interpreter.js";
 
 export const relationshipTypes = ["PARENT_OF", "CHILD_OF", "SPOUSE_OF", "SIBLING_OF"] as const;
 export type RelationshipType = (typeof relationshipTypes)[number];
@@ -70,7 +71,7 @@ export type AuthState = {
 
 export type SearchRelationshipsResponse = {
   parsed?: {
-    intent: string;
+    intent: InterpreterIntent;
     sourceName: string;
     requiredGender?: "MALE" | "FEMALE";
     relationshipType: RelationshipType;

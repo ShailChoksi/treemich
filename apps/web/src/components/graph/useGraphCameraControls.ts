@@ -4,12 +4,10 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { FamilyViewStyle, NodePosition } from "./layout";
 
 type UseGraphCameraControlsOptions = {
-  graphBounds:
-    | {
-        min: NodePosition;
-        max: NodePosition;
-      }
-    | null;
+  graphBounds: {
+    min: NodePosition;
+    max: NodePosition;
+  } | null;
   visiblePositionsById: Map<string, NodePosition>;
   selectedPersonId: string | null;
   hoveredPersonId: string | null;
@@ -71,7 +69,10 @@ export const useGraphCameraControls = ({
       return;
     }
     if (familyViewStyle === "centeredRelationshipMap") {
-      applyCameraPose([center[0] + distance * 0.42, center[1] + distance * 0.3, center[2] + distance * 0.88], center);
+      applyCameraPose(
+        [center[0] + distance * 0.42, center[1] + distance * 0.3, center[2] + distance * 0.88],
+        center
+      );
       return;
     }
     applyCameraPose([center[0] + distance * 0.55, center[1] + distance * 0.42, center[2] + distance], center);

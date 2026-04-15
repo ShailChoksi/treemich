@@ -23,7 +23,9 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
 
     const allPeople = await getImmichClientForRequest(request).listPeople();
     const normalizedSourceName = interpreted.parsed.sourceName.trim().toLowerCase();
-    const sourceCandidates = allPeople.filter((person) => person.name.toLowerCase().includes(normalizedSourceName));
+    const sourceCandidates = allPeople.filter((person) =>
+      person.name.toLowerCase().includes(normalizedSourceName)
+    );
     if (sourceCandidates.length === 0) {
       return {
         parsed: interpreted.parsed,
@@ -41,10 +43,10 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
     )) as Array<{ fromPersonId: string }>;
 
     const targetIds = [...new Set(relationshipHits.map((item) => item.fromPersonId))];
-    const profilesById = (await app.services.relationshipService.getProfilesForPersonIds(auth.user.id, targetIds)) as Map<
-      string,
-      { gender: Gender }
-    >;
+    const profilesById = (await app.services.relationshipService.getProfilesForPersonIds(
+      auth.user.id,
+      targetIds
+    )) as Map<string, { gender: Gender }>;
     const peopleById = new Map(allPeople.map((person) => [person.id, person]));
 
     const matches = targetIds

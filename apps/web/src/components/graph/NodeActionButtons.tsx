@@ -18,6 +18,7 @@ export const NodeActionButtons = ({ onOpen }: Props) => {
           type="button"
           className="node-action-btn"
           title="Add parent"
+          aria-label="Add parent"
           onMouseDown={stop}
           onClick={(event) => {
             stop(event);
@@ -32,6 +33,7 @@ export const NodeActionButtons = ({ onOpen }: Props) => {
           type="button"
           className="node-action-btn"
           title="Add sibling or spouse"
+          aria-label="Add sibling or spouse"
           onMouseDown={stop}
           onClick={(event) => {
             stop(event);
@@ -46,6 +48,7 @@ export const NodeActionButtons = ({ onOpen }: Props) => {
           type="button"
           className="node-action-btn"
           title="Add child"
+          aria-label="Add child"
           onMouseDown={stop}
           onClick={(event) => {
             stop(event);

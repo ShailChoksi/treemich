@@ -35,7 +35,8 @@ const incrementMapValue = (map: Map<string, number>, key: string, by = 1) => {
   map.set(key, (map.get(key) ?? 0) + by);
 };
 
-const pairKeyFor = (firstPersonId: string, secondPersonId: string) => [firstPersonId, secondPersonId].sort().join("|");
+const pairKeyFor = (firstPersonId: string, secondPersonId: string) =>
+  [firstPersonId, secondPersonId].sort().join("|");
 
 export const buildPhotoCooccurrenceStats = (assets: ImmichAssetPeople[]): PhotoCooccurrenceStats => {
   const personPhotoCounts = new Map<string, number>();

@@ -8,7 +8,11 @@ type UseGraphLifecycleOptions = {
   onSelectedPersonChange?: (personId: string | null) => void;
 };
 
-export const useGraphLifecycle = ({ thumbnailNodeIds, selectedPersonId, onSelectedPersonChange }: UseGraphLifecycleOptions) => {
+export const useGraphLifecycle = ({
+  thumbnailNodeIds,
+  selectedPersonId,
+  onSelectedPersonChange
+}: UseGraphLifecycleOptions) => {
   useEffect(() => {
     for (const personId of thumbnailNodeIds) {
       useTexture.preload(personThumbnailUrl(personId));

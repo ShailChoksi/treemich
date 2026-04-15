@@ -110,4 +110,30 @@ describe("RelationshipService", () => {
     );
     expect(result).toEqual({ count: 2 });
   });
+
+  it("evicts old photo co-occurrence cache entries when the user cache grows too large", async () => {
+    const listAssetsWithPeopleMock = vi.fn().mockResolvedValue([{ assetId: "a1", personIds: ["p1", "p2"] }]);
+
+    const { RelationshipService } = await import("../src/relationships/service.js");
+    const service = new RelationshipService();
+    const immichClient = {
+      listAssetsWithPeople: listAssetsWithPeopleMock
+    } as const;
+
+    for (let index = 0; index <= 100; index += 1) {
+      await service.getPhotoCooccurrence(`user-${index}`, immichClient as never, {
+        minSharedPhotos: 1,
+        minScore: 0
+      });
+    }
+
+    expect(listAssetsWithPeopleMock).toHaveBeenCalledTimes(101);
+
+    await service.getPhotoCooccurrence("user-0", immichClient as never, {
+      minSharedPhotos: 1,
+      minScore: 0
+    });
+
+    expect(listAssetsWithPeopleMock).toHaveBeenCalledTimes(102);
+  });
 });

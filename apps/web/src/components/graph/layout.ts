@@ -101,7 +101,9 @@ const deriveSiblingPairs = (relationships: RelationshipRecord[]) => {
   return [...pairs.values()];
 };
 
-const indexPairsByPerson = <TPair extends { firstPersonId: string; secondPersonId: string }>(pairs: TPair[]) => {
+const indexPairsByPerson = <TPair extends { firstPersonId: string; secondPersonId: string }>(
+  pairs: TPair[]
+) => {
   const byPerson = new Map<string, TPair[]>();
   for (const pair of pairs) {
     const firstList = byPerson.get(pair.firstPersonId);
@@ -226,11 +228,13 @@ const buildTreePositions = (
     const end = Math.min(start + componentLayoutColumns, components.length);
     const spans = componentSpanByIndex.slice(start, end);
     const maxZ = spans.length > 0 ? Math.max(...spans.map((span) => span.z)) : 10;
-    const totalX = spans.reduce((sum, span) => sum + span.x, 0) + Math.max(spans.length - 1, 0) * componentGapX;
+    const totalX =
+      spans.reduce((sum, span) => sum + span.x, 0) + Math.max(spans.length - 1, 0) * componentGapX;
     rowSpanX.push(totalX);
     rowMaxSpanZ.push(maxZ);
   }
-  const totalSpanZ = rowMaxSpanZ.reduce((sum, span) => sum + span, 0) + Math.max(rowCount - 1, 0) * componentGapZ;
+  const totalSpanZ =
+    rowMaxSpanZ.reduce((sum, span) => sum + span, 0) + Math.max(rowCount - 1, 0) * componentGapZ;
   const componentCenterByIndex = new Map<number, NodePosition>();
   let zCursor = -totalSpanZ / 2;
   for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
@@ -313,7 +317,9 @@ const buildTreePositions = (
       if (parents.length === 0) {
         continue;
       }
-      const selectedParent = [...parents].sort((a, b) => (depthById.get(b) ?? 0) - (depthById.get(a) ?? 0))[0];
+      const selectedParent = [...parents].sort(
+        (a, b) => (depthById.get(b) ?? 0) - (depthById.get(a) ?? 0)
+      )[0];
       if (selectedParent) {
         primaryParentByChild.set(childId, selectedParent);
       }
@@ -350,7 +356,8 @@ const buildTreePositions = (
       }
       computing.add(personId);
       const children = primaryChildrenByParent.get(personId) ?? [];
-      const width = children.length === 0 ? 1 : children.reduce((total, childId) => total + subtreeWidth(childId), 0);
+      const width =
+        children.length === 0 ? 1 : children.reduce((total, childId) => total + subtreeWidth(childId), 0);
       computing.delete(personId);
       widthMemo.set(personId, width);
       return width;
@@ -372,8 +379,8 @@ const buildTreePositions = (
 
       const firstChild = children[0];
       const lastChild = children[children.length - 1];
-      const firstX = firstChild ? xById.get(firstChild) ?? leftUnit : leftUnit;
-      const lastX = lastChild ? xById.get(lastChild) ?? leftUnit + 1 : leftUnit + 1;
+      const firstX = firstChild ? (xById.get(firstChild) ?? leftUnit) : leftUnit;
+      const lastX = lastChild ? (xById.get(lastChild) ?? leftUnit + 1) : leftUnit + 1;
       xById.set(personId, (firstX + lastX) / 2);
       return cursor;
     };
@@ -428,7 +435,11 @@ const buildTreePositions = (
       siblingAdjacency.set(personId, new Set());
     }
     const connectSiblings = (firstPersonId: string, secondPersonId: string) => {
-      if (!componentSet.has(firstPersonId) || !componentSet.has(secondPersonId) || firstPersonId === secondPersonId) {
+      if (
+        !componentSet.has(firstPersonId) ||
+        !componentSet.has(secondPersonId) ||
+        firstPersonId === secondPersonId
+      ) {
         return;
       }
       siblingAdjacency.get(firstPersonId)?.add(secondPersonId);
@@ -554,7 +565,10 @@ const buildTreePositions = (
   return positions;
 };
 
-const positionPeopleByPhotoClusters = (people: ImmichPerson[], photoClusters: PhotoCluster[]): Array<{
+const positionPeopleByPhotoClusters = (
+  people: ImmichPerson[],
+  photoClusters: PhotoCluster[]
+): Array<{
   person: ImmichPerson;
   position: NodePosition;
 }> => {
@@ -581,9 +595,7 @@ const positionPeopleByPhotoClusters = (people: ImmichPerson[], photoClusters: Ph
       id: `cluster:${person.id}`,
       members: [person]
     }))
-  ].sort(
-    (left, right) => right.members.length - left.members.length || left.id.localeCompare(right.id)
-  );
+  ].sort((left, right) => right.members.length - left.members.length || left.id.localeCompare(right.id));
 
   const columnCount = Math.max(1, Math.ceil(Math.sqrt(allClusters.length)));
   const rowCount = Math.max(1, Math.ceil(allClusters.length / columnCount));
@@ -660,15 +672,21 @@ const toCenteredRelationshipMapPositions = (
   const sorted = (ids: Iterable<string>) =>
     [...new Set(ids)]
       .filter((id) => id !== selectedPersonId && peopleById.has(id))
-      .sort((left, right) => (peopleById.get(left)?.name ?? left).localeCompare(peopleById.get(right)?.name ?? right));
+      .sort((left, right) =>
+        (peopleById.get(left)?.name ?? left).localeCompare(peopleById.get(right)?.name ?? right)
+      );
   const placeRow = (ids: string[], y: number, z: number, xOffset = 0): Array<[string, NodePosition]> =>
     ids.map((id, index) => {
       const startX = -((ids.length - 1) * 2.8) / 2;
       return [id, [xOffset + startX + index * 2.8, y, z] as NodePosition];
     });
 
-  const parentIds = sorted(parentChildEdges.filter((edge) => edge.childId === selectedPersonId).map((edge) => edge.parentId));
-  const childIds = sorted(parentChildEdges.filter((edge) => edge.parentId === selectedPersonId).map((edge) => edge.childId));
+  const parentIds = sorted(
+    parentChildEdges.filter((edge) => edge.childId === selectedPersonId).map((edge) => edge.parentId)
+  );
+  const childIds = sorted(
+    parentChildEdges.filter((edge) => edge.parentId === selectedPersonId).map((edge) => edge.childId)
+  );
   const spouseIds = sorted(
     spousePairs.flatMap((pair) => {
       if (pair.firstPersonId === selectedPersonId) {
@@ -706,12 +724,18 @@ const toCenteredRelationshipMapPositions = (
     positionedById.set(id, position);
   }
 
-  const remainingPeople = items.filter((item) => !positionedById.has(item.person.id)).sort((left, right) => left.person.name.localeCompare(right.person.name));
+  const remainingPeople = items
+    .filter((item) => !positionedById.has(item.person.id))
+    .sort((left, right) => left.person.name.localeCompare(right.person.name));
   const ringSize = Math.max(remainingPeople.length, 1);
   remainingPeople.forEach((item, index) => {
     const angle = (index / ringSize) * Math.PI * 2;
     const radius = 12 + Math.floor(index / 14) * 2.4;
-    positionedById.set(item.person.id, [Math.cos(angle) * radius, ((index % 3) - 1) * 0.6, Math.sin(angle) * radius * 0.7]);
+    positionedById.set(item.person.id, [
+      Math.cos(angle) * radius,
+      ((index % 3) - 1) * 0.6,
+      Math.sin(angle) * radius * 0.7
+    ]);
   });
 
   return items.map((item) => ({
@@ -769,7 +793,9 @@ const toHybridTreeListPositions = (
   }
 
   const positionedById = new Map<string, NodePosition>();
-  const farPeople = generationItems.filter((item) => !closeIds.has(item.person.id)).sort((left, right) => left.person.name.localeCompare(right.person.name));
+  const farPeople = generationItems
+    .filter((item) => !closeIds.has(item.person.id))
+    .sort((left, right) => left.person.name.localeCompare(right.person.name));
   generationItems.forEach((item) => {
     if (closeIds.has(item.person.id)) {
       positionedById.set(item.person.id, item.position);
@@ -780,7 +806,11 @@ const toHybridTreeListPositions = (
   farPeople.forEach((item, index) => {
     const angle = (index / farCount) * Math.PI * 2;
     const radius = 15 + Math.floor(index / 24) * 2;
-    positionedById.set(item.person.id, [Math.cos(angle) * radius, -9 + (index % 2) * 0.7, Math.sin(angle) * radius * 0.48]);
+    positionedById.set(item.person.id, [
+      Math.cos(angle) * radius,
+      -9 + (index % 2) * 0.7,
+      Math.sin(angle) * radius * 0.48
+    ]);
   });
 
   return items.map((item) => ({
@@ -806,12 +836,7 @@ export const positionPeople = (
   const parentChildEdges = deriveParentChildEdges(relationships);
   const spousePairs = deriveSpousePairs(relationships);
   const siblingPairs = deriveSiblingPairs(relationships);
-  const treePositions = buildTreePositions(
-    people,
-    parentChildEdges,
-    spousePairs,
-    siblingPairs
-  );
+  const treePositions = buildTreePositions(people, parentChildEdges, spousePairs, siblingPairs);
   const withoutTreePosition = people.filter((person) => !treePositions.has(person.id));
   const connectedPeople = people.filter((person) => treePositions.has(person.id));
 

@@ -39,7 +39,12 @@ export const GraphSearchOverlay = ({
           </svg>
         </button>
         {searchTerm ? (
-          <button type="button" className="graph-search-clear-button" aria-label="Clear search" onClick={onClearSearch}>
+          <button
+            type="button"
+            className="graph-search-clear-button"
+            aria-label="Clear search"
+            onClick={onClearSearch}
+          >
             x
           </button>
         ) : null}

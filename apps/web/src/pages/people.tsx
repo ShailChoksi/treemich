@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType } from "../lib/api";
-import { createRelationship, deleteRelationship, getImmichPeople, getRelationships, updatePersonProfile } from "../lib/api";
+import {
+  createRelationship,
+  deleteRelationship,
+  getImmichPeople,
+  getRelationships,
+  updatePersonProfile
+} from "../lib/api";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
 
@@ -41,7 +47,10 @@ export const PeoplePage = () => {
   const refreshGraphData = async () => {
     setIsLoading(true);
     try {
-      const [peopleResponse, relationshipsResponse] = await Promise.all([getImmichPeople(), getRelationships()]);
+      const [peopleResponse, relationshipsResponse] = await Promise.all([
+        getImmichPeople(),
+        getRelationships()
+      ]);
       setPeople(peopleResponse);
       setRelationships(relationshipsResponse);
       setLoadError(null);
@@ -177,6 +186,7 @@ export const PeoplePage = () => {
         <PeopleGraph3D
           people={people}
           relationships={relationships}
+          selectedPersonId={selectedPersonId}
           status={status}
           isLoading={isLoading}
           isSavingRelationship={isSavingRelationship}
@@ -193,7 +203,7 @@ export const PeoplePage = () => {
           people={people}
           relationships={relationships}
           genders={genders}
-          genderValue={selectedPerson ? genderByPersonId[selectedPerson.id] ?? "UNKNOWN" : "UNKNOWN"}
+          genderValue={selectedPerson ? (genderByPersonId[selectedPerson.id] ?? "UNKNOWN") : "UNKNOWN"}
           onGenderChange={(gender) => {
             if (!selectedPerson || !isGender(gender)) {
               return;
@@ -203,16 +213,16 @@ export const PeoplePage = () => {
               [selectedPerson.id]: gender
             }));
           }}
-        birthDateValue={selectedPerson ? birthDateByPersonId[selectedPerson.id] ?? "" : ""}
-        onBirthDateChange={(birthDate) => {
-          if (!selectedPerson) {
-            return;
-          }
-          setBirthDateByPersonId((current) => ({
-            ...current,
-            [selectedPerson.id]: birthDate
-          }));
-        }}
+          birthDateValue={selectedPerson ? (birthDateByPersonId[selectedPerson.id] ?? "") : ""}
+          onBirthDateChange={(birthDate) => {
+            if (!selectedPerson) {
+              return;
+            }
+            setBirthDateByPersonId((current) => ({
+              ...current,
+              [selectedPerson.id]: birthDate
+            }));
+          }}
           onProfileSave={onProfileSave}
           isSavingProfile={isSavingProfile}
           onFocusPerson={focusPersonInGraph}

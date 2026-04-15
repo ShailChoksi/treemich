@@ -106,9 +106,16 @@ export const App = () => {
       <header className="card session-bar">
         <div className="stack">
           <strong>{headerSummary}</strong>
-          <span className="hint">{linkStatus?.linked ? "Linked to Immich" : "Immich account not linked"}</span>
+          <span className="hint">
+            {linkStatus?.linked ? "Linked to Immich" : "Immich account not linked"}
+          </span>
         </div>
-        <button type="button" className="secondary-button" onClick={() => void handleLogout()} disabled={isSubmittingAuth}>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => void handleLogout()}
+          disabled={isSubmittingAuth}
+        >
           {isSubmittingAuth ? "Signing out..." : "Sign out"}
         </button>
       </header>
