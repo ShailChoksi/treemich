@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { PerspectiveCamera, Vector3 } from "three";
+import { Vector3, type PerspectiveCamera } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { FamilyViewStyle, NodePosition } from "./layout";
 
@@ -124,9 +124,47 @@ export const useGraphCameraControls = ({
     applyCameraPose([center[0], center[1] + topHeight, center[2] + 0.1], center);
   }, [applyCameraPose, graphBounds]);
 
+  const nudgeCamera = useCallback(
+    (forwardUnits: number, rightUnits: number) => {
+      if (forwardUnits === 0 && rightUnits === 0) {
+        return;
+      }
+
+      const camera = cameraRef.current;
+      const controls = orbitControlsRef.current;
+      if (!camera || !controls) {
+        return;
+      }
+
+      const step = 1.6;
+      const worldUp = new Vector3(0, 1, 0);
+      const viewDirection = controls.target.clone().sub(camera.position);
+      viewDirection.y = 0;
+      if (viewDirection.lengthSq() < 0.000001) {
+        viewDirection.set(0, 0, -1);
+      } else {
+        viewDirection.normalize();
+      }
+
+      const rightDirection = new Vector3().crossVectors(viewDirection, worldUp).normalize();
+      const delta = new Vector3()
+        .addScaledVector(viewDirection, forwardUnits * step)
+        .addScaledVector(rightDirection, rightUnits * step);
+
+      const nextPosition = camera.position.clone().add(delta);
+      const nextTarget = controls.target.clone().add(delta);
+      applyCameraPose(
+        [nextPosition.x, nextPosition.y, nextPosition.z],
+        [nextTarget.x, nextTarget.y, nextTarget.z]
+      );
+    },
+    [applyCameraPose, cameraRef, orbitControlsRef]
+  );
+
   return {
     frameAllNodes,
     focusActiveNode,
-    topDownView
+    topDownView,
+    nudgeCamera
   };
 };

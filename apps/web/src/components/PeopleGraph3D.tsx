@@ -30,6 +30,7 @@ import { GraphSurfaceOverlays } from "./graph/GraphSurfaceOverlays";
 import { GraphFooterStatus } from "./graph/GraphFooterStatus";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { GraphViewModeSelector } from "./graph/GraphViewModeSelector";
+import { useGraphKeyboardNavigation } from "./graph/useGraphKeyboardNavigation";
 
 type Props = {
   people: ImmichPerson[];
@@ -112,6 +113,7 @@ const PeopleGraph3DComponent = ({
     onSelectedPersonChange
   });
   const {
+    peopleById,
     selectedPerson,
     prioritizedNodeIds,
     displayVisiblePeople,
@@ -175,7 +177,7 @@ const PeopleGraph3DComponent = ({
     setHoveredPersonId,
     onSearchFallback: handleSearchFallback
   });
-  const { frameAllNodes, focusActiveNode, topDownView } = useGraphCameraControls({
+  const { frameAllNodes, focusActiveNode, topDownView, nudgeCamera } = useGraphCameraControls({
     graphBounds,
     visiblePositionsById,
     selectedPersonId,
@@ -190,6 +192,17 @@ const PeopleGraph3DComponent = ({
   });
 
   useGraphCamera({ frameAllNodes, focusActiveNode, topDownView });
+  useGraphKeyboardNavigation({
+    enabled: !addRelativeIntent,
+    selectedPersonId,
+    relationships,
+    visiblePositionsById,
+    peopleById,
+    setSelectedPersonId,
+    setFocusPersonId,
+    setPinnedPersonId,
+    nudgeCamera
+  });
 
   useEffect(() => {
     if (hasInitializedCameraRef.current) {

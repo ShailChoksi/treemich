@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
-import { buildParentChildIndex, getLastNameKey, hashToNumber, positionPeople } from "./layout";
+import {
+  buildDirectionalNeighborBuckets,
+  buildParentChildIndex,
+  getLastNameKey,
+  hashToNumber,
+  positionPeople
+} from "./layout";
 
 const getPositionById = (
   people: ImmichPerson[],
@@ -48,6 +54,22 @@ describe("layout utilities", () => {
     expect(index.edges).toHaveLength(2);
     expect(index.parentsByChild.get("c1")).toEqual(new Set(["p1", "p2"]));
     expect(index.childrenByParent.get("p1")).toEqual(new Set(["c1"]));
+  });
+
+  it("buildDirectionalNeighborBuckets groups vertical and non-vertical links", () => {
+    const relationships: RelationshipRecord[] = [
+      { fromPersonId: "parent", toPersonId: "self", type: "PARENT_OF" },
+      { fromPersonId: "self", toPersonId: "child", type: "PARENT_OF" },
+      { fromPersonId: "self", toPersonId: "spouse", type: "SPOUSE_OF" },
+      { fromPersonId: "friend", toPersonId: "self", type: "FRIEND_OF" },
+      { fromPersonId: "self", toPersonId: "pet", type: "PET_OF" }
+    ];
+
+    const buckets = buildDirectionalNeighborBuckets("self", relationships);
+
+    expect(buckets.up).toEqual(["parent"]);
+    expect(buckets.down).toEqual(["child"]);
+    expect(new Set(buckets.side)).toEqual(new Set(["spouse", "friend", "pet"]));
   });
 });
 

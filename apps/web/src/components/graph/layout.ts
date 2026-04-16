@@ -5,6 +5,11 @@ export type GraphLayoutMode = "family" | "photo";
 export type FamilyViewStyle = "generationTree" | "centeredRelationshipMap" | "hybridTreeList" | "cleaned3D";
 export const defaultFamilyViewStyle: FamilyViewStyle = "generationTree";
 export type ParentChildEdge = { parentId: string; childId: string };
+export type DirectionalNeighborBuckets = {
+  up: string[];
+  down: string[];
+  side: string[];
+};
 type SpousePair = { firstPersonId: string; secondPersonId: string };
 type SiblingPair = { firstPersonId: string; secondPersonId: string };
 
@@ -93,6 +98,50 @@ export const buildParentChildIndex = (relationships: RelationshipRecord[]) => {
     edges: [...edges.values()],
     parentsByChild,
     childrenByParent
+  };
+};
+
+export const buildDirectionalNeighborBuckets = (
+  selectedPersonId: string,
+  relationships: RelationshipRecord[]
+): DirectionalNeighborBuckets => {
+  const up = new Set<string>();
+  const down = new Set<string>();
+  const side = new Set<string>();
+
+  for (const relationship of relationships) {
+    if (relationship.type === "PARENT_OF") {
+      if (relationship.toPersonId === selectedPersonId) {
+        up.add(relationship.fromPersonId);
+      } else if (relationship.fromPersonId === selectedPersonId) {
+        down.add(relationship.toPersonId);
+      }
+      continue;
+    }
+
+    if (relationship.type === "CHILD_OF") {
+      if (relationship.fromPersonId === selectedPersonId) {
+        up.add(relationship.toPersonId);
+      } else if (relationship.toPersonId === selectedPersonId) {
+        down.add(relationship.fromPersonId);
+      }
+      continue;
+    }
+
+    if (relationship.fromPersonId === selectedPersonId && relationship.toPersonId !== selectedPersonId) {
+      side.add(relationship.toPersonId);
+      continue;
+    }
+
+    if (relationship.toPersonId === selectedPersonId && relationship.fromPersonId !== selectedPersonId) {
+      side.add(relationship.fromPersonId);
+    }
+  }
+
+  return {
+    up: [...up],
+    down: [...down],
+    side: [...side]
   };
 };
 

@@ -453,6 +453,7 @@ export const useGraphLayoutState = ({
   }, [filteredRelationships, mergedParentGroups, photoEdges, viewMode, visiblePositionsById]);
 
   return {
+    filteredRelationships,
     peopleById,
     selectedPerson,
     prioritizedNodeIds,
