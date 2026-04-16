@@ -411,49 +411,57 @@ const PersonDetailPanelComponent = ({
                 </span>
               </div>
               <ul className="relatives-list">
-                {visibleSuggestions.map((suggestion) => (
-                  <li key={suggestion.key} className="relative-card suggestion-card">
-                    <div className="relative-main suggestion-main">
-                      <div className="relative-summary">
-                        <img
-                          className="relative-avatar"
-                          src={personThumbnailUrl(suggestion.personId)}
-                          alt={suggestion.personName}
-                        />
+                {visibleSuggestions.map((suggestion) => {
+                  const acceptLabel = isSavingRelationship
+                    ? "Saving..."
+                    : `Add as ${getSuggestionRelationshipLabel(suggestion.suggestedType)}`;
+                  return (
+                    <li key={suggestion.key} className="relative-card suggestion-card">
+                      <div className="relative-main suggestion-main">
+                        <div className="relative-summary">
+                          <img
+                            className="relative-avatar"
+                            src={personThumbnailUrl(suggestion.personId)}
+                            alt={suggestion.personName}
+                          />
+                          <button
+                            type="button"
+                            className="text-link-button relative-name-button"
+                            onClick={() => onFocusPerson(suggestion.personId)}
+                          >
+                            {suggestion.personName}
+                          </button>
+                          <span className="relative-pill">
+                            {getSuggestionRelationshipLabel(suggestion.suggestedType)}
+                          </span>
+                        </div>
+                        <p className="hint suggestion-reason">{suggestion.reason}</p>
+                      </div>
+                      <div className="relative-actions suggestion-actions">
                         <button
                           type="button"
-                          className="text-link-button relative-name-button"
-                          onClick={() => onFocusPerson(suggestion.personId)}
+                          className="icon-action-button suggestion-accept-button"
+                          disabled={isSavingRelationship}
+                          onClick={() => void handleSuggestionAccept(suggestion)}
+                          aria-label={acceptLabel}
+                          title={acceptLabel}
                         >
-                          {suggestion.personName}
+                          <span aria-hidden="true">✓</span>
                         </button>
-                        <span className="relative-pill">
-                          {getSuggestionRelationshipLabel(suggestion.suggestedType)}
-                        </span>
+                        <button
+                          type="button"
+                          className="icon-action-button suggestion-dismiss-button"
+                          disabled={isSavingRelationship}
+                          onClick={() => handleSuggestionDismiss(suggestion.key)}
+                          aria-label="Dismiss"
+                          title="Dismiss"
+                        >
+                          <span aria-hidden="true">✕</span>
+                        </button>
                       </div>
-                      <p className="hint suggestion-reason">{suggestion.reason}</p>
-                    </div>
-                    <div className="relative-actions">
-                      <button
-                        type="button"
-                        disabled={isSavingRelationship}
-                        onClick={() => void handleSuggestionAccept(suggestion)}
-                      >
-                        {isSavingRelationship
-                          ? "Saving..."
-                          : `Add as ${getSuggestionRelationshipLabel(suggestion.suggestedType)}`}
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        disabled={isSavingRelationship}
-                        onClick={() => handleSuggestionDismiss(suggestion.key)}
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
               {remainingSuggestionCount > 0 ? (
                 <button
