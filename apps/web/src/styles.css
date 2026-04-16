@@ -591,6 +591,22 @@ body {
   text-align: left;
 }
 
+.suggestion-card {
+  align-items: flex-start;
+}
+
+.suggestion-main {
+  flex: 1 1 auto;
+}
+
+.suggestion-reason {
+  margin-left: 46px;
+}
+
+.suggestion-show-more-button {
+  width: 100%;
+}
+
 .person-detail-inline-summary {
   display: flex;
   flex-wrap: wrap;

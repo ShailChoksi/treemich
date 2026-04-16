@@ -110,7 +110,8 @@ export const familyViewStyleSchema = z.enum(familyViewStyleValues);
 
 export const userPreferencesSchema = z.object({
   graphFilterVisibility: graphFilterVisibilitySchema.optional(),
-  familyViewStyle: familyViewStyleSchema.optional()
+  familyViewStyle: familyViewStyleSchema.optional(),
+  dismissedSuggestions: z.array(z.string()).optional()
 });
 
 export type GraphFilterVisibility = z.infer<typeof graphFilterVisibilitySchema>;
