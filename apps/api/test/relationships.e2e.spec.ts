@@ -20,10 +20,16 @@ const requireSessionMock = vi.fn();
 const logoutMock = vi.fn();
 const getClientMock = vi.fn();
 const queryRawMock = vi.fn();
+const treemichUserFindUniqueOrThrowMock = vi.fn();
+const treemichUserUpdateMock = vi.fn();
 
 vi.mock("../src/db/client.js", () => ({
   prisma: {
-    $queryRaw: queryRawMock
+    $queryRaw: queryRawMock,
+    treemichUser: {
+      findUniqueOrThrow: treemichUserFindUniqueOrThrowMock,
+      update: treemichUserUpdateMock
+    }
   }
 }));
 
@@ -691,5 +697,182 @@ describe("Treemich API routes", () => {
     });
     expect(healthResponse.statusCode).toBe(200);
     expect(healthResponse.json()).toEqual({ ok: true });
+  });
+
+  describe("user preferences", () => {
+    it("returns empty object when user has no saved preferences", async () => {
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: {} });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/user/preferences"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({});
+    });
+
+    it("returns saved preferences", async () => {
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({
+        preferences: {
+          familyViewStyle: "centeredRelationshipMap",
+          graphFilterVisibility: {
+            parentChild: true,
+            spouse: true,
+            sibling: false,
+            friends: true,
+            pets: false
+          }
+        }
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/user/preferences"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        familyViewStyle: "centeredRelationshipMap",
+        graphFilterVisibility: {
+          parentChild: true,
+          spouse: true,
+          sibling: false,
+          friends: true,
+          pets: false
+        }
+      });
+    });
+
+    it("returns empty object when stored preferences are corrupted", async () => {
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({
+        preferences: { familyViewStyle: "nonExistentStyle", extra: 123 }
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/user/preferences"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({});
+    });
+
+    it("saves new preferences via PATCH", async () => {
+      const savedPrefs = {
+        familyViewStyle: "hybridTreeList",
+        graphFilterVisibility: {
+          parentChild: true,
+          spouse: false,
+          sibling: true,
+          friends: true,
+          pets: true
+        }
+      };
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: {} });
+      treemichUserUpdateMock.mockResolvedValueOnce({ preferences: savedPrefs });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: savedPrefs
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(savedPrefs);
+      expect(treemichUserUpdateMock).toHaveBeenCalledWith({
+        where: { id: "user-1" },
+        data: { preferences: savedPrefs },
+        select: { preferences: true }
+      });
+    });
+
+    it("merges partial preferences with existing ones", async () => {
+      const existing = {
+        familyViewStyle: "generationTree",
+        graphFilterVisibility: {
+          parentChild: true,
+          spouse: true,
+          sibling: true,
+          friends: true,
+          pets: true
+        }
+      };
+      const merged = {
+        ...existing,
+        familyViewStyle: "cleaned3D"
+      };
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: existing });
+      treemichUserUpdateMock.mockResolvedValueOnce({ preferences: merged });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { familyViewStyle: "cleaned3D" }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(merged);
+      expect(treemichUserUpdateMock).toHaveBeenCalledWith({
+        where: { id: "user-1" },
+        data: { preferences: merged },
+        select: { preferences: true }
+      });
+    });
+
+    it("preserves existing graphFilterVisibility when only familyViewStyle is sent", async () => {
+      const existingFilters = {
+        parentChild: false,
+        spouse: true,
+        sibling: false,
+        friends: true,
+        pets: false
+      };
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({
+        preferences: { familyViewStyle: "generationTree", graphFilterVisibility: existingFilters }
+      });
+      treemichUserUpdateMock.mockResolvedValueOnce({
+        preferences: { familyViewStyle: "hybridTreeList", graphFilterVisibility: existingFilters }
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { familyViewStyle: "hybridTreeList" }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json.graphFilterVisibility).toEqual(existingFilters);
+      expect(json.familyViewStyle).toBe("hybridTreeList");
+    });
+
+    it("rejects invalid familyViewStyle values", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { familyViewStyle: "invalidView" }
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("rejects invalid graphFilterVisibility field types", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: {
+          graphFilterVisibility: {
+            parentChild: "yes",
+            spouse: true,
+            sibling: true,
+            friends: true,
+            pets: true
+          }
+        }
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
   });
 });

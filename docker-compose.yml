@@ -37,7 +37,7 @@ services:
       TREEMICH_SESSION_COOKIE_NAME: ${TREEMICH_SESSION_COOKIE_NAME:-treemich_session}
       TREEMICH_SESSION_TTL_MS: ${TREEMICH_SESSION_TTL_MS:-2592000000}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
-      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-120}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
       RATE_LIMIT_TIME_WINDOW_MS: ${RATE_LIMIT_TIME_WINDOW_MS:-60000}
     extra_hosts:
       - "host.docker.internal:host-gateway"

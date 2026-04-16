@@ -29,6 +29,7 @@ model TreemichUser {
   immichUserId   String
   immichEmail    String
   immichName     String
+  preferences    Json                @default("{}")
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   linkedAccount  LinkedImmichAccount?

@@ -5,7 +5,8 @@ import {
   searchRelationships,
   type ImmichPerson,
   type RelationshipRecord,
-  type RelationshipType
+  type RelationshipType,
+  type UserPreferences
 } from "../lib/api";
 import { type NodePosition } from "./graph/layout";
 import { AddRelativePopup } from "./graph/AddRelativePopup";
@@ -39,6 +40,7 @@ type Props = {
   isSavingRelationship: boolean;
   loadError: string | null;
   focusPersonRequest: string | null;
+  savedPreferences: UserPreferences | null;
   onFocusPersonConsumed: () => void;
   onSelectedPersonChange?: (personId: string | null) => void;
   onCreateRelationship: (
@@ -46,6 +48,7 @@ type Props = {
     targetPersonId: string,
     relationshipType: RelationshipType
   ) => Promise<void>;
+  onPreferencesChange: (prefs: UserPreferences) => void;
 };
 
 const DEFAULT_RENDER_LIMIT = 120;
@@ -66,21 +69,41 @@ const PeopleGraph3DComponent = ({
   isSavingRelationship,
   loadError,
   focusPersonRequest,
+  savedPreferences,
   onFocusPersonConsumed,
   onSelectedPersonChange,
-  onCreateRelationship
+  onCreateRelationship,
+  onPreferencesChange
 }: Props) => {
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
   const [focusPersonId, setFocusPersonId] = useState<string | null>(null);
   const [pinnedPersonId, setPinnedPersonId] = useState<string | null>(null);
   const [cameraPosition, setCameraPosition] = useState<NodePosition>([0, 2, 18]);
   const [addRelativeIntent, setAddRelativeIntent] = useState<AddRelativeIntent | null>(null);
-  const [familyViewStyle, setFamilyViewStyle] = useState<FamilyViewStyle>(defaultFamilyViewStyle);
-  const [filterVisibility, setFilterVisibility] = useState(defaultGraphFilterVisibility);
+  const [familyViewStyle, setFamilyViewStyle] = useState<FamilyViewStyle>(
+    savedPreferences?.familyViewStyle ?? defaultFamilyViewStyle
+  );
+  const [filterVisibility, setFilterVisibility] = useState(
+    savedPreferences?.graphFilterVisibility ?? defaultGraphFilterVisibility
+  );
+  const prefsAppliedRef = useRef(false);
   const lastCameraSampleRef = useRef(new Vector3(0, 2, 18));
   const hasInitializedCameraRef = useRef(false);
   const cameraRef = useRef<PerspectiveCamera | null>(null);
   const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
+
+  useEffect(() => {
+    if (!savedPreferences || prefsAppliedRef.current) {
+      return;
+    }
+    prefsAppliedRef.current = true;
+    if (savedPreferences.familyViewStyle) {
+      setFamilyViewStyle(savedPreferences.familyViewStyle);
+    }
+    if (savedPreferences.graphFilterVisibility) {
+      setFilterVisibility(savedPreferences.graphFilterVisibility);
+    }
+  }, [savedPreferences]);
 
   const { selectedPersonId, setSelectedPersonId, clearSelection, handleNodeClick } = useGraphSelection({
     selectedPersonId: parentSelectedPersonId,
@@ -256,10 +279,16 @@ const PeopleGraph3DComponent = ({
   };
 
   const handleToggleFilter = (filter: GraphFilter) => {
-    setFilterVisibility((current) => ({
-      ...current,
-      [filter]: !current[filter]
-    }));
+    setFilterVisibility((current) => {
+      const next = { ...current, [filter]: !current[filter] };
+      onPreferencesChange({ graphFilterVisibility: next, familyViewStyle });
+      return next;
+    });
+  };
+
+  const handleViewStyleChange = (style: FamilyViewStyle) => {
+    setFamilyViewStyle(style);
+    onPreferencesChange({ familyViewStyle: style, graphFilterVisibility: filterVisibility });
   };
 
   return (
@@ -275,7 +304,7 @@ const PeopleGraph3DComponent = ({
         />
         <GraphViewModeSelector
           value={familyViewStyle}
-          onChange={setFamilyViewStyle}
+          onChange={handleViewStyleChange}
           filterVisibility={filterVisibility}
           onToggleFilter={handleToggleFilter}
         />

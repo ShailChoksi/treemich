@@ -19,6 +19,8 @@ import { registerPeopleRelationshipsPostRoute } from "./routes/people-relationsh
 import { registerPeopleThumbnailGetRoute } from "./routes/people-thumbnail.get.js";
 import { registerRelationshipsGetRoute } from "./routes/relationships.get.js";
 import { registerSearchGetRoute } from "./routes/search.get.js";
+import { registerUserPreferencesGetRoute } from "./routes/user-preferences.get.js";
+import { registerUserPreferencesPatchRoute } from "./routes/user-preferences.patch.js";
 import { buildServices, registerServices, type AppServices } from "./services.js";
 
 type BuildAppOptions = {
@@ -168,6 +170,8 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerRelationshipsGetRoute);
   app.register(registerPeoplePatchRoute);
   app.register(registerSearchGetRoute);
+  app.register(registerUserPreferencesGetRoute);
+  app.register(registerUserPreferencesPatchRoute);
 
   return app;
 };
