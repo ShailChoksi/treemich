@@ -19,8 +19,7 @@ export const registerUserPreferencesPatchRoute = (app: FastifyInstance) => {
     const merged: UserPreferences = {
       ...current,
       ...incoming,
-      graphFilterVisibility:
-        incoming.graphFilterVisibility ?? current.graphFilterVisibility
+      graphFilterVisibility: incoming.graphFilterVisibility ?? current.graphFilterVisibility
     };
 
     const updated = await prisma.treemichUser.update({
