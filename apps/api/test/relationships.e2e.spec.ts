@@ -847,6 +847,39 @@ describe("Treemich API routes", () => {
       expect(json.familyViewStyle).toBe("hybridTreeList");
     });
 
+    it("persists dismissed suggestion keys alongside existing preferences", async () => {
+      const existing = {
+        familyViewStyle: "generationTree",
+        graphFilterVisibility: {
+          parentChild: true,
+          spouse: true,
+          sibling: true,
+          friends: false,
+          pets: false
+        }
+      };
+      const merged = {
+        ...existing,
+        dismissedSuggestions: ["parent:casey:alex", "sibling:alex:blair"]
+      };
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: existing });
+      treemichUserUpdateMock.mockResolvedValueOnce({ preferences: merged });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { dismissedSuggestions: ["parent:casey:alex", "sibling:alex:blair"] }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(merged);
+      expect(treemichUserUpdateMock).toHaveBeenCalledWith({
+        where: { id: "user-1" },
+        data: { preferences: merged },
+        select: { preferences: true }
+      });
+    });
+
     it("rejects invalid familyViewStyle values", async () => {
       const response = await app.inject({
         method: "PATCH",

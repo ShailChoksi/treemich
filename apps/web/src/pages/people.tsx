@@ -114,10 +114,31 @@ export const PeoplePage = () => {
     [people, selectedPersonId]
   );
 
-  const onPreferencesChange = useCallback((prefs: UserPreferences) => {
-    setSavedPreferences(prefs);
-    updateUserPreferences(prefs).catch(() => {});
+  const onPreferencesChange = useCallback((prefs: Partial<UserPreferences>) => {
+    setSavedPreferences((current) => ({
+      ...(current ?? {}),
+      ...prefs,
+      dismissedSuggestions: prefs.dismissedSuggestions ?? current?.dismissedSuggestions,
+      familyViewStyle: prefs.familyViewStyle ?? current?.familyViewStyle,
+      graphFilterVisibility: prefs.graphFilterVisibility ?? current?.graphFilterVisibility
+    }));
+    updateUserPreferences(prefs)
+      .then((nextPrefs) => {
+        setSavedPreferences(nextPrefs);
+      })
+      .catch(() => {});
   }, []);
+
+  const onDismissSuggestion = useCallback(
+    (suggestionKey: string) => {
+      const dismissedSuggestions = new Set(savedPreferences?.dismissedSuggestions ?? []);
+      dismissedSuggestions.add(suggestionKey);
+      onPreferencesChange({
+        dismissedSuggestions: [...dismissedSuggestions].sort((left, right) => left.localeCompare(right))
+      });
+    },
+    [onPreferencesChange, savedPreferences?.dismissedSuggestions]
+  );
 
   const clearGraphFocus = useCallback(() => setGraphFocusPersonId(null), []);
 
@@ -268,6 +289,7 @@ export const PeoplePage = () => {
           person={selectedPerson}
           people={people}
           relationships={relationships}
+          dismissedSuggestionKeys={savedPreferences?.dismissedSuggestions ?? []}
           genders={genders}
           genderValue={selectedPerson ? (genderByPersonId[selectedPerson.id] ?? "UNKNOWN") : "UNKNOWN"}
           onGenderChange={handleGenderChange}
@@ -276,8 +298,10 @@ export const PeoplePage = () => {
           onProfileSave={onProfileSave}
           isSavingProfile={isSavingProfile}
           onFocusPerson={focusPersonInGraph}
+          onCreateRelationship={onCreateRelationship}
           onUpdateRelationship={onUpdateExistingRelationship}
           onDeleteRelationship={onDeleteExistingRelationship}
+          onDismissSuggestion={onDismissSuggestion}
           isSavingRelationship={isSavingRelationship}
         />
       </aside>
