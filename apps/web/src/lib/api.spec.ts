@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getCurrentUser, login, logout } from "./api";
+import { getCurrentUser, immichPersonUrl, login, logout } from "./api";
 
 describe("session-auth API helpers", () => {
   const originalFetch = globalThis.fetch;
@@ -75,5 +75,25 @@ describe("session-auth API helpers", () => {
         credentials: "include"
       })
     );
+  });
+});
+
+describe("immichPersonUrl", () => {
+  it("builds a person page URL from Immich API base URL", () => {
+    expect(immichPersonUrl("person-123", "http://localhost:2283/api")).toBe(
+      "http://localhost:2283/people/person-123"
+    );
+  });
+
+  it("supports base URLs that already omit /api", () => {
+    expect(immichPersonUrl("person-abc", "http://localhost:2283")).toBe(
+      "http://localhost:2283/people/person-abc"
+    );
+  });
+
+  it("returns null when no base URL is available", () => {
+    expect(immichPersonUrl("person-abc", undefined)).toBeNull();
+    expect(immichPersonUrl("person-abc", null)).toBeNull();
+    expect(immichPersonUrl("person-abc", "   ")).toBeNull();
   });
 });

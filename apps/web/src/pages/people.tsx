@@ -44,7 +44,11 @@ const sortRelationshipsStable = (relationships: RelationshipRecord[]) =>
       left.type.localeCompare(right.type)
   );
 
-export const PeoplePage = () => {
+type Props = {
+  immichBaseUrl?: string | null;
+};
+
+export const PeoplePage = ({ immichBaseUrl = null }: Props) => {
   const [people, setPeople] = useState<ImmichPerson[]>([]);
   const [relationships, setRelationships] = useState<RelationshipRecord[]>([]);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
@@ -303,6 +307,7 @@ export const PeoplePage = () => {
           onDeleteRelationship={onDeleteExistingRelationship}
           onDismissSuggestion={onDismissSuggestion}
           isSavingRelationship={isSavingRelationship}
+          immichBaseUrl={immichBaseUrl}
         />
       </aside>
     </main>

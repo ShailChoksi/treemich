@@ -218,6 +218,24 @@ export const searchRelationships = async (query: string): Promise<SearchRelation
 export const personThumbnailUrl = (personId: string) =>
   `${treemichApi}/people/${encodeURIComponent(personId)}/thumbnail`;
 
+export const immichPersonUrl = (personId: string, immichBaseUrl?: string | null) => {
+  if (!immichBaseUrl) {
+    return null;
+  }
+
+  const normalizedBase = immichBaseUrl.trim().replace(/\/+$/, "");
+  if (!normalizedBase) {
+    return null;
+  }
+
+  const appBase = normalizedBase.endsWith("/api") ? normalizedBase.slice(0, -4) : normalizedBase;
+  if (!appBase) {
+    return null;
+  }
+
+  return `${appBase}/people/${encodeURIComponent(personId)}`;
+};
+
 export const getUserPreferences = async (): Promise<UserPreferences> => {
   const response = await fetchWithRetry(`${treemichApi}/user/preferences`, {
     cache: "no-store"

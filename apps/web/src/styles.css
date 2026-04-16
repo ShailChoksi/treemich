@@ -720,6 +720,11 @@ select:disabled {
   text-decoration: underline;
 }
 
+.person-detail-immich-link {
+  display: inline-flex;
+  width: fit-content;
+}
+
 @media (max-width: 768px) {
   .graph-search-form input {
     width: min(100%, 180px);

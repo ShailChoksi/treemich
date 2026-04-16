@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType } from "../lib/api";
-import { personThumbnailUrl } from "../lib/api";
+import { immichPersonUrl, personThumbnailUrl } from "../lib/api";
 import {
   computeSuggestions,
   getSuggestionRelationshipLabel,
@@ -44,6 +44,7 @@ type Props = {
   onDeleteRelationship: (relationship: RelationshipRecord, relatedPersonId: string) => Promise<void>;
   onDismissSuggestion: (suggestionKey: string) => void;
   isSavingRelationship: boolean;
+  immichBaseUrl?: string | null;
 };
 
 const maxVisibleSuggestions = 5;
@@ -148,7 +149,8 @@ const PersonDetailPanelComponent = ({
   onUpdateRelationship,
   onDeleteRelationship,
   onDismissSuggestion,
-  isSavingRelationship
+  isSavingRelationship,
+  immichBaseUrl
 }: Props) => {
   const [editingRelationshipKey, setEditingRelationshipKey] = useState<string | null>(null);
   const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>("SIBLING_OF");
@@ -225,6 +227,7 @@ const PersonDetailPanelComponent = ({
     : [];
   const sourceBirthDate = formatBirthDate(person?.birthDate);
   const hasBirthDateOverride = Boolean(birthDateValue);
+  const immichPersonPageUrl = person ? immichPersonUrl(person.id, immichBaseUrl) : null;
 
   useEffect(() => {
     setEditingRelationshipKey(null);
@@ -332,6 +335,16 @@ const PersonDetailPanelComponent = ({
                 ? `Override shown in Treemich: ${formatBirthDate(birthDateValue)}`
                 : "No override set. Treemich will use the birth date from Immich when available."}
             </p>
+            {immichPersonPageUrl ? (
+              <a
+                className="text-link-button person-detail-immich-link"
+                href={immichPersonPageUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open this person in Immich
+              </a>
+            ) : null}
             <button
               className="person-detail-primary-action"
               onClick={onProfileSave}
