@@ -1,6 +1,11 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType } from "../lib/api";
 import { personThumbnailUrl } from "../lib/api";
+import {
+  computeSuggestions,
+  getSuggestionRelationshipLabel,
+  type RelationshipSuggestion
+} from "./graph/relationshipSuggestions";
 import { inverseRelationshipType } from "./graph/layout";
 
 type RelativeItem = {
@@ -17,6 +22,7 @@ type Props = {
   person: ImmichPerson | null;
   people: ImmichPerson[];
   relationships: RelationshipRecord[];
+  dismissedSuggestionKeys: string[];
   genders: Gender[];
   genderValue: Gender;
   birthDateValue: string;
@@ -25,14 +31,22 @@ type Props = {
   onProfileSave: () => void;
   isSavingProfile: boolean;
   onFocusPerson: (personId: string) => void;
+  onCreateRelationship: (
+    sourcePersonId: string,
+    targetPersonId: string,
+    relationshipType: RelationshipType
+  ) => Promise<void>;
   onUpdateRelationship: (
     relationship: RelationshipRecord,
     relatedPersonId: string,
     relationshipType: RelationshipType
   ) => Promise<void>;
   onDeleteRelationship: (relationship: RelationshipRecord, relatedPersonId: string) => Promise<void>;
+  onDismissSuggestion: (suggestionKey: string) => void;
   isSavingRelationship: boolean;
 };
+
+const maxVisibleSuggestions = 5;
 
 const relationshipLabel: Record<RelationshipRecord["type"], string> = {
   PARENT_OF: "Parent",
@@ -121,6 +135,7 @@ const PersonDetailPanelComponent = ({
   person,
   people,
   relationships,
+  dismissedSuggestionKeys,
   genders,
   genderValue,
   birthDateValue,
@@ -129,13 +144,16 @@ const PersonDetailPanelComponent = ({
   onProfileSave,
   isSavingProfile,
   onFocusPerson,
+  onCreateRelationship,
   onUpdateRelationship,
   onDeleteRelationship,
+  onDismissSuggestion,
   isSavingRelationship
 }: Props) => {
   const [editingRelationshipKey, setEditingRelationshipKey] = useState<string | null>(null);
   const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>("SIBLING_OF");
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
+  const [visibleSuggestionCount, setVisibleSuggestionCount] = useState(maxVisibleSuggestions);
 
   const relatives = useMemo<RelativeItem[]>(() => {
     if (!person) {
@@ -187,6 +205,12 @@ const PersonDetailPanelComponent = ({
         left.relatedName.localeCompare(right.relatedName)
     );
   }, [people, person, relationships]);
+  const suggestions = useMemo<RelationshipSuggestion[]>(
+    () => (person ? computeSuggestions(person.id, people, relationships, dismissedSuggestionKeys) : []),
+    [dismissedSuggestionKeys, people, person, relationships]
+  );
+  const visibleSuggestions = suggestions.slice(0, visibleSuggestionCount);
+  const remainingSuggestionCount = suggestions.length - visibleSuggestions.length;
 
   const activeRelationship =
     relatives.find((relationship) => relationship.key === editingRelationshipKey) ?? null;
@@ -205,6 +229,7 @@ const PersonDetailPanelComponent = ({
   useEffect(() => {
     setEditingRelationshipKey(null);
     setPendingDeleteKey(null);
+    setVisibleSuggestionCount(maxVisibleSuggestions);
   }, [person?.id]);
 
   useEffect(() => {
@@ -244,6 +269,17 @@ const PersonDetailPanelComponent = ({
     if (editingRelationshipKey === relationship.key) {
       setEditingRelationshipKey(null);
     }
+  };
+
+  const handleSuggestionAccept = async (suggestion: RelationshipSuggestion) => {
+    if (!person) {
+      return;
+    }
+    await onCreateRelationship(person.id, suggestion.personId, suggestion.suggestedType);
+  };
+
+  const handleSuggestionDismiss = (suggestionKey: string) => {
+    onDismissSuggestion(suggestionKey);
   };
 
   return (
@@ -361,6 +397,77 @@ const PersonDetailPanelComponent = ({
               <p className="hint">No relationships found yet.</p>
             )}
           </div>
+          {suggestions.length > 0 ? (
+            <div className="person-detail-section stack">
+              <div className="person-detail-section-header">
+                <div className="stack">
+                  <h3>Suggested Relationships</h3>
+                  <p className="hint">Suggestions are inferred from the existing family graph.</p>
+                </div>
+                <span className="person-detail-count">
+                  {suggestions.length > visibleSuggestions.length
+                    ? `${visibleSuggestions.length} of ${suggestions.length}`
+                    : suggestions.length}
+                </span>
+              </div>
+              <ul className="relatives-list">
+                {visibleSuggestions.map((suggestion) => (
+                  <li key={suggestion.key} className="relative-card suggestion-card">
+                    <div className="relative-main suggestion-main">
+                      <div className="relative-summary">
+                        <img
+                          className="relative-avatar"
+                          src={personThumbnailUrl(suggestion.personId)}
+                          alt={suggestion.personName}
+                        />
+                        <button
+                          type="button"
+                          className="text-link-button relative-name-button"
+                          onClick={() => onFocusPerson(suggestion.personId)}
+                        >
+                          {suggestion.personName}
+                        </button>
+                        <span className="relative-pill">
+                          {getSuggestionRelationshipLabel(suggestion.suggestedType)}
+                        </span>
+                      </div>
+                      <p className="hint suggestion-reason">{suggestion.reason}</p>
+                    </div>
+                    <div className="relative-actions">
+                      <button
+                        type="button"
+                        disabled={isSavingRelationship}
+                        onClick={() => void handleSuggestionAccept(suggestion)}
+                      >
+                        {isSavingRelationship
+                          ? "Saving..."
+                          : `Add as ${getSuggestionRelationshipLabel(suggestion.suggestedType)}`}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={isSavingRelationship}
+                        onClick={() => handleSuggestionDismiss(suggestion.key)}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {remainingSuggestionCount > 0 ? (
+                <button
+                  type="button"
+                  className="secondary-button suggestion-show-more-button"
+                  onClick={() => setVisibleSuggestionCount(suggestions.length)}
+                  disabled={isSavingRelationship}
+                >
+                  Show {remainingSuggestionCount} more suggestion
+                  {remainingSuggestionCount === 1 ? "" : "s"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {activeRelationship ? (
             <div className="relationship-editor stack">
               <div className="person-detail-section-header">

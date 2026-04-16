@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { userPreferencesSchema, type UserPreferences } from "@treemich/shared";
+import { userPreferencesSchema } from "@treemich/shared";
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";
+import { mergeUserPreferences, parseUserPreferences, withUserPreferenceDefaults } from "../preferences.js";
 
 export const registerUserPreferencesPatchRoute = (app: FastifyInstance) => {
   app.patch("/user/preferences", async (request) => {
@@ -13,14 +14,8 @@ export const registerUserPreferencesPatchRoute = (app: FastifyInstance) => {
       select: { preferences: true }
     });
 
-    const existing = userPreferencesSchema.safeParse(user.preferences);
-    const current: UserPreferences = existing.success ? existing.data : {};
-
-    const merged: UserPreferences = {
-      ...current,
-      ...incoming,
-      graphFilterVisibility: incoming.graphFilterVisibility ?? current.graphFilterVisibility
-    };
+    const current = parseUserPreferences(user.preferences);
+    const merged = mergeUserPreferences(current, incoming);
 
     const updated = await prisma.treemichUser.update({
       where: { id: auth.user.id },
@@ -28,6 +23,8 @@ export const registerUserPreferencesPatchRoute = (app: FastifyInstance) => {
       select: { preferences: true }
     });
 
-    return userPreferencesSchema.parse(updated.preferences);
+    await app.services.cooccurrenceService.syncScheduleFromPreferences(auth.user.id);
+
+    return withUserPreferenceDefaults(parseUserPreferences(updated.preferences));
   });
 };

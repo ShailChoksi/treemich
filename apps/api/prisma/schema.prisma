@@ -23,19 +23,29 @@ enum RelationshipType {
   PET_OF
 }
 
+enum CooccurrenceJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 model TreemichUser {
-  id             String              @id @default(cuid())
-  immichBaseUrl  String
-  immichUserId   String
-  immichEmail    String
-  immichName     String
-  preferences    Json                @default("{}")
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  linkedAccount  LinkedImmichAccount?
-  sessions       TreemichSession[]
-  profiles       PersonProfile[]
-  relationships  Relationship[]
+  id                  String                @id @default(cuid())
+  immichBaseUrl       String
+  immichUserId        String
+  immichEmail         String
+  immichName          String
+  preferences         Json                  @default("{}")
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  linkedAccount       LinkedImmichAccount?
+  sessions            TreemichSession[]
+  profiles            PersonProfile[]
+  relationships       Relationship[]
+  cooccurrenceJobs    CooccurrenceJob[]
+  cooccurrenceEdges   CooccurrenceEdge[]
+  cooccurrenceSchedule CooccurrenceSchedule?
 
   @@unique([immichBaseUrl, immichUserId])
   @@unique([immichBaseUrl, immichEmail])
@@ -106,4 +116,58 @@ model Relationship {
   @@index([userId, fromPersonId])
   @@index([userId, toPersonId])
   @@index([userId, id])
+}
+
+model CooccurrenceSchedule {
+  id         String       @id @default(cuid())
+  userId     String       @unique
+  enabled    Boolean      @default(true)
+  intervalDays Int         @default(7)
+  nextRunAt  DateTime
+  lastRunAt  DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  user       TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([enabled, nextRunAt])
+}
+
+model CooccurrenceJob {
+  id               String                @id @default(cuid())
+  userId           String
+  status           CooccurrenceJobStatus @default(PENDING)
+  sourcePhotoCount Int?
+  edgeCount        Int?
+  progress         Float?
+  errorMessage     String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  user             TreemichUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+}
+
+model CooccurrenceEdge {
+  id                String       @id @default(cuid())
+  userId            String
+  personAId         String
+  personBId         String
+  sharedPhotos      Int
+  score             Float
+  personAPhotoCount Int
+  personBPhotoCount Int
+  computedAt        DateTime
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  user              TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, personAId, personBId])
+  @@index([userId])
+  @@index([userId, personAId])
+  @@index([userId, personBId])
+  @@index([userId, score])
+  @@index([userId, computedAt])
 }

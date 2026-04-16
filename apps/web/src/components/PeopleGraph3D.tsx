@@ -48,7 +48,7 @@ type Props = {
     targetPersonId: string,
     relationshipType: RelationshipType
   ) => Promise<void>;
-  onPreferencesChange: (prefs: UserPreferences) => void;
+  onPreferencesChange: (prefs: Partial<UserPreferences>) => void;
 };
 
 const DEFAULT_RENDER_LIMIT = 120;
