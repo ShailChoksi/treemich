@@ -11,6 +11,12 @@ const getProfilesForPersonIdsMock = vi.fn();
 const getConnectedPersonIdsMock = vi.fn();
 const listRelationshipsMock = vi.fn();
 const getPhotoCooccurrenceMock = vi.fn();
+const triggerCooccurrenceComputationMock = vi.fn();
+const getCooccurrenceStatusMock = vi.fn();
+const queryCooccurrenceEdgesMock = vi.fn();
+const getCooccurrenceEdgeBetweenMock = vi.fn();
+const getPersistedPhotoCooccurrenceMock = vi.fn();
+const syncCooccurrenceScheduleFromPreferencesMock = vi.fn();
 const listPeopleMock = vi.fn();
 const getPersonThumbnailMock = vi.fn();
 const listAssetsWithPeopleMock = vi.fn();
@@ -35,6 +41,10 @@ vi.mock("../src/db/client.js", () => ({
 
 describe("Treemich API routes", () => {
   let app: FastifyInstance;
+  const defaultCooccurrencePreferences = {
+    refreshEnabled: true,
+    refreshIntervalDays: 7
+  };
   const authContext = {
     user: {
       id: "user-1",
@@ -100,6 +110,7 @@ describe("Treemich API routes", () => {
     queryRawMock.mockResolvedValue([1]);
     getClientMock.mockReturnValue(immichClient);
     requireSessionMock.mockResolvedValue(authContext);
+    syncCooccurrenceScheduleFromPreferencesMock.mockResolvedValue(undefined);
     getAuthStateMock.mockResolvedValue({
       authenticated: false,
       linkStatus: {
@@ -116,6 +127,14 @@ describe("Treemich API routes", () => {
         requireSession: requireSessionMock,
         logout: logoutMock
       } as unknown as AppServices["authService"],
+      cooccurrenceService: {
+        triggerComputation: triggerCooccurrenceComputationMock,
+        getStatus: getCooccurrenceStatusMock,
+        queryEdges: queryCooccurrenceEdgesMock,
+        getEdgeBetween: getCooccurrenceEdgeBetweenMock,
+        getPersistedPhotoCooccurrence: getPersistedPhotoCooccurrenceMock,
+        syncScheduleFromPreferences: syncCooccurrenceScheduleFromPreferencesMock
+      } as unknown as AppServices["cooccurrenceService"],
       immichClientFactory: {
         getClient: getClientMock
       } as unknown as AppServices["immichClientFactory"],
@@ -709,7 +728,9 @@ describe("Treemich API routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({});
+      expect(response.json()).toEqual({
+        cooccurrence: defaultCooccurrencePreferences
+      });
     });
 
     it("returns saved preferences", async () => {
@@ -740,7 +761,8 @@ describe("Treemich API routes", () => {
           sibling: false,
           friends: true,
           pets: false
-        }
+        },
+        cooccurrence: defaultCooccurrencePreferences
       });
     });
 
@@ -755,7 +777,9 @@ describe("Treemich API routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({});
+      expect(response.json()).toEqual({
+        cooccurrence: defaultCooccurrencePreferences
+      });
     });
 
     it("saves new preferences via PATCH", async () => {
@@ -779,7 +803,10 @@ describe("Treemich API routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual(savedPrefs);
+      expect(response.json()).toEqual({
+        ...savedPrefs,
+        cooccurrence: defaultCooccurrencePreferences
+      });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
         data: { preferences: savedPrefs },
@@ -812,7 +839,10 @@ describe("Treemich API routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual(merged);
+      expect(response.json()).toEqual({
+        ...merged,
+        cooccurrence: defaultCooccurrencePreferences
+      });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
         data: { preferences: merged },
@@ -872,7 +902,10 @@ describe("Treemich API routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual(merged);
+      expect(response.json()).toEqual({
+        ...merged,
+        cooccurrence: defaultCooccurrencePreferences
+      });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
         data: { preferences: merged },

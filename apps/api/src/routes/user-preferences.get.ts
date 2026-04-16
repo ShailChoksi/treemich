@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { userPreferencesSchema } from "@treemich/shared";
+import { parseUserPreferences, withUserPreferenceDefaults } from "../preferences.js";
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";
 
@@ -10,7 +10,6 @@ export const registerUserPreferencesGetRoute = (app: FastifyInstance) => {
       where: { id: auth.user.id },
       select: { preferences: true }
     });
-    const parsed = userPreferencesSchema.safeParse(user.preferences);
-    return parsed.success ? parsed.data : {};
+    return withUserPreferenceDefaults(parseUserPreferences(user.preferences));
   });
 };
