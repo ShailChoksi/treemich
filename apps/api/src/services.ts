@@ -7,17 +7,20 @@ import {
   type LinkedAuthenticatedRequestContext
 } from "./auth/service.js";
 import { TreemichAuthError } from "./auth/service.js";
+import { CooccurrenceService } from "./cooccurrence/service.js";
 import { ImmichClientFactory } from "./integrations/immich/factory.js";
 import { RelationshipService } from "./relationships/service.js";
 
 export type AppServices = {
   authService: AuthService;
+  cooccurrenceService: CooccurrenceService;
   immichClientFactory: ImmichClientFactory;
   relationshipService: RelationshipService;
 };
 
 export const buildServices = (): AppServices => ({
   authService: new AuthService(),
+  cooccurrenceService: new CooccurrenceService(),
   immichClientFactory: new ImmichClientFactory(),
   relationshipService: new RelationshipService()
 });

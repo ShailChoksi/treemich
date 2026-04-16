@@ -56,6 +56,49 @@ export type PhotoCooccurrenceResponse = {
   sourcePhotoCount: number;
 };
 
+export const cooccurrenceJobStatusValues = ["PENDING", "RUNNING", "COMPLETED", "FAILED"] as const;
+export const cooccurrenceJobStatusSchema = z.enum(cooccurrenceJobStatusValues);
+export type CooccurrenceJobStatus = (typeof cooccurrenceJobStatusValues)[number];
+
+export type CooccurrenceEdgeRecord = {
+  id: string;
+  personAId: string;
+  personBId: string;
+  sharedPhotos: number;
+  score: number;
+  personAPhotoCount: number;
+  personBPhotoCount: number;
+  computedAt: string;
+};
+
+export type CooccurrenceEdgesResponse = {
+  edges: CooccurrenceEdgeRecord[];
+  nextCursor: string | null;
+};
+
+export type CooccurrenceScheduleInfo = {
+  refreshEnabled: boolean;
+  refreshIntervalDays: number;
+  nextRunAt?: string | null;
+  lastRunAt?: string | null;
+};
+
+export type CooccurrenceJobResponse = {
+  job: {
+    id: string;
+    status: CooccurrenceJobStatus;
+    sourcePhotoCount?: number | null;
+    edgeCount?: number | null;
+    progress?: number | null;
+    errorMessage?: string | null;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  schedule: CooccurrenceScheduleInfo;
+};
+
 export type AuthUser = {
   id: string;
   immichUserId: string;
@@ -108,10 +151,22 @@ export const familyViewStyleValues = [
 ] as const;
 export const familyViewStyleSchema = z.enum(familyViewStyleValues);
 
+export const cooccurrencePreferencesSchema = z.object({
+  refreshEnabled: z.boolean(),
+  refreshIntervalDays: z.number().int().min(1).max(90)
+});
+export type CooccurrencePreferences = z.infer<typeof cooccurrencePreferencesSchema>;
+
+export const defaultCooccurrencePreferences: CooccurrencePreferences = {
+  refreshEnabled: true,
+  refreshIntervalDays: 7
+};
+
 export const userPreferencesSchema = z.object({
   graphFilterVisibility: graphFilterVisibilitySchema.optional(),
   familyViewStyle: familyViewStyleSchema.optional(),
-  dismissedSuggestions: z.array(z.string()).optional()
+  dismissedSuggestions: z.array(z.string()).optional(),
+  cooccurrence: cooccurrencePreferencesSchema.optional()
 });
 
 export type GraphFilterVisibility = z.infer<typeof graphFilterVisibilitySchema>;
