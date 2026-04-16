@@ -631,6 +631,62 @@ const alignSiblingDepths = (
   }
 };
 
+const alignCoParentDepths = (
+  component: string[],
+  parentsInComponentByChild: Map<string, string[]>,
+  depthById: Map<string, number>
+) => {
+  // If two+ parents share a child, keep those parents on the same generation level.
+  for (let pass = 0; pass < component.length; pass += 1) {
+    let changed = false;
+    for (const childId of component) {
+      const parentIds = parentsInComponentByChild.get(childId) ?? [];
+      if (parentIds.length < 2) {
+        continue;
+      }
+      const alignedDepth = Math.max(...parentIds.map((parentId) => depthById.get(parentId) ?? 0));
+      for (const parentId of parentIds) {
+        if ((depthById.get(parentId) ?? 0) !== alignedDepth) {
+          depthById.set(parentId, alignedDepth);
+          changed = true;
+        }
+      }
+    }
+    if (!changed) {
+      break;
+    }
+  }
+};
+
+const enforceParentChildDepthOrder = (
+  component: string[],
+  componentSet: Set<string>,
+  childrenByParent: Map<string, Set<string>>,
+  depthById: Map<string, number>
+) => {
+  // When spouse/sibling alignment changes a person's depth, make sure all descendants
+  // are still at least one level below their parent.
+  for (let pass = 0; pass < component.length; pass += 1) {
+    let changed = false;
+    for (const parentId of component) {
+      const parentDepth = depthById.get(parentId) ?? 0;
+      for (const childId of childrenByParent.get(parentId) ?? []) {
+        if (!componentSet.has(childId)) {
+          continue;
+        }
+        const requiredDepth = parentDepth + 1;
+        if (requiredDepth > (depthById.get(childId) ?? 0)) {
+          depthById.set(childId, requiredDepth);
+          changed = true;
+        }
+      }
+    }
+    if (!changed) {
+      break;
+    }
+  }
+};
+
 const applySameLevelSpacing = (
   component: string[],
   depthById: Map<string, number>,
@@ -729,6 +785,255 @@ const applySharedChildrenSpouseCentering = (
   }
 };
 
+const applySharedChildrenParentPairAnchoring = (
+  relationshipPairsInComponent: SpousePair[],
+  xById: Map<string, number>,
+  childrenByParent: Map<string, Set<string>>,
+  componentSet: Set<string>,
+  peopleById: Map<string, ImmichPerson>,
+  pairGap: number
+) => {
+  for (const pair of relationshipPairsInComponent) {
+    const firstChildren = childrenByParent.get(pair.firstPersonId) ?? new Set<string>();
+    const secondChildren = childrenByParent.get(pair.secondPersonId) ?? new Set<string>();
+    const sharedChildren = [...firstChildren].filter(
+      (childId) => secondChildren.has(childId) && componentSet.has(childId)
+    );
+    if (sharedChildren.length === 0) {
+      continue;
+    }
+
+    const sharedChildXs = sharedChildren
+      .map((childId) => xById.get(childId))
+      .filter((value): value is number => value !== undefined);
+    if (sharedChildXs.length === 0) {
+      continue;
+    }
+
+    const childCenterX = sharedChildXs.reduce((sum, value) => sum + value, 0) / sharedChildXs.length;
+    const firstName = personNameById(peopleById, pair.firstPersonId);
+    const secondName = personNameById(peopleById, pair.secondPersonId);
+    const [leftId, rightId] =
+      firstName.localeCompare(secondName) <= 0
+        ? [pair.firstPersonId, pair.secondPersonId]
+        : [pair.secondPersonId, pair.firstPersonId];
+    xById.set(leftId, childCenterX - pairGap / 2);
+    xById.set(rightId, childCenterX + pairGap / 2);
+  }
+};
+
+const applyChildrenAnchorAlignment = (
+  component: string[],
+  parentsInComponentByChild: Map<string, string[]>,
+  xById: Map<string, number>,
+  peopleById: Map<string, ImmichPerson>,
+  primaryChildrenByParent: Map<string, string[]>,
+  childGap: number
+) => {
+  const childrenByParentGroup = new Map<string, string[]>();
+  for (const childId of component) {
+    const parentIds = parentsInComponentByChild.get(childId) ?? [];
+    if (parentIds.length === 0) {
+      continue;
+    }
+    const key = parentIds.join("|");
+    const existing = childrenByParentGroup.get(key);
+    if (existing) {
+      existing.push(childId);
+    } else {
+      childrenByParentGroup.set(key, [childId]);
+    }
+  }
+
+  for (const [parentKey, childIds] of childrenByParentGroup.entries()) {
+    const parentIds = parentKey.split("|").filter(Boolean);
+    const parentXs = parentIds
+      .map((parentId) => xById.get(parentId))
+      .filter((value): value is number => value !== undefined);
+    if (parentXs.length === 0 || childIds.length === 0) {
+      continue;
+    }
+
+    const anchorX = parentXs.reduce((sum, value) => sum + value, 0) / parentXs.length;
+    const orderedChildren = sortPersonIdsByName(new Set(childIds), peopleById);
+    const startX = anchorX - ((orderedChildren.length - 1) * childGap) / 2;
+
+    orderedChildren.forEach((childId, index) => {
+      const targetX = startX + index * childGap;
+      const currentX = xById.get(childId) ?? targetX;
+      shiftSubtree(childId, targetX - currentX, xById, primaryChildrenByParent);
+    });
+  }
+};
+
+const buildParentChildUndirectedAdjacency = (
+  component: string[],
+  componentSet: Set<string>,
+  childrenByParent: Map<string, Set<string>>
+) => {
+  const adjacency = new Map<string, Set<string>>();
+  for (const personId of component) {
+    adjacency.set(personId, new Set());
+  }
+  for (const [parentId, childIds] of childrenByParent.entries()) {
+    if (!componentSet.has(parentId)) {
+      continue;
+    }
+    for (const childId of childIds) {
+      if (!componentSet.has(childId)) {
+        continue;
+      }
+      adjacency.get(parentId)?.add(childId);
+      adjacency.get(childId)?.add(parentId);
+    }
+  }
+  return adjacency;
+};
+
+const computeBfsDistances = (startId: string, adjacency: Map<string, Set<string>>) => {
+  const distances = new Map<string, number>();
+  distances.set(startId, 0);
+  const queue = [startId];
+  let queueIndex = 0;
+  while (queueIndex < queue.length) {
+    const currentId = queue[queueIndex];
+    queueIndex += 1;
+    if (!currentId) {
+      continue;
+    }
+    const currentDistance = distances.get(currentId) ?? 0;
+    for (const nextId of adjacency.get(currentId) ?? []) {
+      if (distances.has(nextId)) {
+        continue;
+      }
+      distances.set(nextId, currentDistance + 1);
+      queue.push(nextId);
+    }
+  }
+  return distances;
+};
+
+const applyPerpendicularMinorSpouseBranchLayout = (
+  component: string[],
+  relationshipPairsInComponent: SpousePair[],
+  childrenByParent: Map<string, Set<string>>,
+  componentSet: Set<string>,
+  xById: Map<string, number>,
+  zById: Map<string, number>
+) => {
+  if (relationshipPairsInComponent.length === 0) {
+    return;
+  }
+
+  const parentChildAdjacency = buildParentChildUndirectedAdjacency(component, componentSet, childrenByParent);
+
+  for (const pair of relationshipPairsInComponent) {
+    const firstDistances = computeBfsDistances(pair.firstPersonId, parentChildAdjacency);
+    const secondDistances = computeBfsDistances(pair.secondPersonId, parentChildAdjacency);
+    const firstSideIds: string[] = [];
+    const secondSideIds: string[] = [];
+
+    for (const personId of component) {
+      if (personId === pair.firstPersonId || personId === pair.secondPersonId) {
+        continue;
+      }
+      const firstDistance = firstDistances.get(personId);
+      const secondDistance = secondDistances.get(personId);
+      if (firstDistance === undefined && secondDistance === undefined) {
+        continue;
+      }
+      if (firstDistance !== undefined && secondDistance === undefined) {
+        firstSideIds.push(personId);
+        continue;
+      }
+      if (secondDistance !== undefined && firstDistance === undefined) {
+        secondSideIds.push(personId);
+        continue;
+      }
+      if (firstDistance !== undefined && secondDistance !== undefined) {
+        if (firstDistance < secondDistance) {
+          firstSideIds.push(personId);
+        } else if (secondDistance < firstDistance) {
+          secondSideIds.push(personId);
+        }
+      }
+    }
+
+    const firstCount = firstSideIds.length;
+    const secondCount = secondSideIds.length;
+    if (firstCount === 0 || secondCount === 0) {
+      continue;
+    }
+    const smallerSideIsFirst = firstCount < secondCount;
+    const smallerSideCount = smallerSideIsFirst ? firstCount : secondCount;
+    const largerSideCount = smallerSideIsFirst ? secondCount : firstCount;
+    if (largerSideCount < smallerSideCount * 1.5) {
+      continue;
+    }
+
+    const anchorId = smallerSideIsFirst ? pair.firstPersonId : pair.secondPersonId;
+    const smallerSideIds = smallerSideIsFirst ? firstSideIds : secondSideIds;
+    const anchorX = xById.get(anchorId) ?? 0;
+    const anchorZ = zById.get(anchorId) ?? 0;
+    const branchDirection = smallerSideIsFirst ? -1 : 1;
+    const orderedSmallerSide = [...smallerSideIds].sort((left, right) => {
+      const leftX = xById.get(left) ?? 0;
+      const rightX = xById.get(right) ?? 0;
+      if (Math.abs(leftX - rightX) > 0.0001) {
+        return leftX - rightX;
+      }
+      return left.localeCompare(right);
+    });
+
+    orderedSmallerSide.forEach((personId, index) => {
+      const currentX = xById.get(personId);
+      if (currentX === undefined) {
+        return;
+      }
+      const currentZ = zById.get(personId) ?? 0;
+      const dx = currentX - anchorX;
+      const dz = currentZ - anchorZ;
+      const fanOffset =
+        orderedSmallerSide.length === 1
+          ? branchDirection * 2.2
+          : (index - (orderedSmallerSide.length - 1) / 2) * 2.1;
+      xById.set(personId, anchorX + dx * 0.35);
+      zById.set(personId, anchorZ + dz + dx * 1.85 + fanOffset);
+    });
+  }
+};
+
+const deriveCoParentPairs = (parentsInComponentByChild: Map<string, string[]>) => {
+  const pairsByKey = new Map<string, SpousePair>();
+  for (const parentIds of parentsInComponentByChild.values()) {
+    if (parentIds.length < 2) {
+      continue;
+    }
+    for (let index = 0; index < parentIds.length; index += 1) {
+      const firstPersonId = parentIds[index];
+      if (!firstPersonId) {
+        continue;
+      }
+      for (let nextIndex = index + 1; nextIndex < parentIds.length; nextIndex += 1) {
+        const secondPersonId = parentIds[nextIndex];
+        if (!secondPersonId) {
+          continue;
+        }
+        const key = canonicalPairKey(firstPersonId, secondPersonId);
+        if (pairsByKey.has(key)) {
+          continue;
+        }
+        const [leftId, rightId] =
+          firstPersonId.localeCompare(secondPersonId) <= 0
+            ? [firstPersonId, secondPersonId]
+            : [secondPersonId, firstPersonId];
+        pairsByKey.set(key, { firstPersonId: leftId, secondPersonId: rightId });
+      }
+    }
+  }
+  return [...pairsByKey.values()];
+};
+
 const collectComponentPairs = <TPair extends { firstPersonId: string; secondPersonId: string }>(
   component: string[],
   componentSet: Set<string>,
@@ -748,6 +1053,102 @@ const collectComponentPairs = <TPair extends { firstPersonId: string; secondPers
     }
   }
   return [...pairsByKey.values()];
+};
+
+type ComponentBounds = {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+};
+
+const computeComponentBounds = (
+  component: string[],
+  positions: Map<string, NodePosition>
+): ComponentBounds => {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+
+  for (const personId of component) {
+    const position = positions.get(personId);
+    if (!position) {
+      continue;
+    }
+    minX = Math.min(minX, position[0]);
+    maxX = Math.max(maxX, position[0]);
+    minZ = Math.min(minZ, position[2]);
+    maxZ = Math.max(maxZ, position[2]);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minZ) || !Number.isFinite(maxZ)) {
+    return { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  }
+
+  return { minX, maxX, minZ, maxZ };
+};
+
+const separateOverlappingComponents = (components: string[][], positions: Map<string, NodePosition>) => {
+  if (components.length < 2) {
+    return;
+  }
+
+  const paddingX = 3.6;
+  const paddingZ = 4.4;
+  const maxPasses = components.length * components.length * 5;
+
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    let changed = false;
+    for (let firstIndex = 0; firstIndex < components.length; firstIndex += 1) {
+      const firstComponent = components[firstIndex] ?? [];
+      const firstBounds = computeComponentBounds(firstComponent, positions);
+      for (let secondIndex = firstIndex + 1; secondIndex < components.length; secondIndex += 1) {
+        const secondComponent = components[secondIndex] ?? [];
+        const secondBounds = computeComponentBounds(secondComponent, positions);
+
+        const overlapsX =
+          firstBounds.minX - paddingX < secondBounds.maxX && secondBounds.minX < firstBounds.maxX + paddingX;
+        const overlapsZ =
+          firstBounds.minZ - paddingZ < secondBounds.maxZ && secondBounds.minZ < firstBounds.maxZ + paddingZ;
+        if (!overlapsX || !overlapsZ) {
+          continue;
+        }
+
+        const firstCenterX = (firstBounds.minX + firstBounds.maxX) / 2;
+        const secondCenterX = (secondBounds.minX + secondBounds.maxX) / 2;
+        const firstCenterZ = (firstBounds.minZ + firstBounds.maxZ) / 2;
+        const secondCenterZ = (secondBounds.minZ + secondBounds.maxZ) / 2;
+
+        const shiftRight = firstBounds.maxX + paddingX - (secondBounds.minX - paddingX);
+        const shiftLeft = secondBounds.maxX + paddingX - (firstBounds.minX - paddingX);
+        const shiftForward = firstBounds.maxZ + paddingZ - (secondBounds.minZ - paddingZ);
+        const shiftBackward = secondBounds.maxZ + paddingZ - (firstBounds.minZ - paddingZ);
+
+        const shiftX = secondCenterX >= firstCenterX ? Math.max(0, shiftRight) : -Math.max(0, shiftLeft);
+        const shiftZ =
+          secondCenterZ >= firstCenterZ ? Math.max(0, shiftForward) : -Math.max(0, shiftBackward);
+
+        const preferX =
+          Math.abs(shiftX) <= Math.abs(shiftZ) ||
+          Math.abs(secondCenterX - firstCenterX) < Math.abs(secondCenterZ - firstCenterZ) * 0.8;
+        const appliedShiftX = preferX ? shiftX : 0;
+        const appliedShiftZ = preferX ? 0 : shiftZ;
+
+        for (const personId of secondComponent) {
+          const position = positions.get(personId);
+          if (!position) {
+            continue;
+          }
+          positions.set(personId, [position[0] + appliedShiftX, position[1], position[2] + appliedShiftZ]);
+        }
+        changed = true;
+      }
+    }
+    if (!changed) {
+      break;
+    }
+  }
 };
 
 const buildTreePositions = (
@@ -787,6 +1188,22 @@ const buildTreePositions = (
     undirected.get(edge.childId)?.add(edge.parentId);
   }
 
+  // Keep spouse-linked families in the same layout component so spouse-level
+  // alignment can be applied even when their parent/child subtrees differ.
+  for (const pair of spousePairs) {
+    if (!peopleById.has(pair.firstPersonId) || !peopleById.has(pair.secondPersonId)) {
+      continue;
+    }
+    if (!undirected.has(pair.firstPersonId)) {
+      undirected.set(pair.firstPersonId, new Set());
+    }
+    if (!undirected.has(pair.secondPersonId)) {
+      undirected.set(pair.secondPersonId, new Set());
+    }
+    undirected.get(pair.firstPersonId)?.add(pair.secondPersonId);
+    undirected.get(pair.secondPersonId)?.add(pair.firstPersonId);
+  }
+
   const components = collectConnectedComponents(undirected);
 
   const positions = new Map<string, NodePosition>();
@@ -821,6 +1238,16 @@ const buildTreePositions = (
       );
       parentsInComponentByChild.set(childId, parents);
     }
+    const spousePairsInComponent = collectComponentPairs(component, componentSet, spousePairsByPerson);
+    const coParentPairsInComponent = deriveCoParentPairs(parentsInComponentByChild);
+    const alignedPartnerPairsByKey = new Map<string, SpousePair>();
+    for (const pair of spousePairsInComponent) {
+      alignedPartnerPairsByKey.set(canonicalPairKey(pair.firstPersonId, pair.secondPersonId), pair);
+    }
+    for (const pair of coParentPairsInComponent) {
+      alignedPartnerPairsByKey.set(canonicalPairKey(pair.firstPersonId, pair.secondPersonId), pair);
+    }
+    const alignedPartnerPairsInComponent = [...alignedPartnerPairsByKey.values()];
 
     const primaryChildrenByParent = buildPrimaryChildrenByParent(
       component,
@@ -888,9 +1315,8 @@ const buildTreePositions = (
       forestCursor += 1;
     }
 
-    const spousePairsInComponent = collectComponentPairs(component, componentSet, spousePairsByPerson);
     const spouseGap = 1.2;
-    applySpouseAlignment(spousePairsInComponent, xById, depthById, peopleById, spouseGap);
+    applySpouseAlignment(alignedPartnerPairsInComponent, xById, depthById, peopleById, spouseGap);
 
     const siblingPairsInComponent = collectComponentPairs(component, componentSet, siblingPairsByPerson);
     const siblingAdjacency = buildSiblingAdjacency(
@@ -900,10 +1326,16 @@ const buildTreePositions = (
       parentsInComponentByChild
     );
     alignSiblingDepths(component, siblingAdjacency, depthById);
+    alignCoParentDepths(component, parentsInComponentByChild, depthById);
+    enforceParentChildDepthOrder(component, componentSet, childrenByParent, depthById);
+    // Co-parent alignment can raise one sibling branch after sibling leveling.
+    // Re-apply sibling leveling so sibling generations remain consistent.
+    alignSiblingDepths(component, siblingAdjacency, depthById);
+    enforceParentChildDepthOrder(component, componentSet, childrenByParent, depthById);
 
     const childGap = 1.7;
     applySharedChildrenSpouseCentering(
-      spousePairsInComponent,
+      alignedPartnerPairsInComponent,
       xById,
       childrenByParent,
       componentSet,
@@ -915,6 +1347,49 @@ const buildTreePositions = (
     const minLevelGap = 0.92;
     applySameLevelSpacing(component, depthById, xById, peopleById, minLevelGap);
 
+    // Run a few stabilization passes so anchoring propagates across generations
+    // (children under parent sets, then parent pairs around shared children).
+    for (let pass = 0; pass < 3; pass += 1) {
+      applyChildrenAnchorAlignment(
+        component,
+        parentsInComponentByChild,
+        xById,
+        peopleById,
+        primaryChildrenByParent,
+        childGap
+      );
+      applySharedChildrenParentPairAnchoring(
+        alignedPartnerPairsInComponent,
+        xById,
+        childrenByParent,
+        componentSet,
+        peopleById,
+        spouseGap
+      );
+    }
+    const zById = new Map<string, number>();
+    for (const personId of component) {
+      zById.set(personId, 0);
+    }
+    const orientationPairsByKey = new Map<string, SpousePair>();
+    for (const pair of spousePairsInComponent) {
+      orientationPairsByKey.set(canonicalPairKey(pair.firstPersonId, pair.secondPersonId), pair);
+    }
+    for (const pair of coParentPairsInComponent) {
+      const key = canonicalPairKey(pair.firstPersonId, pair.secondPersonId);
+      if (!orientationPairsByKey.has(key)) {
+        orientationPairsByKey.set(key, pair);
+      }
+    }
+    applyPerpendicularMinorSpouseBranchLayout(
+      component,
+      [...orientationPairsByKey.values()],
+      childrenByParent,
+      componentSet,
+      xById,
+      zById
+    );
+
     const placedXs = [...xById.values()];
     const minX = placedXs.length > 0 ? Math.min(...placedXs) : 0;
     const maxX = placedXs.length > 0 ? Math.max(...placedXs) : 0;
@@ -924,9 +1399,18 @@ const buildTreePositions = (
       const localXUnits = xById.get(personId) ?? 0;
       const localX = (localXUnits - midX) * levelSpacingX;
       const depth = depthById.get(personId) ?? 0;
-      positions.set(personId, [componentCenterX + localX, treeTopY - depth * levelStepY, componentCenterZ]);
+      const localZ = zById.get(personId) ?? 0;
+      positions.set(personId, [
+        componentCenterX + localX,
+        treeTopY - depth * levelStepY,
+        componentCenterZ + localZ
+      ]);
     }
   });
+
+  // Large disconnected components can exceed the initial coarse span estimate.
+  // Resolve any remaining overlap after all local per-component transforms.
+  separateOverlappingComponents(components, positions);
 
   return positions;
 };

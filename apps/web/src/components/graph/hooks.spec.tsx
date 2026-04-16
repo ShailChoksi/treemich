@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ImmichPerson } from "../../lib/api";
 import { type NodePosition } from "./layout";
-import { filterRelationshipsByLayer, pickNearest } from "./useGraphLayoutState";
+import {
+  filterRelationshipsByLayer,
+  pickNearest,
+  pickSingleFamilyTreeIds,
+  routeRelationshipSegment
+} from "./useGraphLayoutState";
 import {
   getCameraNudgeForDirection,
   getNextKeyboardTraversal,
@@ -42,6 +47,63 @@ describe("filterRelationshipsByLayer", () => {
     expect(filtered).toEqual([
       { fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" },
       { fromPersonId: "a", toPersonId: "d", type: "PET_OF" }
+    ]);
+  });
+});
+
+describe("pickSingleFamilyTreeIds", () => {
+  it("returns largest component when no person is selected", () => {
+    const ids = pickSingleFamilyTreeIds(
+      [
+        { fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" },
+        { fromPersonId: "b", toPersonId: "c", type: "SPOUSE_OF" },
+        { fromPersonId: "x", toPersonId: "y", type: "PARENT_OF" }
+      ],
+      null
+    );
+
+    expect(ids).toEqual(new Set(["a", "b", "c"]));
+  });
+
+  it("returns selected person's component when selected", () => {
+    const ids = pickSingleFamilyTreeIds(
+      [
+        { fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" },
+        { fromPersonId: "x", toPersonId: "y", type: "PARENT_OF" }
+      ],
+      "x"
+    );
+
+    expect(ids).toEqual(new Set(["x", "y"]));
+  });
+
+  it("returns selected person when graph has no relationships", () => {
+    const ids = pickSingleFamilyTreeIds([], "solo");
+    expect(ids).toEqual(new Set(["solo"]));
+  });
+});
+
+describe("routeRelationshipSegment", () => {
+  it("routes generation-tree parent-child links with elbows", () => {
+    const points = routeRelationshipSegment([0, 8, 0], [6, 0, 3], "PARENT_CHILD", "generationTree");
+    expect(points.length).toBeGreaterThan(2);
+    expect(points[0]).toEqual([0, 8, 0]);
+    expect(points[points.length - 1]).toEqual([6, 0, 3]);
+  });
+
+  it("keeps non-parent-child links as direct segments", () => {
+    const points = routeRelationshipSegment([0, 1, 0], [6, 0, 3], "FRIEND", "generationTree");
+    expect(points).toEqual([
+      [0, 1, 0],
+      [6, 0, 3]
+    ]);
+  });
+
+  it("keeps parent-child links direct when routing style preference is direct", () => {
+    const points = routeRelationshipSegment([0, 8, 0], [6, 0, 3], "PARENT_CHILD", "generationTree", "direct");
+    expect(points).toEqual([
+      [0, 8, 0],
+      [6, 0, 3]
     ]);
   });
 });

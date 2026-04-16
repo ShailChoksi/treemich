@@ -45,6 +45,8 @@ describe("Treemich API routes", () => {
     refreshEnabled: true,
     refreshIntervalDays: 7
   };
+  const defaultGraphLineRoutingStyle = "orthogonal";
+  const defaultShowSingleFamilyTree = false;
   const authContext = {
     user: {
       id: "user-1",
@@ -729,6 +731,8 @@ describe("Treemich API routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
+        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
         cooccurrence: defaultCooccurrencePreferences
       });
     });
@@ -755,6 +759,8 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         familyViewStyle: "centeredRelationshipMap",
+        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
         graphFilterVisibility: {
           parentChild: true,
           spouse: true,
@@ -778,6 +784,8 @@ describe("Treemich API routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
+        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
         cooccurrence: defaultCooccurrencePreferences
       });
     });
@@ -805,6 +813,8 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...savedPrefs,
+        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
@@ -841,6 +851,8 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...merged,
+        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
@@ -875,6 +887,45 @@ describe("Treemich API routes", () => {
       const json = response.json();
       expect(json.graphFilterVisibility).toEqual(existingFilters);
       expect(json.familyViewStyle).toBe("hybridTreeList");
+      expect(json.graphLineRoutingStyle).toBe(defaultGraphLineRoutingStyle);
+      expect(json.showSingleFamilyTree).toBe(defaultShowSingleFamilyTree);
+    });
+
+    it("accepts and persists graphLineRoutingStyle preference", async () => {
+      const existing = {
+        familyViewStyle: "generationTree",
+        graphFilterVisibility: {
+          parentChild: true,
+          spouse: true,
+          sibling: true,
+          friends: true,
+          pets: true
+        }
+      };
+      const merged = {
+        ...existing,
+        graphLineRoutingStyle: "direct"
+      };
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: existing });
+      treemichUserUpdateMock.mockResolvedValueOnce({ preferences: merged });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { graphLineRoutingStyle: "direct" }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        ...merged,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
+        cooccurrence: defaultCooccurrencePreferences
+      });
+      expect(treemichUserUpdateMock).toHaveBeenCalledWith({
+        where: { id: "user-1" },
+        data: { preferences: merged },
+        select: { preferences: true }
+      });
     });
 
     it("persists dismissed suggestion keys alongside existing preferences", async () => {
@@ -904,6 +955,8 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...merged,
+        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({

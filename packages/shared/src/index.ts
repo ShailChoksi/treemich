@@ -150,6 +150,11 @@ export const familyViewStyleValues = [
   "cleaned3D"
 ] as const;
 export const familyViewStyleSchema = z.enum(familyViewStyleValues);
+export const graphLineRoutingStyleValues = ["orthogonal", "direct"] as const;
+export const graphLineRoutingStyleSchema = z.enum(graphLineRoutingStyleValues);
+export type GraphLineRoutingStyle = z.infer<typeof graphLineRoutingStyleSchema>;
+export const defaultGraphLineRoutingStyle: GraphLineRoutingStyle = "orthogonal";
+export const defaultShowSingleFamilyTree = false;
 
 export const cooccurrencePreferencesSchema = z.object({
   refreshEnabled: z.boolean(),
@@ -165,6 +170,8 @@ export const defaultCooccurrencePreferences: CooccurrencePreferences = {
 export const userPreferencesSchema = z.object({
   graphFilterVisibility: graphFilterVisibilitySchema.optional(),
   familyViewStyle: familyViewStyleSchema.optional(),
+  graphLineRoutingStyle: graphLineRoutingStyleSchema.optional(),
+  showSingleFamilyTree: z.boolean().optional(),
   dismissedSuggestions: z.array(z.string()).optional(),
   cooccurrence: cooccurrencePreferencesSchema.optional()
 });

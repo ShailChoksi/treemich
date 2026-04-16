@@ -87,6 +87,10 @@ const PeopleGraph3DComponent = ({
   const [filterVisibility, setFilterVisibility] = useState(
     savedPreferences?.graphFilterVisibility ?? defaultGraphFilterVisibility
   );
+  const [showSingleFamilyTree, setShowSingleFamilyTree] = useState(
+    savedPreferences?.showSingleFamilyTree ?? false
+  );
+  const [singleFamilyTreeAnchorId, setSingleFamilyTreeAnchorId] = useState<string | null>(null);
   const prefsAppliedRef = useRef(false);
   const lastCameraSampleRef = useRef(new Vector3(0, 2, 18));
   const hasInitializedCameraRef = useRef(false);
@@ -103,6 +107,9 @@ const PeopleGraph3DComponent = ({
     }
     if (savedPreferences.graphFilterVisibility) {
       setFilterVisibility(savedPreferences.graphFilterVisibility);
+    }
+    if (savedPreferences.showSingleFamilyTree !== undefined) {
+      setShowSingleFamilyTree(savedPreferences.showSingleFamilyTree);
     }
   }, [savedPreferences]);
 
@@ -127,6 +134,9 @@ const PeopleGraph3DComponent = ({
     photoClusters: EMPTY_PHOTO_CLUSTERS,
     viewMode: "family",
     familyViewStyle,
+    graphLineRoutingStyle: savedPreferences?.graphLineRoutingStyle,
+    showSingleFamilyTree,
+    singleFamilyTreeAnchorId,
     filterVisibility,
     selectedPersonId,
     hoveredPersonId,
@@ -203,6 +213,16 @@ const PeopleGraph3DComponent = ({
     setPinnedPersonId,
     nudgeCamera
   });
+
+  useEffect(() => {
+    if (!showSingleFamilyTree) {
+      setSingleFamilyTreeAnchorId(null);
+      return;
+    }
+    if (selectedPersonId) {
+      setSingleFamilyTreeAnchorId(selectedPersonId);
+    }
+  }, [selectedPersonId, showSingleFamilyTree]);
 
   useEffect(() => {
     if (hasInitializedCameraRef.current) {
@@ -294,14 +314,31 @@ const PeopleGraph3DComponent = ({
   const handleToggleFilter = (filter: GraphFilter) => {
     setFilterVisibility((current) => {
       const next = { ...current, [filter]: !current[filter] };
-      onPreferencesChange({ graphFilterVisibility: next, familyViewStyle });
+      onPreferencesChange({ graphFilterVisibility: next, familyViewStyle, showSingleFamilyTree });
       return next;
     });
   };
 
   const handleViewStyleChange = (style: FamilyViewStyle) => {
     setFamilyViewStyle(style);
-    onPreferencesChange({ familyViewStyle: style, graphFilterVisibility: filterVisibility });
+    onPreferencesChange({
+      familyViewStyle: style,
+      graphFilterVisibility: filterVisibility,
+      showSingleFamilyTree
+    });
+  };
+  const handleShowSingleFamilyTreeChange = (next: boolean) => {
+    setShowSingleFamilyTree(next);
+    if (next) {
+      setSingleFamilyTreeAnchorId(selectedPersonId);
+    } else {
+      setSingleFamilyTreeAnchorId(null);
+    }
+    onPreferencesChange({
+      showSingleFamilyTree: next,
+      familyViewStyle,
+      graphFilterVisibility: filterVisibility
+    });
   };
 
   return (
@@ -320,6 +357,8 @@ const PeopleGraph3DComponent = ({
           onChange={handleViewStyleChange}
           filterVisibility={filterVisibility}
           onToggleFilter={handleToggleFilter}
+          showSingleFamilyTree={showSingleFamilyTree}
+          onShowSingleFamilyTreeChange={handleShowSingleFamilyTreeChange}
         />
         <GraphSurfaceOverlays isLoading={isLoading} loadError={loadError} />
         {addRelativeIntent && selectedPerson ? (

@@ -24,6 +24,9 @@ type UseGraphLayoutStateOptions = {
   photoClusters: PhotoCluster[];
   viewMode: GraphLayoutMode;
   familyViewStyle?: FamilyViewStyle;
+  graphLineRoutingStyle?: "orthogonal" | "direct";
+  showSingleFamilyTree?: boolean;
+  singleFamilyTreeAnchorId?: string | null;
   filterVisibility: GraphFilterVisibility;
   selectedPersonId: string | null;
   hoveredPersonId: string | null;
@@ -84,6 +87,117 @@ export const filterRelationshipsByLayer = (
     return filterVisibility[filter];
   });
 
+export const pickSingleFamilyTreeIds = (
+  relationships: RelationshipRecord[],
+  preferredPersonId: string | null
+) => {
+  const adjacency = new Map<string, Set<string>>();
+  for (const relationship of relationships) {
+    const from = relationship.fromPersonId;
+    const to = relationship.toPersonId;
+    if (!adjacency.has(from)) {
+      adjacency.set(from, new Set());
+    }
+    if (!adjacency.has(to)) {
+      adjacency.set(to, new Set());
+    }
+    adjacency.get(from)?.add(to);
+    adjacency.get(to)?.add(from);
+  }
+
+  const visited = new Set<string>();
+  const components: string[][] = [];
+  for (const startId of adjacency.keys()) {
+    if (visited.has(startId)) {
+      continue;
+    }
+    const queue = [startId];
+    visited.add(startId);
+    const component: string[] = [];
+    let queueIndex = 0;
+    while (queueIndex < queue.length) {
+      const currentId = queue[queueIndex];
+      queueIndex += 1;
+      if (!currentId) {
+        continue;
+      }
+      component.push(currentId);
+      for (const nextId of adjacency.get(currentId) ?? []) {
+        if (visited.has(nextId)) {
+          continue;
+        }
+        visited.add(nextId);
+        queue.push(nextId);
+      }
+    }
+    components.push(component);
+  }
+
+  if (components.length === 0) {
+    return preferredPersonId ? new Set([preferredPersonId]) : new Set<string>();
+  }
+
+  if (preferredPersonId) {
+    const selectedComponent = components.find((component) => component.includes(preferredPersonId));
+    if (selectedComponent) {
+      return new Set(selectedComponent);
+    }
+    return new Set([preferredPersonId]);
+  }
+
+  const largestComponent = components.reduce((largest, current) =>
+    current.length > largest.length ? current : largest
+  );
+  return new Set(largestComponent);
+};
+
+const dedupeAdjacentPoints = (points: NodePosition[]) => {
+  if (points.length < 2) {
+    return points;
+  }
+
+  const deduped: NodePosition[] = [points[0] as NodePosition];
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index];
+    const previous = deduped[deduped.length - 1];
+    if (!point || !previous) {
+      continue;
+    }
+    if (point[0] === previous[0] && point[1] === previous[1] && point[2] === previous[2]) {
+      continue;
+    }
+    deduped.push(point);
+  }
+  return deduped;
+};
+
+export const routeRelationshipSegment = (
+  from: NodePosition,
+  to: NodePosition,
+  kind: RelationshipKind,
+  familyViewStyle?: FamilyViewStyle,
+  graphLineRoutingStyle: "orthogonal" | "direct" = "orthogonal"
+) => {
+  if (
+    kind !== "PARENT_CHILD" ||
+    familyViewStyle !== "generationTree" ||
+    graphLineRoutingStyle !== "orthogonal"
+  ) {
+    return [from, to] as NodePosition[];
+  }
+
+  const joinY = from[1] + (to[1] - from[1]) * 0.55;
+  const routed = [
+    from,
+    [from[0], joinY, from[2]],
+    [to[0], joinY, from[2]],
+    [to[0], joinY, to[2]],
+    to
+  ] satisfies NodePosition[];
+
+  return dedupeAdjacentPoints(routed);
+};
+
 export const useGraphLayoutState = ({
   people,
   relationships,
@@ -91,6 +205,9 @@ export const useGraphLayoutState = ({
   photoClusters,
   viewMode,
   familyViewStyle,
+  graphLineRoutingStyle,
+  showSingleFamilyTree,
+  singleFamilyTreeAnchorId,
   filterVisibility,
   selectedPersonId,
   hoveredPersonId,
@@ -110,6 +227,13 @@ export const useGraphLayoutState = ({
     }
     return ids;
   }, [filteredRelationships]);
+  const singleFamilyTreeIds = useMemo(
+    () =>
+      showSingleFamilyTree && viewMode === "family"
+        ? pickSingleFamilyTreeIds(filteredRelationships, selectedPersonId ?? singleFamilyTreeAnchorId ?? null)
+        : null,
+    [filteredRelationships, selectedPersonId, showSingleFamilyTree, singleFamilyTreeAnchorId, viewMode]
+  );
 
   const positionedPeople = useMemo(
     () =>
@@ -146,11 +270,24 @@ export const useGraphLayoutState = ({
 
   const candidatePositionedPeople = useMemo(() => {
     if (viewMode === "photo" || filteredRelationships.length === 0) {
+      if (singleFamilyTreeIds && singleFamilyTreeIds.size > 0) {
+        return positionedPeople.filter((item) => singleFamilyTreeIds.has(item.person.id));
+      }
       return positionedPeople;
     }
 
-    return positionedPeople.filter((item) => visibleIdsFromRelationships.has(item.person.id));
-  }, [filteredRelationships.length, positionedPeople, viewMode, visibleIdsFromRelationships]);
+    return positionedPeople.filter(
+      (item) =>
+        visibleIdsFromRelationships.has(item.person.id) &&
+        (!singleFamilyTreeIds || singleFamilyTreeIds.size === 0 || singleFamilyTreeIds.has(item.person.id))
+    );
+  }, [
+    filteredRelationships.length,
+    positionedPeople,
+    singleFamilyTreeIds,
+    viewMode,
+    visibleIdsFromRelationships
+  ]);
 
   const visiblePeople = useMemo(() => {
     const ensurePinnedVisible = (items: typeof positionedPeople) => {
@@ -398,19 +535,37 @@ export const useGraphLayoutState = ({
 
       lines.push({
         key: `family:merge:${pairKey}:a`,
-        points: [parentA, parentMid],
+        points: routeRelationshipSegment(
+          parentA,
+          parentMid,
+          "PARENT_CHILD",
+          familyViewStyle,
+          graphLineRoutingStyle
+        ),
         kind: "PARENT_CHILD"
       });
       lines.push({
         key: `family:merge:${pairKey}:b`,
-        points: [parentB, parentMid],
+        points: routeRelationshipSegment(
+          parentB,
+          parentMid,
+          "PARENT_CHILD",
+          familyViewStyle,
+          graphLineRoutingStyle
+        ),
         kind: "PARENT_CHILD"
       });
 
       if (childPositions.length > 1) {
         lines.push({
           key: `family:merge:${pairKey}:trunk`,
-          points: [parentMid, forkBase],
+          points: routeRelationshipSegment(
+            parentMid,
+            forkBase,
+            "PARENT_CHILD",
+            familyViewStyle,
+            graphLineRoutingStyle
+          ),
           kind: "PARENT_CHILD"
         });
       }
@@ -419,7 +574,13 @@ export const useGraphLayoutState = ({
       for (const { childId, position } of childPositions) {
         lines.push({
           key: `family:merge:${pairKey}:child:${childId}`,
-          points: [branchRoot, position],
+          points: routeRelationshipSegment(
+            branchRoot,
+            position,
+            "PARENT_CHILD",
+            familyViewStyle,
+            graphLineRoutingStyle
+          ),
           kind: "PARENT_CHILD"
         });
       }
@@ -447,10 +608,22 @@ export const useGraphLayoutState = ({
         continue;
       }
       seen.add(key);
-      lines.push({ key, points: [from, to], kind });
+      lines.push({
+        key,
+        points: routeRelationshipSegment(from, to, kind, familyViewStyle, graphLineRoutingStyle),
+        kind
+      });
     }
     return lines;
-  }, [filteredRelationships, mergedParentGroups, photoEdges, viewMode, visiblePositionsById]);
+  }, [
+    familyViewStyle,
+    graphLineRoutingStyle,
+    filteredRelationships,
+    mergedParentGroups,
+    photoEdges,
+    viewMode,
+    visiblePositionsById
+  ]);
 
   return {
     filteredRelationships,
