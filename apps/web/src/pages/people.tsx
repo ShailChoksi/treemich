@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType } from "../lib/api";
+import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType, UserPreferences } from "../lib/api";
 import {
   createRelationship,
   deleteRelationship,
   getImmichPeople,
   getRelationships,
-  updatePersonProfile
+  getUserPreferences,
+  updatePersonProfile,
+  updateUserPreferences
 } from "../lib/api";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
@@ -54,18 +56,21 @@ export const PeoplePage = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingRelationship, setIsSavingRelationship] = useState(false);
+  const [savedPreferences, setSavedPreferences] = useState<UserPreferences | null>(null);
 
   const refreshGraphData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [peopleResponse, relationshipsResponse] = await Promise.all([
+      const [peopleResponse, relationshipsResponse, preferencesResponse] = await Promise.all([
         getImmichPeople(),
-        getRelationships()
+        getRelationships(),
+        getUserPreferences().catch(() => ({}) as UserPreferences)
       ]);
       const sortedPeople = sortPeopleStable(peopleResponse);
       const sortedRelationships = sortRelationshipsStable(relationshipsResponse);
       setPeople(sortedPeople);
       setRelationships(sortedRelationships);
+      setSavedPreferences((current) => current ?? preferencesResponse);
       setLoadError(null);
       setGenderByPersonId(
         sortedPeople.reduce<Record<string, Gender>>((acc, person) => {
@@ -108,6 +113,11 @@ export const PeoplePage = () => {
     () => people.find((person) => person.id === selectedPersonId) ?? null,
     [people, selectedPersonId]
   );
+
+  const onPreferencesChange = useCallback((prefs: UserPreferences) => {
+    setSavedPreferences(prefs);
+    updateUserPreferences(prefs).catch(() => {});
+  }, []);
 
   const clearGraphFocus = useCallback(() => setGraphFocusPersonId(null), []);
 
@@ -245,9 +255,11 @@ export const PeoplePage = () => {
           isSavingRelationship={isSavingRelationship}
           loadError={loadError}
           focusPersonRequest={graphFocusPersonId}
+          savedPreferences={savedPreferences}
           onFocusPersonConsumed={clearGraphFocus}
           onSelectedPersonChange={setSelectedPersonId}
           onCreateRelationship={onCreateRelationship}
+          onPreferencesChange={onPreferencesChange}
         />
       </section>
 

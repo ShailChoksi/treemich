@@ -10,7 +10,8 @@ import type {
   RelationshipRecord,
   RelationshipType,
   SearchRelationshipsResponse,
-  TreemichPersonProfile
+  TreemichPersonProfile,
+  UserPreferences
 } from "@treemich/shared";
 export type {
   AuthState,
@@ -23,7 +24,8 @@ export type {
   RelationshipRecord,
   RelationshipType,
   SearchRelationshipsResponse,
-  TreemichPersonProfile
+  TreemichPersonProfile,
+  UserPreferences
 };
 
 const treemichApi = import.meta.env.VITE_TREEMICH_API_URL ?? "/api";
@@ -215,6 +217,27 @@ export const searchRelationships = async (query: string): Promise<SearchRelation
 
 export const personThumbnailUrl = (personId: string) =>
   `${treemichApi}/people/${encodeURIComponent(personId)}/thumbnail`;
+
+export const getUserPreferences = async (): Promise<UserPreferences> => {
+  const response = await fetchWithRetry(`${treemichApi}/user/preferences`, {
+    cache: "no-store"
+  });
+  await ensureOk(response, "Failed to load preferences");
+  return (await response.json()) as UserPreferences;
+};
+
+export const updateUserPreferences = async (prefs: Partial<UserPreferences>): Promise<UserPreferences> => {
+  const response = await fetch(
+    `${treemichApi}/user/preferences`,
+    withSession({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(prefs)
+    })
+  );
+  await ensureOk(response, "Failed to save preferences");
+  return (await response.json()) as UserPreferences;
+};
 
 export const getRelationships = async (): Promise<RelationshipRecord[]> => {
   const all: RelationshipRecord[] = [];

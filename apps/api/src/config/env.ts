@@ -23,7 +23,7 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(1000 * 60 * 60 * 24 * 30),
-  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
+  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   RATE_LIMIT_TIME_WINDOW_MS: z.coerce.number().int().positive().default(60_000)
 });
 

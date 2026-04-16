@@ -168,7 +168,7 @@ This starts the API on `localhost:4000` and the web app on `localhost:5173` with
 | `TREEMICH_SESSION_COOKIE_NAME` | `treemich_session`      | Browser cookie name                                 |
 | `TREEMICH_SESSION_TTL_MS`      | `2592000000` (30 days)  | Session lifetime                                    |
 | `WEB_ORIGIN`                   | `http://localhost:5173` | CORS allowed origin                                 |
-| `RATE_LIMIT_MAX`               | `120`                   | Max API requests per time window                    |
+| `RATE_LIMIT_MAX`               | `300`                   | Max API requests per time window                    |
 | `RATE_LIMIT_TIME_WINDOW_MS`    | `60000`                 | Rate limit window in ms                             |
 | `VITE_TREEMICH_API_URL`        | `/api`                  | Frontend API base URL (build-time)                  |
 

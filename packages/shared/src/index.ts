@@ -91,3 +91,28 @@ export type SearchRelationshipsResponse = {
   }>;
   message?: string;
 };
+
+export const graphFilterVisibilitySchema = z.object({
+  parentChild: z.boolean(),
+  spouse: z.boolean(),
+  sibling: z.boolean(),
+  friends: z.boolean(),
+  pets: z.boolean()
+});
+
+export const familyViewStyleValues = [
+  "generationTree",
+  "centeredRelationshipMap",
+  "hybridTreeList",
+  "cleaned3D"
+] as const;
+export const familyViewStyleSchema = z.enum(familyViewStyleValues);
+
+export const userPreferencesSchema = z.object({
+  graphFilterVisibility: graphFilterVisibilitySchema.optional(),
+  familyViewStyle: familyViewStyleSchema.optional()
+});
+
+export type GraphFilterVisibility = z.infer<typeof graphFilterVisibilitySchema>;
+export type FamilyViewStyle = z.infer<typeof familyViewStyleSchema>;
+export type UserPreferences = z.infer<typeof userPreferencesSchema>;
