@@ -1,6 +1,8 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MutableRefObject } from "react";
+import type { Vector3 } from "three";
 import type { ThumbnailWorkerResult } from "./thumbnailWorkerTypes";
 import {
   buildThumbnailLoadOrder,
@@ -54,9 +56,7 @@ describe("useThumbnailLoader hook", () => {
           person: { id },
           displayPosition: [i * 2, 0, 0] as [number, number, number]
         })),
-        cameraSampleRef: { current: { x: 0, y: 0, z: 0 } } as unknown as {
-          current: { x: number; y: number; z: number };
-        }
+        cameraSampleRef: { current: { x: 0, y: 0, z: 0 } } as unknown as MutableRefObject<Vector3>
       });
       capturedIds = thumbnailNodeIds;
       capturedTextures = thumbnailTextures;
@@ -124,9 +124,7 @@ describe("useThumbnailLoader hook", () => {
           person: { id },
           displayPosition: [i * 2, 0, 0] as [number, number, number]
         })),
-        cameraSampleRef: { current: { x: 0, y: 0, z: 0 } } as unknown as {
-          current: { x: number; y: number; z: number };
-        }
+        cameraSampleRef: { current: { x: 0, y: 0, z: 0 } } as unknown as MutableRefObject<Vector3>
       });
       capturedIds = thumbnailNodeIds;
       return null;
@@ -210,9 +208,7 @@ describe("useThumbnailLoader hook", () => {
           person: { id },
           displayPosition: [i * 2, 0, 0] as [number, number, number]
         })),
-        cameraSampleRef: { current: { x: 0, y: 0, z: 0 } } as unknown as {
-          current: { x: number; y: number; z: number };
-        }
+        cameraSampleRef: { current: { x: 0, y: 0, z: 0 } } as unknown as MutableRefObject<Vector3>
       });
       capturedIds = thumbnailNodeIds;
       return null;

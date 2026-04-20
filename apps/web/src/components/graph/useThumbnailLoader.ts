@@ -214,16 +214,21 @@ export const useThumbnailLoader = ({
     return displayVisiblePeople.map((item) => item.person.id);
   }, [displayVisiblePeople]);
 
-  const thumbnailLoadOrder = useMemo(
-    () =>
-      buildThumbnailLoadOrder({
-        renderNearPersonIds,
-        prioritizedNodeIds,
-        nearCameraNodeIds,
-        visibleIdsByDistance
-      }),
-    [nearCameraNodeIds, prioritizedNodeIds, renderNearPersonIds, visibleIdsByDistance]
-  );
+  const prevLoadOrderRef = useRef<string[]>([]);
+  const thumbnailLoadOrder = useMemo(() => {
+    const next = buildThumbnailLoadOrder({
+      renderNearPersonIds,
+      prioritizedNodeIds,
+      nearCameraNodeIds,
+      visibleIdsByDistance
+    });
+    const prev = prevLoadOrderRef.current;
+    if (next.length === prev.length && next.every((v, i) => v === prev[i])) {
+      return prev;
+    }
+    prevLoadOrderRef.current = next;
+    return next;
+  }, [nearCameraNodeIds, prioritizedNodeIds, renderNearPersonIds, visibleIdsByDistance]);
 
   // Dispose textures for people that have been removed from the graph.
   useEffect(() => {
