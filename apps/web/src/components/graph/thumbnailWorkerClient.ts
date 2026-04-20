@@ -80,16 +80,3 @@ export const loadThumbnailBatch = async (
     worker.postMessage({ id: requestId, items });
   });
 };
-
-export const resetThumbnailWorkerClientForTests = () => {
-  if (workerInstance) {
-    workerInstance.terminate();
-  }
-  workerInstance = null;
-  workerPromise = null;
-  nextRequestId = 1;
-  for (const [requestId, pending] of pendingById.entries()) {
-    cleanupPendingRequest(requestId);
-    pending.reject(new Error("Thumbnail worker reset"));
-  }
-};
