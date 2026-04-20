@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildGraphLayoutRevision, type GraphLayoutRequest } from "@treemich/shared";
 import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
 import {
   buildDirectionalNeighborBuckets,
@@ -70,7 +71,7 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "p2", toPersonId: "c2", type: "PARENT_OF" }
     ];
 
-    const syncPositions = positionPeople(people, relationships, { familyViewStyle: "generationTree" });
+    const syncPositions = positionPeople(people, relationships, {});
     const serialized = syncPositions.map((item) => ({
       personId: item.person.id,
       position: item.position
@@ -98,7 +99,7 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "p1", toPersonId: "c1", type: "PARENT_OF" },
       { fromPersonId: "p2", toPersonId: "c1", type: "PARENT_OF" }
     ];
-    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const positions = getPositionById(people, relationships, {});
     expect((positions.get("p1")?.[1] ?? 0) > (positions.get("c1")?.[1] ?? 0)).toBe(true);
     expect((positions.get("p2")?.[1] ?? 0) > (positions.get("c1")?.[1] ?? 0)).toBe(true);
   });
@@ -114,7 +115,7 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "a", toPersonId: "c", type: "PARENT_OF" },
       { fromPersonId: "b", toPersonId: "c", type: "PARENT_OF" }
     ];
-    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const positions = getPositionById(people, relationships, {});
     const first = positions.get("a");
     const second = positions.get("b");
     expect(first).toBeDefined();
@@ -144,7 +145,7 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "a1", toPersonId: "s1", type: "SPOUSE_OF" },
       { fromPersonId: "a2", toPersonId: "s2", type: "SPOUSE_OF" }
     ];
-    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const positions = getPositionById(people, relationships, {});
     const spousePairs = new Set(["a1|s1", "s1|a1", "a2|s2", "s2|a2"]);
     const sameRow = ["a1", "a2", "a3", "s1", "s2"];
     for (let firstIndex = 0; firstIndex < sameRow.length; firstIndex += 1) {
@@ -184,7 +185,7 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "a", toPersonId: "c3", type: "PARENT_OF" },
       { fromPersonId: "b", toPersonId: "c3", type: "PARENT_OF" }
     ];
-    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const positions = getPositionById(people, relationships, {});
     const parentCenter = ((positions.get("a")?.[0] ?? 0) + (positions.get("b")?.[0] ?? 0)) / 2;
     const childCenter =
       ((positions.get("c1")?.[0] ?? 0) + (positions.get("c2")?.[0] ?? 0) + (positions.get("c3")?.[0] ?? 0)) /
@@ -204,7 +205,7 @@ describe("deterministic family layout invariants", () => {
       relationships.push({ fromPersonId: "pa", toPersonId: childId, type: "PARENT_OF" });
       relationships.push({ fromPersonId: "pb", toPersonId: childId, type: "PARENT_OF" });
     }
-    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const positions = getPositionById(people, relationships, {});
     const childXs = people
       .filter((person) => person.id.startsWith("child-"))
       .map((person) => positions.get(person.id)?.[0])
@@ -245,9 +246,8 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "x", toPersonId: "child", type: "PARENT_OF" }
     ];
 
-    const defaultPositions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const defaultPositions = getPositionById(people, relationships, {});
     const overriddenPositions = getPositionById(people, relationships, {
-      familyViewStyle: "generationTree",
       primaryFamilyUnitByPersonId: {
         x: "pB|pC"
       }
@@ -293,7 +293,7 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "G", toPersonId: "H", type: "PARENT_OF" }
     ];
 
-    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const positions = getPositionById(people, relationships, {});
     const yOf = (id: string) => positions.get(id)?.[1] ?? 0;
 
     // D (biological child of A+B) must sit strictly below A and B.
@@ -341,7 +341,7 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "pb1", toPersonId: "B", type: "PARENT_OF" }
     ];
 
-    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const positions = getPositionById(people, relationships, {});
     const zOf = (id: string) => positions.get(id)?.[2] ?? 0;
 
     // pb1 and pa1/pa2 are all grandparent-depth, so they share the same staircase
@@ -396,7 +396,7 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "B", toPersonId: "c2", type: "PARENT_OF" }
     ];
 
-    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const positions = getPositionById(people, relationships, {});
     const zOf = (id: string) => positions.get(id)?.[2] ?? 0;
 
     // Parent-generation comparison: pb1/pb2 (minor side) vs pa1/pa2 (major side),
@@ -434,7 +434,7 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "pb2", toPersonId: "B", type: "PARENT_OF" }
     ];
 
-    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const positions = getPositionById(people, relationships, {});
     const zOf = (id: string) => positions.get(id)?.[2] ?? 0;
     // All four parents are at the same depth, so with no rotation they should
     // share the same Z (any per-depth staircase offset is identical for them).
@@ -470,7 +470,7 @@ describe("deterministic family layout invariants", () => {
       { fromPersonId: "sp2", toPersonId: "c2", type: "PARENT_OF" }
     ];
 
-    const positions = getPositionById(people, relationships, { familyViewStyle: "generationTree" });
+    const positions = getPositionById(people, relationships, {});
     const s1 = positions.get("s1");
     const sp1 = positions.get("sp1");
     const c1 = positions.get("c1");
@@ -517,7 +517,7 @@ describe("deterministic family layout invariants", () => {
     expect(people.length).toBe(familyCount * (2 + childrenPerFamily));
 
     const start = performance.now();
-    const positioned = positionPeople(people, relationships, { familyViewStyle: "generationTree" });
+    const positioned = positionPeople(people, relationships, {});
     const elapsed = performance.now() - start;
 
     expect(positioned).toHaveLength(people.length);
@@ -591,10 +591,60 @@ describe("deterministic family layout invariants", () => {
     expect(people.length).toBeGreaterThan(150);
 
     const start = performance.now();
-    const positioned = positionPeople(people, relationships, { familyViewStyle: "generationTree" });
+    const positioned = positionPeople(people, relationships, {});
     const elapsed = performance.now() - start;
 
     expect(positioned).toHaveLength(people.length);
     expect(elapsed).toBeLessThan(750);
+  });
+});
+
+describe("layout edge cases", () => {
+  it("does not complete layout for a two-node parent-child cycle (Buchheim recursion)", () => {
+    const people: ImmichPerson[] = [{ id: "a", name: "A" }, { id: "b", name: "B" }];
+    const relationships: RelationshipRecord[] = [
+      { fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" },
+      { fromPersonId: "b", toPersonId: "a", type: "PARENT_OF" }
+    ];
+    expect(() => positionPeople(people, relationships, {})).toThrow(RangeError);
+  });
+
+  it("does not change family positions when only non-topology edges differ", () => {
+    const people: ImmichPerson[] = [
+      { id: "p1", name: "Pat One" },
+      { id: "p2", name: "Pat Two" }
+    ];
+    const topology: RelationshipRecord[] = [{ fromPersonId: "p1", toPersonId: "p2", type: "SPOUSE_OF" }];
+    const withFriend: RelationshipRecord[] = [
+      ...topology,
+      { fromPersonId: "p1", toPersonId: "p2", type: "FRIEND_OF" }
+    ];
+    const a = getPositionById(people, topology);
+    const b = getPositionById(people, withFriend);
+    expect(a.get("p1")).toEqual(b.get("p1"));
+    expect(a.get("p2")).toEqual(b.get("p2"));
+  });
+});
+
+describe("buildGraphLayoutRevision", () => {
+  const baseRequest = (): GraphLayoutRequest => ({
+    people: [
+      { id: "a", name: "A" },
+      { id: "x", name: "X" }
+    ],
+    relationships: [],
+    viewMode: "family",
+    familyViewStyle: "generationTree",
+    selectedPersonId: null,
+    primaryFamilyUnitByPersonId: {}
+  });
+
+  it("ignores non-topology edges in the relationship hash when people are identical", () => {
+    const withoutExtra = baseRequest();
+    const withFriend: GraphLayoutRequest = {
+      ...baseRequest(),
+      relationships: [{ fromPersonId: "a", toPersonId: "x", type: "FRIEND_OF" }]
+    };
+    expect(buildGraphLayoutRevision(withoutExtra)).toBe(buildGraphLayoutRevision(withFriend));
   });
 });

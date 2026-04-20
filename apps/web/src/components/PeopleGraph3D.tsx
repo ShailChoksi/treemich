@@ -20,13 +20,12 @@ import {
   relationshipStyleByKind,
   type GraphFilter
 } from "./graph/relationshipStyles";
-import { defaultFamilyViewStyle, type FamilyViewStyle } from "./graph/layout";
 import { useGraphLayoutState } from "./graph/useGraphLayoutState";
 import { useGraphCameraControls } from "./graph/useGraphCameraControls";
 import { GraphSurfaceOverlays } from "./graph/GraphSurfaceOverlays";
 import { GraphFooterStatus } from "./graph/GraphFooterStatus";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { GraphViewModeSelector } from "./graph/GraphViewModeSelector";
+import { GraphLayerControls } from "./graph/GraphLayerControls";
 import { useGraphKeyboardNavigation } from "./graph/useGraphKeyboardNavigation";
 
 type Props = {
@@ -66,7 +65,6 @@ type AddRelativeIntent = {
 };
 
 type GraphViewPreferencesState = {
-  familyViewStyle: FamilyViewStyle;
   filterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]>;
   showSingleFamilyTree: boolean;
 };
@@ -76,7 +74,6 @@ const resolveInitialGraphViewPreferences = (
   defaultToNoRelationshipsGraphState: boolean,
   noRelationshipsGraphFilterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]>
 ): GraphViewPreferencesState => ({
-  familyViewStyle: savedPreferences?.familyViewStyle ?? defaultFamilyViewStyle,
   filterVisibility:
     savedPreferences?.graphFilterVisibility ??
     (defaultToNoRelationshipsGraphState
@@ -118,7 +115,7 @@ const PeopleGraph3DComponent = ({
       noRelationshipsGraphFilterVisibility
     )
   );
-  const { familyViewStyle, filterVisibility, showSingleFamilyTree } = graphViewPreferences;
+  const { filterVisibility, showSingleFamilyTree } = graphViewPreferences;
   const [singleFamilyTreeAnchorId, setSingleFamilyTreeAnchorId] = useState<string | null>(null);
   const [cameraPositionForCulling, setCameraPositionForCulling] = useState<[number, number, number]>([
     0, 2, 18
@@ -160,15 +157,14 @@ const PeopleGraph3DComponent = ({
     renderVisiblePeople,
     renderVisibleRelationshipLines,
     renderVisibilityBucketByPersonId,
-    renderNearPersonIds
+    renderNearPersonIds,
+    isWorkerLayoutPending
   } = useGraphLayoutState({
     people,
     relationships,
     photoEdges: EMPTY_PHOTO_EDGES,
     photoClusters: EMPTY_PHOTO_CLUSTERS,
     viewMode: "family",
-    familyViewStyle,
-    graphLineRoutingStyle: savedPreferences?.graphLineRoutingStyle,
     primaryFamilyUnitByPersonId: savedPreferences?.primaryFamilyUnitByPersonId,
     showSingleFamilyTree,
     singleFamilyTreeAnchorId,
@@ -226,7 +222,6 @@ const PeopleGraph3DComponent = ({
       hoveredPersonId,
       focusPersonId,
       pinnedPersonId,
-      familyViewStyle,
       cameraRef,
       orbitControlsRef,
       lastCameraSampleRef
@@ -399,30 +394,17 @@ const PeopleGraph3DComponent = ({
       };
       onPreferencesChange({
         graphFilterVisibility: next.filterVisibility,
-        familyViewStyle: next.familyViewStyle,
         showSingleFamilyTree: next.showSingleFamilyTree
       });
       return next;
     });
   };
 
-  const handleViewStyleChange = (style: FamilyViewStyle) => {
-    setGraphViewPreferences((current) => {
-      const next = { ...current, familyViewStyle: style };
-      onPreferencesChange({
-        familyViewStyle: next.familyViewStyle,
-        graphFilterVisibility: next.filterVisibility,
-        showSingleFamilyTree: next.showSingleFamilyTree
-      });
-      return next;
-    });
-  };
   const handleShowSingleFamilyTreeChange = (next: boolean) => {
     setGraphViewPreferences((current) => {
       const nextPreferences = { ...current, showSingleFamilyTree: next };
       onPreferencesChange({
         showSingleFamilyTree: nextPreferences.showSingleFamilyTree,
-        familyViewStyle: nextPreferences.familyViewStyle,
         graphFilterVisibility: nextPreferences.filterVisibility
       });
       return nextPreferences;
@@ -446,15 +428,17 @@ const PeopleGraph3DComponent = ({
           people={people}
           searchFeedback={searchFeedback}
         />
-        <GraphViewModeSelector
-          value={familyViewStyle}
-          onChange={handleViewStyleChange}
+        <GraphLayerControls
           filterVisibility={filterVisibility}
           onToggleFilter={handleToggleFilter}
           showSingleFamilyTree={showSingleFamilyTree}
           onShowSingleFamilyTreeChange={handleShowSingleFamilyTreeChange}
         />
-        <GraphSurfaceOverlays isLoading={isLoading} loadError={loadError} />
+        <GraphSurfaceOverlays
+          isLoading={isLoading}
+          loadError={loadError}
+          isLayoutWorkerPending={isWorkerLayoutPending}
+        />
         {addRelativeIntent && selectedPerson ? (
           <AddRelativePopup
             slot={addRelativeIntent.slot}

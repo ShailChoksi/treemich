@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { Vector3, type PerspectiveCamera } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import type { FamilyViewStyle, NodePosition } from "./layout";
+import type { NodePosition } from "./layout";
 
 type UseGraphCameraControlsOptions = {
   graphBounds: {
@@ -13,33 +13,15 @@ type UseGraphCameraControlsOptions = {
   hoveredPersonId: string | null;
   focusPersonId: string | null;
   pinnedPersonId: string | null;
-  familyViewStyle: FamilyViewStyle;
   cameraRef: React.MutableRefObject<PerspectiveCamera | null>;
   orbitControlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
   lastCameraSampleRef: React.MutableRefObject<Vector3>;
 };
 
-export const getFocusCameraPoseForStyle = (
-  target: NodePosition,
-  familyViewStyle: FamilyViewStyle
-): { position: NodePosition; target: NodePosition } => {
-  if (familyViewStyle === "generationTree" || familyViewStyle === "hybridTreeList") {
-    return {
-      position: [target[0], target[1] + 3.8, target[2] + 7.4],
-      target
-    };
-  }
-  if (familyViewStyle === "centeredRelationshipMap") {
-    return {
-      position: [target[0] + 5.4, target[1] + 3.6, target[2] + 6.2],
-      target
-    };
-  }
-  return {
-    position: [target[0] + 7, target[1] + 4.8, target[2] + 8.2],
-    target
-  };
-};
+export const getFocusCameraPose = (target: NodePosition): { position: NodePosition; target: NodePosition } => ({
+  position: [target[0], target[1] + 3.8, target[2] + 7.4],
+  target
+});
 
 export const useGraphCameraControls = ({
   graphBounds,
@@ -48,7 +30,6 @@ export const useGraphCameraControls = ({
   hoveredPersonId,
   focusPersonId,
   pinnedPersonId,
-  familyViewStyle,
   cameraRef,
   orbitControlsRef,
   lastCameraSampleRef
@@ -83,19 +64,8 @@ export const useGraphCameraControls = ({
     const spanZ = graphBounds.max[2] - graphBounds.min[2];
     const radius = Math.max(spanX, spanY * 1.3, spanZ, 12);
     const distance = radius * 1.35;
-    if (familyViewStyle === "generationTree" || familyViewStyle === "hybridTreeList") {
-      applyCameraPose([center[0], center[1] + distance * 0.24, center[2] + distance * 1.04], center);
-      return;
-    }
-    if (familyViewStyle === "centeredRelationshipMap") {
-      applyCameraPose(
-        [center[0] + distance * 0.42, center[1] + distance * 0.3, center[2] + distance * 0.88],
-        center
-      );
-      return;
-    }
-    applyCameraPose([center[0] + distance * 0.55, center[1] + distance * 0.42, center[2] + distance], center);
-  }, [applyCameraPose, familyViewStyle, graphBounds]);
+    applyCameraPose([center[0], center[1] + distance * 0.24, center[2] + distance * 1.04], center);
+  }, [applyCameraPose, graphBounds]);
 
   const focusPersonById = useCallback(
     (personId: string) => {
@@ -104,10 +74,10 @@ export const useGraphCameraControls = ({
         frameAllNodes();
         return;
       }
-      const pose = getFocusCameraPoseForStyle(target, familyViewStyle);
+      const pose = getFocusCameraPose(target);
       applyCameraPose(pose.position, pose.target);
     },
-    [applyCameraPose, familyViewStyle, frameAllNodes, visiblePositionsById]
+    [applyCameraPose, frameAllNodes, visiblePositionsById]
   );
 
   const focusActiveNode = useCallback(() => {

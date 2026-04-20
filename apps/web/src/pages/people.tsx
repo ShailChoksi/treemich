@@ -1,3 +1,4 @@
+import { filterGraphLayoutTopologyRelationships } from "@treemich/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Gender,
@@ -245,7 +246,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setServerLayout(null);
       computeGraphLayout({
         people: sortedPeople.map((person) => ({ id: person.id, name: person.name })),
-        relationships: sortedRelationships,
+        relationships: filterGraphLayoutTopologyRelationships(sortedRelationships),
         viewMode: "family",
         familyViewStyle: preferencesResponse.familyViewStyle,
         selectedPersonId: nextSelection.selectedPersonId,
