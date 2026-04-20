@@ -3,7 +3,11 @@ import type { GraphLayoutMode, NodePosition } from "./types";
 import { buildParentChildIndex, getLastNameKey, hashToNumber } from "./graphPrimitives";
 import { buildTreePositions, deriveSiblingPairs, deriveSpousePairs } from "./familyTreeCore";
 import { positionPeopleByPhotoClusters } from "./photoLayout";
-import { buildStaircaseOffsetsById, applyStaircaseOffsets, toGenerationTreePositions } from "./generationTransforms";
+import {
+  buildStaircaseOffsetsById,
+  applyStaircaseOffsets,
+  toGenerationTreePositions
+} from "./generationTransforms";
 
 export const positionPeople = (
   people: ImmichPerson[],

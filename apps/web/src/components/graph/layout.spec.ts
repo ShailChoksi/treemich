@@ -601,7 +601,10 @@ describe("deterministic family layout invariants", () => {
 
 describe("layout edge cases", () => {
   it("does not complete layout for a two-node parent-child cycle (Buchheim recursion)", () => {
-    const people: ImmichPerson[] = [{ id: "a", name: "A" }, { id: "b", name: "B" }];
+    const people: ImmichPerson[] = [
+      { id: "a", name: "A" },
+      { id: "b", name: "B" }
+    ];
     const relationships: RelationshipRecord[] = [
       { fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" },
       { fromPersonId: "b", toPersonId: "a", type: "PARENT_OF" }

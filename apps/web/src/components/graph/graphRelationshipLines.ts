@@ -1,8 +1,5 @@
 import type { PhotoCooccurrenceEdge, RelationshipRecord } from "../../lib/api";
-import {
-  relationshipKindForType,
-  type RelationshipKind
-} from "./relationshipStyles";
+import { relationshipKindForType, type RelationshipKind } from "./relationshipStyles";
 import type { GraphLayoutMode, NodePosition } from "./layout";
 /** Two-person key; person ids must not contain "|" (same contract as family unit keys in layout). */
 export const pairKey = (firstId: string, secondId: string) =>

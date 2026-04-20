@@ -9,10 +9,7 @@ import {
   type GraphLayoutMode,
   type NodePosition
 } from "./layout";
-import {
-  buildMergedParentGroups,
-  buildVisibleRelationshipLines
-} from "./graphRelationshipLines";
+import { buildMergedParentGroups, buildVisibleRelationshipLines } from "./graphRelationshipLines";
 import { relationshipFilterForType, type GraphFilterVisibility } from "./relationshipStyles";
 import type { LayoutWorkerPayload } from "./layoutWorkerTypes";
 import { shouldUseLayoutWorker, TOPOLOGY_LAYOUT_CACHE_MAX_ENTRIES } from "./graphLayoutConstants";
@@ -332,10 +329,7 @@ export const useGraphLayoutState = ({
       return computedPositionedPeople;
     }
     const showStaleWorkerLayout =
-      shouldUseWorker &&
-      !shouldUseServerLayout &&
-      !isWorkerFallbackEnabled &&
-      workerPositions === null;
+      shouldUseWorker && !shouldUseServerLayout && !isWorkerFallbackEnabled && workerPositions === null;
     if (!showStaleWorkerLayout) {
       return computedPositionedPeople;
     }
@@ -627,11 +621,7 @@ export const useGraphLayoutState = ({
   );
 
   const isWorkerLayoutPending = useMemo(
-    () =>
-      shouldUseWorker &&
-      !shouldUseServerLayout &&
-      !isWorkerFallbackEnabled &&
-      workerPositions === null,
+    () => shouldUseWorker && !shouldUseServerLayout && !isWorkerFallbackEnabled && workerPositions === null,
     [isWorkerFallbackEnabled, shouldUseServerLayout, shouldUseWorker, workerPositions]
   );
 

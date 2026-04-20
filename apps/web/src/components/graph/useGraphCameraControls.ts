@@ -18,7 +18,9 @@ type UseGraphCameraControlsOptions = {
   lastCameraSampleRef: React.MutableRefObject<Vector3>;
 };
 
-export const getFocusCameraPose = (target: NodePosition): { position: NodePosition; target: NodePosition } => ({
+export const getFocusCameraPose = (
+  target: NodePosition
+): { position: NodePosition; target: NodePosition } => ({
   position: [target[0], target[1] + 3.8, target[2] + 7.4],
   target
 });
