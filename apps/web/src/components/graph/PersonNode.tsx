@@ -1,36 +1,24 @@
-import { Billboard, Text, useTexture } from "@react-three/drei";
-import { memo, useEffect, useMemo } from "react";
-import { CircleGeometry, RingGeometry, SRGBColorSpace, type BufferGeometry, type Texture } from "three";
+import { Billboard, Text } from "@react-three/drei";
+import { memo, useEffect, useMemo, useState } from "react";
+import {
+  CircleGeometry,
+  MeshBasicMaterial,
+  RingGeometry,
+  TextureLoader,
+  type BufferGeometry,
+  type Texture
+} from "three";
 import type { ImmichPerson } from "../../lib/api";
 import { personThumbnailUrl } from "../../lib/api";
-
-const applyCoverCrop = (texture: Texture) => {
-  const image = texture.image as { width?: number; height?: number } | undefined;
-  const width = image?.width ?? 1;
-  const height = image?.height ?? 1;
-
-  texture.colorSpace = SRGBColorSpace;
-  texture.repeat.set(1, 1);
-  texture.offset.set(0, 0);
-
-  if (width > height) {
-    const xRepeat = height / width;
-    texture.repeat.set(xRepeat, 1);
-    texture.offset.set((1 - xRepeat) / 2, 0);
-  } else if (height > width) {
-    const yRepeat = width / height;
-    texture.repeat.set(1, yRepeat);
-    texture.offset.set(0, (1 - yRepeat) / 2);
-  }
-
-  texture.needsUpdate = true;
-};
+import { applyCoverCrop } from "./useThumbnailLoader";
 
 export type PersonNodeProps = {
   person: ImmichPerson;
   isSelected: boolean;
   isHovered: boolean;
   isHighlighted: boolean;
+  showLabel?: boolean;
+  preloadedTexture?: Texture | null;
   onClick: (personId: string, event: { stopPropagation: () => void }) => void;
   onHover: (personId: string, hovered: boolean) => void;
 };
@@ -40,13 +28,6 @@ const truncateName = (name: string, maxLength = 22) => {
     return name;
   }
   return `${name.slice(0, maxLength - 1)}...`;
-};
-
-const ringColor = (isSelected: boolean, isHovered: boolean, isHighlighted: boolean) => {
-  if (isSelected) return "#22d3ee";
-  if (isHighlighted) return "#a78bfa";
-  if (isHovered) return "#93c5fd";
-  return "#64748b";
 };
 
 const nodeScale = (isSelected: boolean, isHovered: boolean, isHighlighted: boolean) => {
@@ -83,6 +64,43 @@ const ringGeometryByState16 = {
   highlighted: new RingGeometry(ringInnerRadius, ringOuterRadius(false, true), 16),
   default: new RingGeometry(ringInnerRadius, ringOuterRadius(false, false), 16)
 } as const;
+const ringGeometryLite = new RingGeometry(0.58, 0.64, 12);
+const avatarGeometryLite = new CircleGeometry(0.56, 12);
+const hitAreaGeometryLite = new CircleGeometry(hitAreaRadius, 12);
+const invisibleHitAreaMaterial = new MeshBasicMaterial({
+  transparent: true,
+  opacity: 0,
+  depthWrite: false
+});
+const haloMaterialSelected = new MeshBasicMaterial({
+  color: "#22d3ee",
+  transparent: true,
+  opacity: 0.12
+});
+const haloMaterialHighlighted = new MeshBasicMaterial({
+  color: "#a78bfa",
+  transparent: true,
+  opacity: 0.12
+});
+const ringMaterialByColor = {
+  selected: new MeshBasicMaterial({ color: "#22d3ee" }),
+  highlighted: new MeshBasicMaterial({ color: "#a78bfa" }),
+  hovered: new MeshBasicMaterial({ color: "#93c5fd" }),
+  default: new MeshBasicMaterial({ color: "#64748b" })
+} as const;
+
+const ringMaterialForState = (isSelected: boolean, isHovered: boolean, isHighlighted: boolean) => {
+  if (isSelected) {
+    return ringMaterialByColor.selected;
+  }
+  if (isHighlighted) {
+    return ringMaterialByColor.highlighted;
+  }
+  if (isHovered) {
+    return ringMaterialByColor.hovered;
+  }
+  return ringMaterialByColor.default;
+};
 
 const ringGeometryForState = (
   isSelected: boolean,
@@ -104,24 +122,55 @@ const PersonNodeComponent = ({
   isSelected,
   isHovered,
   isHighlighted,
+  showLabel = true,
+  preloadedTexture,
   onClick,
   onHover
 }: PersonNodeProps) => {
   const thumbnailUrl = useMemo(() => personThumbnailUrl(person.id), [person.id]);
-  const texture = useTexture(thumbnailUrl);
+  const [localTexture, setLocalTexture] = useState<Texture | null>(null);
+  const texture = preloadedTexture !== undefined ? preloadedTexture : localTexture;
   const scale = nodeScale(isSelected, isHovered, isHighlighted);
   const ringGeometry = ringGeometryForState(isSelected, isHighlighted, "segments20");
+  const ringMaterial = ringMaterialForState(isSelected, isHovered, isHighlighted);
+  const haloMaterial = isSelected ? haloMaterialSelected : haloMaterialHighlighted;
 
+  // Fallback TextureLoader path: only runs when no preloadedTexture is provided.
   useEffect(() => {
-    applyCoverCrop(texture);
-  }, [texture]);
+    if (preloadedTexture !== undefined) {
+      return;
+    }
+    let disposed = false;
+    const loader = new TextureLoader();
+    loader.setCrossOrigin("use-credentials");
+    loader.load(
+      thumbnailUrl,
+      (loadedTexture) => {
+        if (disposed) {
+          return;
+        }
+        applyCoverCrop(loadedTexture);
+        setLocalTexture(loadedTexture);
+      },
+      undefined,
+      () => {
+        if (disposed) {
+          return;
+        }
+        setLocalTexture(null);
+      }
+    );
+    return () => {
+      disposed = true;
+    };
+  }, [thumbnailUrl, preloadedTexture]);
 
   return (
     <Billboard>
       {isSelected || isHighlighted ? (
         <mesh position={[0, 0, -0.04]} scale={1.16}>
           <primitive object={selectedHaloGeometry28} attach="geometry" />
-          <meshBasicMaterial color={isSelected ? "#22d3ee" : "#a78bfa"} transparent opacity={0.12} />
+          <primitive object={haloMaterial} attach="material" />
         </mesh>
       ) : null}
       <mesh
@@ -131,29 +180,31 @@ const PersonNodeComponent = ({
         scale={scale}
       >
         <primitive object={hitAreaGeometry20} attach="geometry" />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        <primitive object={invisibleHitAreaMaterial} attach="material" />
       </mesh>
       <mesh scale={scale}>
         <primitive object={avatarGeometry20} attach="geometry" />
-        <meshBasicMaterial map={texture} />
+        {texture ? <meshBasicMaterial map={texture} /> : <meshBasicMaterial color="#64748b" />}
       </mesh>
       {showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.02]}>
           <primitive object={ringGeometry} attach="geometry" />
-          <meshBasicMaterial color={ringColor(isSelected, isHovered, isHighlighted)} />
+          <primitive object={ringMaterial} attach="material" />
         </mesh>
       ) : null}
-      <Text
-        position={[0, -1.05, 0]}
-        fontSize={isSelected ? 0.23 : 0.21}
-        color={isSelected ? "#f8fafc" : isHighlighted ? "#c4b5fd" : "#e2e8f0"}
-        anchorX="center"
-        anchorY="middle"
-        outlineWidth={0.012}
-        outlineColor="#0f172a"
-      >
-        {truncateName(person.name)}
-      </Text>
+      {showLabel ? (
+        <Text
+          position={[0, -1.05, 0]}
+          fontSize={isSelected ? 0.23 : 0.21}
+          color={isSelected ? "#f8fafc" : isHighlighted ? "#c4b5fd" : "#e2e8f0"}
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.012}
+          outlineColor="#0f172a"
+        >
+          {truncateName(person.name)}
+        </Text>
+      ) : null}
     </Billboard>
   );
 };
@@ -165,18 +216,21 @@ const PersonNodeFallbackComponent = ({
   isSelected,
   isHovered,
   isHighlighted,
+  showLabel = true,
   onClick,
   onHover
 }: PersonNodeProps) => {
   const scale = nodeScale(isSelected, isHovered, isHighlighted);
   const ringGeometry = ringGeometryForState(isSelected, isHighlighted, "segments16");
+  const ringMaterial = ringMaterialForState(isSelected, isHovered, isHighlighted);
+  const haloMaterial = isSelected ? haloMaterialSelected : haloMaterialHighlighted;
 
   return (
     <Billboard>
       {isSelected || isHighlighted ? (
         <mesh position={[0, 0, -0.04]} scale={1.16}>
           <primitive object={selectedHaloGeometry20} attach="geometry" />
-          <meshBasicMaterial color={isSelected ? "#22d3ee" : "#a78bfa"} transparent opacity={0.12} />
+          <primitive object={haloMaterial} attach="material" />
         </mesh>
       ) : null}
       <mesh
@@ -186,31 +240,69 @@ const PersonNodeFallbackComponent = ({
         scale={scale}
       >
         <primitive object={hitAreaGeometry16} attach="geometry" />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        <primitive object={invisibleHitAreaMaterial} attach="material" />
       </mesh>
       <mesh scale={scale}>
         <primitive object={avatarGeometry16} attach="geometry" />
-        <meshBasicMaterial color={ringColor(isSelected, isHovered, isHighlighted)} />
+        <primitive object={ringMaterial} attach="material" />
       </mesh>
       {showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.02]}>
           <primitive object={ringGeometry} attach="geometry" />
-          <meshBasicMaterial color={ringColor(isSelected, isHovered, isHighlighted)} />
+          <primitive object={ringMaterial} attach="material" />
         </mesh>
       ) : null}
-      <Text
-        position={[0, -1.05, 0]}
-        fontSize={isSelected ? 0.23 : 0.21}
-        color={isSelected ? "#f8fafc" : isHighlighted ? "#c4b5fd" : "#e2e8f0"}
-        anchorX="center"
-        anchorY="middle"
-        outlineWidth={0.012}
-        outlineColor="#0f172a"
-      >
-        {truncateName(person.name)}
-      </Text>
+      {showLabel ? (
+        <Text
+          position={[0, -1.05, 0]}
+          fontSize={isSelected ? 0.23 : 0.21}
+          color={isSelected ? "#f8fafc" : isHighlighted ? "#c4b5fd" : "#e2e8f0"}
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.012}
+          outlineColor="#0f172a"
+        >
+          {truncateName(person.name)}
+        </Text>
+      ) : null}
     </Billboard>
   );
 };
 
 export const PersonNodeFallback = memo(PersonNodeFallbackComponent);
+
+const PersonNodeMinimalComponent = ({
+  person,
+  isSelected,
+  isHovered,
+  isHighlighted,
+  onClick,
+  onHover
+}: PersonNodeProps) => {
+  const ringMaterial = ringMaterialForState(isSelected, isHovered, isHighlighted);
+
+  return (
+    <Billboard>
+      <mesh
+        onClick={(event) => onClick(person.id, event)}
+        onPointerOver={() => onHover(person.id, true)}
+        onPointerOut={() => onHover(person.id, false)}
+      >
+        <primitive object={hitAreaGeometryLite} attach="geometry" />
+        <primitive object={invisibleHitAreaMaterial} attach="material" />
+      </mesh>
+      <mesh>
+        <primitive object={avatarGeometryLite} attach="geometry" />
+        <primitive object={ringMaterial} attach="material" />
+      </mesh>
+      {showRing(isSelected, isHovered, isHighlighted) ? (
+        <mesh position={[0, 0, -0.01]}>
+          <primitive object={ringGeometryLite} attach="geometry" />
+          <primitive object={ringMaterial} attach="material" />
+        </mesh>
+      ) : null}
+    </Billboard>
+  );
+};
+
+export const PersonNodeMinimal = memo(PersonNodeMinimalComponent);

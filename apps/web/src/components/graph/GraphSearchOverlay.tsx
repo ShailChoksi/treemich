@@ -1,32 +1,82 @@
+import { memo, useEffect, useId, useMemo, useState } from "react";
+
 type Props = {
   searchTerm: string;
   onSearchTermChange: (value: string) => void;
   onSearchSubmit: (event: React.FormEvent) => void;
   onClearSearch: () => void;
+  onCenterView: () => void;
   people: Array<{ id: string; name: string }>;
   searchFeedback: string | null;
 };
 
-export const GraphSearchOverlay = ({
+const SEARCH_TERM_DEBOUNCE_MS = 120;
+const SEARCH_OPTION_LIMIT = 80;
+
+const GraphSearchOverlayComponent = ({
   searchTerm,
   onSearchTermChange,
   onSearchSubmit,
   onClearSearch,
+  onCenterView,
   people,
   searchFeedback
 }: Props) => {
+  const [draftSearchTerm, setDraftSearchTerm] = useState(searchTerm);
+  const listId = useId();
+
+  useEffect(() => {
+    setDraftSearchTerm(searchTerm);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (draftSearchTerm === searchTerm) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      onSearchTermChange(draftSearchTerm);
+    }, SEARCH_TERM_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [draftSearchTerm, onSearchTermChange, searchTerm]);
+
+  const sortedPeople = useMemo(
+    () => [...people].sort((left, right) => left.name.localeCompare(right.name)),
+    [people]
+  );
+  const datalistOptions = useMemo(() => {
+    const query = draftSearchTerm.trim().toLowerCase();
+    if (!query) {
+      return sortedPeople.slice(0, SEARCH_OPTION_LIMIT);
+    }
+    const startsWithMatches = sortedPeople.filter((person) => person.name.toLowerCase().startsWith(query));
+    if (startsWithMatches.length >= SEARCH_OPTION_LIMIT) {
+      return startsWithMatches.slice(0, SEARCH_OPTION_LIMIT);
+    }
+    const containsMatches = sortedPeople.filter(
+      (person) => !person.name.toLowerCase().startsWith(query) && person.name.toLowerCase().includes(query)
+    );
+    return [...startsWithMatches, ...containsMatches].slice(0, SEARCH_OPTION_LIMIT);
+  }, [draftSearchTerm, sortedPeople]);
+
+  const handleSubmit = (event: React.FormEvent) => {
+    if (draftSearchTerm !== searchTerm) {
+      onSearchTermChange(draftSearchTerm);
+    }
+    onSearchSubmit(event);
+  };
+
   return (
     <div className="graph-search-overlay">
-      <form className="graph-search-form" onSubmit={onSearchSubmit}>
+      <form className="graph-search-form" onSubmit={handleSubmit}>
         <input
-          value={searchTerm}
-          onChange={(event) => onSearchTermChange(event.target.value)}
+          value={draftSearchTerm}
+          onChange={(event) => setDraftSearchTerm(event.target.value)}
           placeholder="Search person..."
-          list="graph-search-options"
+          list={listId}
           aria-label="Search person"
         />
-        <datalist id="graph-search-options">
-          {people.map((person) => (
+        <datalist id={listId}>
+          {datalistOptions.map((person) => (
             <option key={person.id} value={person.name} />
           ))}
         </datalist>
@@ -38,20 +88,31 @@ export const GraphSearchOverlay = ({
             />
           </svg>
         </button>
-        {searchTerm ? (
+        {draftSearchTerm ? (
           <button
             type="button"
             className="graph-search-clear-button"
             aria-label="Clear search"
-            onClick={onClearSearch}
+            onClick={() => {
+              setDraftSearchTerm("");
+              onClearSearch();
+            }}
           >
             x
           </button>
         ) : null}
       </form>
       <p className="graph-search-helper">
-        Search by name or try: "sisters of Mike", "cousins of Sue", "uncle of Tom older than 40"
+        Search by name or try: "mother of Jessica", "sisters of Mike", "mother-in-law of Sue"
       </p>
+      <button
+        type="button"
+        className="graph-center-view-button secondary-button"
+        onClick={onCenterView}
+        aria-label="Center graph view"
+      >
+        Center view (F)
+      </button>
       {searchFeedback ? (
         <p className="graph-search-feedback" aria-live="polite">
           {searchFeedback}
@@ -60,3 +121,5 @@ export const GraphSearchOverlay = ({
     </div>
   );
 };
+
+export const GraphSearchOverlay = memo(GraphSearchOverlayComponent);

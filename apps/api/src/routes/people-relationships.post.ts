@@ -7,22 +7,45 @@ const paramsSchema = z.object({
   id: z.string().min(1)
 });
 
-const bodySchema = z.object({
-  toPersonId: z.string().min(1),
-  relationshipType: z.enum(relationshipTypes)
-});
+const bodySchema = z
+  .object({
+    toPersonId: z.string().min(1),
+    relationshipType: z.enum(relationshipTypes),
+    marriageAnniversaryDate: z.string().optional().nullable(),
+    divorceDate: z.string().optional().nullable()
+  })
+  .superRefine((body, context) => {
+    if (body.relationshipType === "SPOUSE_OF") {
+      return;
+    }
+
+    if (body.marriageAnniversaryDate !== undefined || body.divorceDate !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Spouse dates can only be provided for spouse relationships"
+      });
+    }
+  });
 
 export const registerPeopleRelationshipsPostRoute = (app: FastifyInstance) => {
   app.post("/people/:id/relationships", async (request, reply) => {
     const auth = getRequiredAuth(request);
     const { id } = paramsSchema.parse(request.params);
     const body = bodySchema.parse(request.body);
+    const normalizeOptionalString = (value: string | null | undefined) =>
+      value === undefined ? undefined : value?.trim() ? value.trim() : null;
 
     const created = await app.services.relationshipService.upsertRelationship(
       auth.user.id,
       id,
       body.toPersonId,
-      body.relationshipType
+      body.relationshipType,
+      body.relationshipType === "SPOUSE_OF"
+        ? {
+            marriageAnniversaryDate: normalizeOptionalString(body.marriageAnniversaryDate),
+            divorceDate: normalizeOptionalString(body.divorceDate)
+          }
+        : undefined
     );
     return reply.code(201).send(created);
   });

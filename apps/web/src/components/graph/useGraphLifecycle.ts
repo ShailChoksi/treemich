@@ -1,15 +1,9 @@
-import { useTexture } from "@react-three/drei";
-import { useEffect } from "react";
-import { personThumbnailUrl } from "../../lib/api";
-
 type UseGraphLifecycleOptions = {
   thumbnailNodeIds: Set<string>;
 };
 
-export const useGraphLifecycle = ({ thumbnailNodeIds }: UseGraphLifecycleOptions) => {
-  useEffect(() => {
-    for (const personId of thumbnailNodeIds) {
-      useTexture.preload(personThumbnailUrl(personId));
-    }
-  }, [thumbnailNodeIds]);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const useGraphLifecycle = (_options: UseGraphLifecycleOptions) => {
+  // Thumbnail preloading is now handled by the worker pipeline in useThumbnailLoader.
+  // This hook is kept as a stable integration point for future lifecycle concerns.
 };

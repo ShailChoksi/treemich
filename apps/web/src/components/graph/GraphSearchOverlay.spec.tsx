@@ -1,0 +1,103 @@
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { GraphSearchOverlay } from "./GraphSearchOverlay";
+
+const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+
+type RenderResult = {
+  container: HTMLDivElement;
+  root: Root;
+};
+
+const renderOverlay = (onCenterView = vi.fn()): RenderResult => {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  act(() => {
+    root.render(
+      <GraphSearchOverlay
+        searchTerm=""
+        onSearchTermChange={() => undefined}
+        onSearchSubmit={(event) => event.preventDefault()}
+        onClearSearch={() => undefined}
+        onCenterView={onCenterView}
+        people={[{ id: "person-1", name: "Alex" }]}
+        searchFeedback={null}
+      />
+    );
+  });
+
+  return { container, root };
+};
+
+afterEach(() => {
+  vi.useRealTimers();
+  document.body.innerHTML = "";
+});
+
+describe("GraphSearchOverlay", () => {
+  it("renders a center view button with an accessible label", () => {
+    const { container, root } = renderOverlay();
+
+    const centerButton = container.querySelector('button[aria-label="Center graph view"]');
+    expect(centerButton).not.toBeNull();
+    expect(centerButton?.textContent).toContain("Center view");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("invokes center view callback when clicked", () => {
+    const onCenterView = vi.fn();
+    const { container, root } = renderOverlay(onCenterView);
+    const centerButton = container.querySelector('button[aria-label="Center graph view"]');
+    expect(centerButton).not.toBeNull();
+
+    act(() => {
+      centerButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onCenterView).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("limits datalist options to a bounded list", () => {
+    const people = Array.from({ length: 120 }, (_, index) => ({
+      id: `person-${index}`,
+      name: `Person ${String(index).padStart(3, "0")}`
+    }));
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <GraphSearchOverlay
+          searchTerm=""
+          onSearchTermChange={() => undefined}
+          onSearchSubmit={(event) => event.preventDefault()}
+          onClearSearch={() => undefined}
+          onCenterView={() => undefined}
+          people={people}
+          searchFeedback={null}
+        />
+      );
+    });
+
+    expect(container.querySelectorAll("datalist option").length).toBeLessThanOrEqual(80);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+});

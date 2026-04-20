@@ -8,9 +8,7 @@ import {
   type RelationshipType,
   type UserPreferences
 } from "../lib/api";
-import { type NodePosition } from "./graph/layout";
 import { AddRelativePopup } from "./graph/AddRelativePopup";
-import { useThumbnailLoader } from "./graph/useThumbnailLoader";
 import { findPersonBySearchTerm, useGraphSearch } from "./graph/useGraphSearch";
 import { useGraphCamera } from "./graph/useGraphCamera";
 import { useGraphSelection } from "./graph/useGraphSelection";
@@ -25,7 +23,6 @@ import {
 import { defaultFamilyViewStyle, type FamilyViewStyle } from "./graph/layout";
 import { useGraphLayoutState } from "./graph/useGraphLayoutState";
 import { useGraphCameraControls } from "./graph/useGraphCameraControls";
-import { useGraphLifecycle } from "./graph/useGraphLifecycle";
 import { GraphSurfaceOverlays } from "./graph/GraphSurfaceOverlays";
 import { GraphFooterStatus } from "./graph/GraphFooterStatus";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -35,14 +32,21 @@ import { useGraphKeyboardNavigation } from "./graph/useGraphKeyboardNavigation";
 type Props = {
   people: ImmichPerson[];
   relationships: RelationshipRecord[];
+  serverPositionsByPersonId?: Record<string, [number, number, number]>;
+  serverLayoutRevision?: string | null;
+  serverLayoutAlgorithmVersion?: string | null;
   selectedPersonId: string | null;
   status: string | null;
   isLoading: boolean;
   isSavingRelationship: boolean;
   loadError: string | null;
   focusPersonRequest: string | null;
+  cameraFocusPersonRequest: string | null;
+  defaultToNoRelationshipsGraphState: boolean;
+  noRelationshipsGraphFilterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]>;
   savedPreferences: UserPreferences | null;
   onFocusPersonConsumed: () => void;
+  onCameraFocusPersonConsumed: () => void;
   onSelectedPersonChange?: (personId: string | null) => void;
   onCreateRelationship: (
     sourcePersonId: string,
@@ -61,17 +65,44 @@ type AddRelativeIntent = {
   selectedPersonId: string;
 };
 
+type GraphViewPreferencesState = {
+  familyViewStyle: FamilyViewStyle;
+  filterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]>;
+  showSingleFamilyTree: boolean;
+};
+
+const resolveInitialGraphViewPreferences = (
+  savedPreferences: UserPreferences | null,
+  defaultToNoRelationshipsGraphState: boolean,
+  noRelationshipsGraphFilterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]>
+): GraphViewPreferencesState => ({
+  familyViewStyle: savedPreferences?.familyViewStyle ?? defaultFamilyViewStyle,
+  filterVisibility:
+    savedPreferences?.graphFilterVisibility ??
+    (defaultToNoRelationshipsGraphState
+      ? noRelationshipsGraphFilterVisibility
+      : defaultGraphFilterVisibility),
+  showSingleFamilyTree: savedPreferences?.showSingleFamilyTree ?? false
+});
+
 const PeopleGraph3DComponent = ({
   people,
   relationships,
+  serverPositionsByPersonId,
+  serverLayoutRevision,
+  serverLayoutAlgorithmVersion,
   selectedPersonId: parentSelectedPersonId,
   status,
   isLoading,
   isSavingRelationship,
   loadError,
   focusPersonRequest,
+  cameraFocusPersonRequest,
+  defaultToNoRelationshipsGraphState,
+  noRelationshipsGraphFilterVisibility,
   savedPreferences,
   onFocusPersonConsumed,
+  onCameraFocusPersonConsumed,
   onSelectedPersonChange,
   onCreateRelationship,
   onPreferencesChange
@@ -79,21 +110,24 @@ const PeopleGraph3DComponent = ({
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
   const [focusPersonId, setFocusPersonId] = useState<string | null>(null);
   const [pinnedPersonId, setPinnedPersonId] = useState<string | null>(null);
-  const [cameraPosition, setCameraPosition] = useState<NodePosition>([0, 2, 18]);
   const [addRelativeIntent, setAddRelativeIntent] = useState<AddRelativeIntent | null>(null);
-  const [familyViewStyle, setFamilyViewStyle] = useState<FamilyViewStyle>(
-    savedPreferences?.familyViewStyle ?? defaultFamilyViewStyle
+  const [graphViewPreferences, setGraphViewPreferences] = useState<GraphViewPreferencesState>(() =>
+    resolveInitialGraphViewPreferences(
+      savedPreferences ?? null,
+      defaultToNoRelationshipsGraphState,
+      noRelationshipsGraphFilterVisibility
+    )
   );
-  const [filterVisibility, setFilterVisibility] = useState(
-    savedPreferences?.graphFilterVisibility ?? defaultGraphFilterVisibility
-  );
-  const [showSingleFamilyTree, setShowSingleFamilyTree] = useState(
-    savedPreferences?.showSingleFamilyTree ?? false
-  );
+  const { familyViewStyle, filterVisibility, showSingleFamilyTree } = graphViewPreferences;
   const [singleFamilyTreeAnchorId, setSingleFamilyTreeAnchorId] = useState<string | null>(null);
+  const [cameraPositionForCulling, setCameraPositionForCulling] = useState<[number, number, number]>([
+    0, 2, 18
+  ]);
   const prefsAppliedRef = useRef(false);
   const lastCameraSampleRef = useRef(new Vector3(0, 2, 18));
   const hasInitializedCameraRef = useRef(false);
+  const hasHandledInitialCameraFocusRef = useRef(false);
+  const lastAutoCenteredFocusPersonIdRef = useRef<string | null>(null);
   const cameraRef = useRef<PerspectiveCamera | null>(null);
   const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
 
@@ -102,16 +136,14 @@ const PeopleGraph3DComponent = ({
       return;
     }
     prefsAppliedRef.current = true;
-    if (savedPreferences.familyViewStyle) {
-      setFamilyViewStyle(savedPreferences.familyViewStyle);
-    }
-    if (savedPreferences.graphFilterVisibility) {
-      setFilterVisibility(savedPreferences.graphFilterVisibility);
-    }
-    if (savedPreferences.showSingleFamilyTree !== undefined) {
-      setShowSingleFamilyTree(savedPreferences.showSingleFamilyTree);
-    }
-  }, [savedPreferences]);
+    setGraphViewPreferences(
+      resolveInitialGraphViewPreferences(
+        savedPreferences,
+        defaultToNoRelationshipsGraphState,
+        noRelationshipsGraphFilterVisibility
+      )
+    );
+  }, [defaultToNoRelationshipsGraphState, noRelationshipsGraphFilterVisibility, savedPreferences]);
 
   const { selectedPersonId, setSelectedPersonId, clearSelection, handleNodeClick } = useGraphSelection({
     selectedPersonId: parentSelectedPersonId,
@@ -123,10 +155,12 @@ const PeopleGraph3DComponent = ({
     peopleById,
     selectedPerson,
     prioritizedNodeIds,
-    displayVisiblePeople,
     visiblePositionsById,
     graphBounds,
-    visibleRelationshipLines
+    renderVisiblePeople,
+    renderVisibleRelationshipLines,
+    renderVisibilityBucketByPersonId,
+    renderNearPersonIds
   } = useGraphLayoutState({
     people,
     relationships,
@@ -135,6 +169,7 @@ const PeopleGraph3DComponent = ({
     viewMode: "family",
     familyViewStyle,
     graphLineRoutingStyle: savedPreferences?.graphLineRoutingStyle,
+    primaryFamilyUnitByPersonId: savedPreferences?.primaryFamilyUnitByPersonId,
     showSingleFamilyTree,
     singleFamilyTreeAnchorId,
     filterVisibility,
@@ -142,17 +177,13 @@ const PeopleGraph3DComponent = ({
     hoveredPersonId,
     focusPersonId,
     pinnedPersonId,
+    cameraPosition: cameraPositionForCulling,
+    serverPositionsByPersonId,
+    serverLayoutRevision,
+    serverLayoutAlgorithmVersion,
     renderLimit: DEFAULT_RENDER_LIMIT
   });
   const peopleIds = useMemo(() => people.map((person) => person.id), [people]);
-
-  const { thumbnailNodeIds } = useThumbnailLoader({
-    peopleIds,
-    prioritizedNodeIds,
-    displayVisiblePeople,
-    cameraPosition
-  });
-  useGraphLifecycle({ thumbnailNodeIds });
 
   const handleSearchFallback = useCallback(async (query: string) => {
     const response = await searchRelationships(query);
@@ -187,19 +218,19 @@ const PeopleGraph3DComponent = ({
     setHoveredPersonId,
     onSearchFallback: handleSearchFallback
   });
-  const { frameAllNodes, focusActiveNode, topDownView, nudgeCamera } = useGraphCameraControls({
-    graphBounds,
-    visiblePositionsById,
-    selectedPersonId,
-    hoveredPersonId,
-    focusPersonId,
-    pinnedPersonId,
-    familyViewStyle,
-    cameraRef,
-    orbitControlsRef,
-    lastCameraSampleRef,
-    setCameraPosition
-  });
+  const { frameAllNodes, focusPersonById, focusActiveNode, topDownView, nudgeCamera } =
+    useGraphCameraControls({
+      graphBounds,
+      visiblePositionsById,
+      selectedPersonId,
+      hoveredPersonId,
+      focusPersonId,
+      pinnedPersonId,
+      familyViewStyle,
+      cameraRef,
+      orbitControlsRef,
+      lastCameraSampleRef
+    });
 
   useGraphCamera({ frameAllNodes, focusActiveNode, topDownView });
   useGraphKeyboardNavigation({
@@ -225,13 +256,54 @@ const PeopleGraph3DComponent = ({
   }, [selectedPersonId, showSingleFamilyTree]);
 
   useEffect(() => {
+    if (!focusPersonId) {
+      lastAutoCenteredFocusPersonIdRef.current = null;
+      return;
+    }
+    if (focusPersonId === lastAutoCenteredFocusPersonIdRef.current) {
+      return;
+    }
+    if (!visiblePositionsById.has(focusPersonId)) {
+      return;
+    }
+    focusPersonById(focusPersonId);
+    lastAutoCenteredFocusPersonIdRef.current = focusPersonId;
+  }, [focusPersonById, focusPersonId, visiblePositionsById]);
+
+  useEffect(() => {
     if (hasInitializedCameraRef.current) {
       return;
     }
 
-    frameAllNodes();
+    if (cameraFocusPersonRequest && visiblePositionsById.has(cameraFocusPersonRequest)) {
+      setFocusPersonId(cameraFocusPersonRequest);
+      focusPersonById(cameraFocusPersonRequest);
+      hasHandledInitialCameraFocusRef.current = true;
+      onCameraFocusPersonConsumed();
+    } else {
+      frameAllNodes();
+    }
     hasInitializedCameraRef.current = true;
-  }, [frameAllNodes]);
+  }, [
+    cameraFocusPersonRequest,
+    focusPersonById,
+    frameAllNodes,
+    onCameraFocusPersonConsumed,
+    visiblePositionsById
+  ]);
+
+  useEffect(() => {
+    if (!cameraFocusPersonRequest || hasHandledInitialCameraFocusRef.current) {
+      return;
+    }
+    if (!visiblePositionsById.has(cameraFocusPersonRequest)) {
+      return;
+    }
+    setFocusPersonId(cameraFocusPersonRequest);
+    focusPersonById(cameraFocusPersonRequest);
+    hasHandledInitialCameraFocusRef.current = true;
+    onCameraFocusPersonConsumed();
+  }, [cameraFocusPersonRequest, focusPersonById, onCameraFocusPersonConsumed, visiblePositionsById]);
 
   useEffect(() => {
     if (selectedPersonId) {
@@ -256,14 +328,22 @@ const PeopleGraph3DComponent = ({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [addRelativeIntent, clearSelection]);
 
-  const handleCanvasMissed = () => {
+  const handleCanvasMissed = useCallback(() => {
     if (addRelativeIntent) {
       return;
     }
     clearSelection();
     clearHighlights();
     setHoveredPersonId(null);
-  };
+  }, [addRelativeIntent, clearHighlights, clearSelection]);
+
+  const handlePersonNodeClick = useCallback(
+    (clickedPersonId: string) => {
+      handleNodeClick(clickedPersonId);
+      focusPersonById(clickedPersonId);
+    },
+    [focusPersonById, handleNodeClick]
+  );
 
   const handleOpenAddRelative = (slot: AddRelativeSlot) => {
     if (!selectedPersonId) {
@@ -312,33 +392,46 @@ const PeopleGraph3DComponent = ({
   };
 
   const handleToggleFilter = (filter: GraphFilter) => {
-    setFilterVisibility((current) => {
-      const next = { ...current, [filter]: !current[filter] };
-      onPreferencesChange({ graphFilterVisibility: next, familyViewStyle, showSingleFamilyTree });
+    setGraphViewPreferences((current) => {
+      const next = {
+        ...current,
+        filterVisibility: { ...current.filterVisibility, [filter]: !current.filterVisibility[filter] }
+      };
+      onPreferencesChange({
+        graphFilterVisibility: next.filterVisibility,
+        familyViewStyle: next.familyViewStyle,
+        showSingleFamilyTree: next.showSingleFamilyTree
+      });
       return next;
     });
   };
 
   const handleViewStyleChange = (style: FamilyViewStyle) => {
-    setFamilyViewStyle(style);
-    onPreferencesChange({
-      familyViewStyle: style,
-      graphFilterVisibility: filterVisibility,
-      showSingleFamilyTree
+    setGraphViewPreferences((current) => {
+      const next = { ...current, familyViewStyle: style };
+      onPreferencesChange({
+        familyViewStyle: next.familyViewStyle,
+        graphFilterVisibility: next.filterVisibility,
+        showSingleFamilyTree: next.showSingleFamilyTree
+      });
+      return next;
     });
   };
   const handleShowSingleFamilyTreeChange = (next: boolean) => {
-    setShowSingleFamilyTree(next);
+    setGraphViewPreferences((current) => {
+      const nextPreferences = { ...current, showSingleFamilyTree: next };
+      onPreferencesChange({
+        showSingleFamilyTree: nextPreferences.showSingleFamilyTree,
+        familyViewStyle: nextPreferences.familyViewStyle,
+        graphFilterVisibility: nextPreferences.filterVisibility
+      });
+      return nextPreferences;
+    });
     if (next) {
       setSingleFamilyTreeAnchorId(selectedPersonId);
     } else {
       setSingleFamilyTreeAnchorId(null);
     }
-    onPreferencesChange({
-      showSingleFamilyTree: next,
-      familyViewStyle,
-      graphFilterVisibility: filterVisibility
-    });
   };
 
   return (
@@ -349,6 +442,7 @@ const PeopleGraph3DComponent = ({
           onSearchTermChange={setSearchTerm}
           onSearchSubmit={handleSearchSubmit}
           onClearSearch={handleClearSearch}
+          onCenterView={frameAllNodes}
           people={people}
           searchFeedback={searchFeedback}
         />
@@ -379,22 +473,25 @@ const PeopleGraph3DComponent = ({
           }
         >
           <GraphCanvasScene
-            displayVisiblePeople={displayVisiblePeople}
-            visibleRelationshipLines={visibleRelationshipLines}
+            displayVisiblePeople={renderVisiblePeople}
+            visibleRelationshipLines={renderVisibleRelationshipLines}
+            renderVisibilityBucketByPersonId={renderVisibilityBucketByPersonId}
             relationshipStyleByKind={relationshipStyleByKind}
             selectedPersonId={selectedPersonId}
             showNodeActionButtons={!addRelativeIntent}
             hoveredPersonId={hoveredPersonId}
             highlightedPersonIds={highlightedPersonIds}
-            thumbnailNodeIds={thumbnailNodeIds}
+            peopleIds={peopleIds}
+            prioritizedNodeIds={prioritizedNodeIds}
+            renderNearPersonIds={renderNearPersonIds}
             setHoveredPersonId={setHoveredPersonId}
-            onNodeClick={handleNodeClick}
+            onNodeClick={handlePersonNodeClick}
             onNodeActionOpen={handleOpenAddRelative}
             onCanvasMissed={handleCanvasMissed}
+            onCameraSample={setCameraPositionForCulling}
             cameraRef={cameraRef}
             orbitControlsRef={orbitControlsRef}
             lastCameraSampleRef={lastCameraSampleRef}
-            setCameraPosition={setCameraPosition}
           />
         </ErrorBoundary>
       </div>

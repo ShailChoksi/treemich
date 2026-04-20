@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { AppServices } from "../src/services.js";
 
 const upsertRelationshipMock = vi.fn();
+const updateSpouseRelationshipDatesMock = vi.fn();
 const deleteRelationshipMock = vi.fn();
 const upsertProfileMock = vi.fn();
 const findTargetsByRelationshipMock = vi.fn();
@@ -142,6 +143,7 @@ describe("Treemich API routes", () => {
       } as unknown as AppServices["immichClientFactory"],
       relationshipService: {
         upsertRelationship: upsertRelationshipMock,
+        updateSpouseRelationshipDates: updateSpouseRelationshipDatesMock,
         deleteRelationship: deleteRelationshipMock,
         upsertProfile: upsertProfileMock,
         findTargetsByRelationship: findTargetsByRelationshipMock,
@@ -179,7 +181,7 @@ describe("Treemich API routes", () => {
     });
 
     expect(response.statusCode).toBe(201);
-    expect(upsertRelationshipMock).toHaveBeenCalledWith("user-1", "p1", "p2", "CHILD_OF");
+    expect(upsertRelationshipMock).toHaveBeenCalledWith("user-1", "p1", "p2", "CHILD_OF", undefined);
   });
 
   it("creates friend relationship edge", async () => {
@@ -198,7 +200,31 @@ describe("Treemich API routes", () => {
     });
 
     expect(response.statusCode).toBe(201);
-    expect(upsertRelationshipMock).toHaveBeenCalledWith("user-1", "p1", "p2", "FRIEND_OF");
+    expect(upsertRelationshipMock).toHaveBeenCalledWith("user-1", "p1", "p2", "FRIEND_OF", undefined);
+  });
+
+  it("creates spouse relationship edge with optional dates", async () => {
+    upsertRelationshipMock.mockResolvedValueOnce({
+      direct: { id: "r-spouse-1" },
+      inverse: { id: "r-spouse-2" }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people/p1/relationships",
+      payload: {
+        toPersonId: "p2",
+        relationshipType: "SPOUSE_OF",
+        marriageAnniversaryDate: "2005-06-15",
+        divorceDate: null
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(upsertRelationshipMock).toHaveBeenCalledWith("user-1", "p1", "p2", "SPOUSE_OF", {
+      marriageAnniversaryDate: "2005-06-15",
+      divorceDate: null
+    });
   });
 
   it("deletes relationship edge", async () => {
@@ -225,6 +251,26 @@ describe("Treemich API routes", () => {
     expect(response.statusCode).toBe(200);
     expect(deleteRelationshipMock).toHaveBeenCalledWith("user-1", "p1", "p3", "PET_OF");
     expect(response.json().deletedCount).toBe(2);
+  });
+
+  it("updates spouse relationship dates", async () => {
+    updateSpouseRelationshipDatesMock.mockResolvedValueOnce({ count: 2 });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/people/p1/relationships",
+      payload: {
+        toPersonId: "p2",
+        marriageAnniversaryDate: "2006-01-20"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(updateSpouseRelationshipDatesMock).toHaveBeenCalledWith("user-1", "p1", "p2", {
+      marriageAnniversaryDate: "2006-01-20",
+      divorceDate: undefined
+    });
+    expect(response.json()).toEqual({ updatedCount: 2 });
   });
 
   it("loads people via treemich backend", async () => {
@@ -268,9 +314,54 @@ describe("Treemich API routes", () => {
     });
   });
 
+  it("updates extended person profile fields", async () => {
+    upsertProfileMock.mockResolvedValueOnce({
+      immichPersonId: "p1",
+      gender: "FEMALE",
+      birthDateOverride: "1985-02-03",
+      givenName: "Alex",
+      surname: "Johnson",
+      nicknames: "AJ",
+      deathDate: null,
+      birthCity: "Boston",
+      birthCountry: "USA"
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/people/p1",
+      payload: {
+        givenName: "Alex",
+        surname: "Johnson",
+        nicknames: "AJ",
+        deathDate: "",
+        birthCity: "Boston",
+        birthCountry: "USA"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(upsertProfileMock).toHaveBeenCalledWith("user-1", "p1", {
+      givenName: "Alex",
+      surname: "Johnson",
+      nicknames: "AJ",
+      deathDate: null,
+      birthCity: "Boston",
+      birthCountry: "USA"
+    });
+  });
+
   it("lists saved relationships", async () => {
     listRelationshipsMock.mockResolvedValueOnce({
-      relationships: [{ fromPersonId: "p1", toPersonId: "p2", type: "PARENT_OF" }],
+      relationships: [
+        {
+          fromPersonId: "p1",
+          toPersonId: "p2",
+          type: "SPOUSE_OF",
+          marriageAnniversaryDate: "2005-06-15",
+          divorceDate: null
+        }
+      ],
       nextCursor: null
     });
 
@@ -286,7 +377,9 @@ describe("Treemich API routes", () => {
     });
     const json = response.json();
     expect(json.relationships).toHaveLength(1);
-    expect(json.relationships[0].type).toBe("PARENT_OF");
+    expect(json.relationships[0].type).toBe("SPOUSE_OF");
+    expect(json.relationships[0].marriageAnniversaryDate).toBe("2005-06-15");
+    expect(json.relationships[0].divorceDate).toBeNull();
     expect(json.nextCursor).toBeNull();
   });
 
@@ -311,6 +404,32 @@ describe("Treemich API routes", () => {
   });
 
   describe("search with multi-hop and filters", () => {
+    it("searches mother with inherent gender filter", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["jane-id", "john-id"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(
+        new Map([
+          ["jane-id", { gender: "FEMALE" }],
+          ["john-id", { gender: "MALE" }]
+        ])
+      );
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "jessica-id", name: "Jessica" },
+        { id: "jane-id", name: "Jane" },
+        { id: "john-id", name: "John" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=mother%20of%20Jessica"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(traverseRelationshipChainMock).toHaveBeenCalledWith("user-1", ["jessica-id"], ["PARENT_OF"]);
+      const json = response.json();
+      expect(json.matches).toHaveLength(1);
+      expect(json.matches[0].person.name).toBe("Jane");
+    });
+
     it("searches siblings with gender filter", async () => {
       traverseRelationshipChainMock.mockResolvedValueOnce(["sarah-id", "bob-id"]);
       getProfilesForPersonIdsMock.mockResolvedValueOnce(
@@ -417,6 +536,36 @@ describe("Treemich API routes", () => {
       );
       const json = response.json();
       expect(json.matches).toHaveLength(1);
+    });
+
+    it("searches mother-in-law via spouse -> parent traversal", async () => {
+      traverseRelationshipChainMock.mockResolvedValueOnce(["mother-in-law-id", "father-in-law-id"]);
+      getProfilesForPersonIdsMock.mockResolvedValueOnce(
+        new Map([
+          ["mother-in-law-id", { gender: "FEMALE" }],
+          ["father-in-law-id", { gender: "MALE" }]
+        ])
+      );
+      listPeopleMock.mockResolvedValueOnce([
+        { id: "mike-id", name: "Mike" },
+        { id: "mother-in-law-id", name: "Martha" },
+        { id: "father-in-law-id", name: "Frank" }
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/search?q=mother-in-law%20of%20Mike"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(traverseRelationshipChainMock).toHaveBeenCalledWith(
+        "user-1",
+        ["mike-id"],
+        ["SPOUSE_OF", "PARENT_OF"]
+      );
+      const json = response.json();
+      expect(json.matches).toHaveLength(1);
+      expect(json.matches[0].person.name).toBe("Martha");
     });
 
     it("applies gender prefix filter", async () => {
@@ -733,6 +882,7 @@ describe("Treemich API routes", () => {
       expect(response.json()).toEqual({
         graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
       });
     });
@@ -761,6 +911,7 @@ describe("Treemich API routes", () => {
         familyViewStyle: "centeredRelationshipMap",
         graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
         graphFilterVisibility: {
           parentChild: true,
           spouse: true,
@@ -786,6 +937,7 @@ describe("Treemich API routes", () => {
       expect(response.json()).toEqual({
         graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
       });
     });
@@ -815,6 +967,7 @@ describe("Treemich API routes", () => {
         ...savedPrefs,
         graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
@@ -853,6 +1006,7 @@ describe("Treemich API routes", () => {
         ...merged,
         graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
@@ -919,6 +1073,7 @@ describe("Treemich API routes", () => {
       expect(response.json()).toEqual({
         ...merged,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
@@ -957,11 +1112,79 @@ describe("Treemich API routes", () => {
         ...merged,
         graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
         data: { preferences: merged },
+        select: { preferences: true }
+      });
+    });
+
+    it("persists and clears lastSelectedPersonId", async () => {
+      const existing = {
+        familyViewStyle: "generationTree",
+        graphFilterVisibility: {
+          parentChild: true,
+          spouse: true,
+          sibling: true,
+          friends: true,
+          pets: true
+        }
+      };
+      const merged = {
+        ...existing,
+        lastSelectedPersonId: "p-42"
+      };
+      const cleared = {
+        ...existing,
+        lastSelectedPersonId: null
+      };
+
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: existing });
+      treemichUserUpdateMock.mockResolvedValueOnce({ preferences: merged });
+
+      const setResponse = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { lastSelectedPersonId: "p-42" }
+      });
+
+      expect(setResponse.statusCode).toBe(200);
+      expect(setResponse.json()).toEqual({
+        ...merged,
+        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
+        cooccurrence: defaultCooccurrencePreferences
+      });
+      expect(treemichUserUpdateMock).toHaveBeenNthCalledWith(1, {
+        where: { id: "user-1" },
+        data: { preferences: merged },
+        select: { preferences: true }
+      });
+
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: merged });
+      treemichUserUpdateMock.mockResolvedValueOnce({ preferences: cleared });
+
+      const clearResponse = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { lastSelectedPersonId: null }
+      });
+
+      expect(clearResponse.statusCode).toBe(200);
+      expect(clearResponse.json()).toEqual({
+        ...cleared,
+        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
+        cooccurrence: defaultCooccurrencePreferences
+      });
+      expect(treemichUserUpdateMock).toHaveBeenNthCalledWith(2, {
+        where: { id: "user-1" },
+        data: { preferences: cleared },
         select: { preferences: true }
       });
     });
@@ -992,6 +1215,77 @@ describe("Treemich API routes", () => {
       });
 
       expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe("graph layout route", () => {
+    it("returns deterministic layout positions and revision", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/graph/layout",
+        payload: {
+          people: [
+            { id: "p1", name: "Alex" },
+            { id: "p2", name: "Blair" },
+            { id: "p3", name: "Casey" }
+          ],
+          relationships: [
+            { fromPersonId: "p1", toPersonId: "p2", type: "SPOUSE_OF" },
+            { fromPersonId: "p1", toPersonId: "p3", type: "PARENT_OF" }
+          ],
+          viewMode: "family",
+          familyViewStyle: "generationTree",
+          selectedPersonId: "p1"
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        layoutRevision: string;
+        algorithmVersion: string;
+        positionsByPersonId: Record<string, [number, number, number]>;
+      };
+      expect(body.algorithmVersion).toBe("server-hybrid-v1");
+      expect(body.layoutRevision.length).toBeGreaterThan(1);
+      expect(Object.keys(body.positionsByPersonId).sort()).toEqual(["p1", "p2", "p3"]);
+      expect(body.positionsByPersonId.p1).toBeDefined();
+      expect(body.positionsByPersonId.p2).toBeDefined();
+      expect(body.positionsByPersonId.p3).toBeDefined();
+    });
+
+    it("returns same revision and positions for same topology", async () => {
+      const payload = {
+        people: [
+          { id: "p1", name: "Alex" },
+          { id: "p2", name: "Blair" }
+        ],
+        relationships: [{ fromPersonId: "p1", toPersonId: "p2", type: "SIBLING_OF" }],
+        viewMode: "family"
+      };
+
+      const first = await app.inject({
+        method: "POST",
+        url: "/graph/layout",
+        payload
+      });
+      const second = await app.inject({
+        method: "POST",
+        url: "/graph/layout",
+        payload
+      });
+
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+      const firstBody = first.json() as {
+        layoutRevision: string;
+        positionsByPersonId: Record<string, [number, number, number]>;
+      };
+      const secondBody = second.json() as {
+        layoutRevision: string;
+        positionsByPersonId: Record<string, [number, number, number]>;
+      };
+      expect(firstBody.layoutRevision).toBe(secondBody.layoutRevision);
+      expect(secondBody.positionsByPersonId).toEqual(firstBody.positionsByPersonId);
     });
   });
 });

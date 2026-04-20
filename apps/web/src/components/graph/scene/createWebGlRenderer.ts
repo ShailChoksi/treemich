@@ -7,7 +7,7 @@ const webglContextAttributes: WebGLContextAttributes = {
   depth: true,
   desynchronized: false,
   failIfMajorPerformanceCaveat: false,
-  powerPreference: "default",
+  powerPreference: "high-performance",
   premultipliedAlpha: true,
   preserveDrawingBuffer: false,
   stencil: false
@@ -31,9 +31,8 @@ export const createWebGlRenderer: CanvasGlFactory = (defaults) => {
     throw new Error("Canvas does not support WebGL2 context creation.");
   }
   const canvas = defaults.canvas;
-  const context =
-    // three@0.180 requires WebGL2, so only request webgl2 contexts.
-    canvas.getContext("webgl2") ?? canvas.getContext("webgl2", webglContextAttributes);
+  // three@0.180 requires WebGL2, so only request webgl2 contexts.
+  const context = canvas.getContext("webgl2", webglContextAttributes);
 
   if (!context) {
     throw new Error(

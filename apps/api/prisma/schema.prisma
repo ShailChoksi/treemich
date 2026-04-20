@@ -90,6 +90,12 @@ model PersonProfile {
   gender              Gender         @default(UNKNOWN)
   birthDateOverride   String?
   displayNameOverride String?
+  givenName           String?
+  surname             String?
+  nicknames           String?
+  deathDate           String?
+  birthCity           String?
+  birthCountry        String?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   user                TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -106,6 +112,8 @@ model Relationship {
   fromPersonId String
   toPersonId String
   type       RelationshipType
+  marriageAnniversaryDate String?
+  divorceDate String?
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
   user       TreemichUser     @relation(fields: [userId], references: [id], onDelete: Cascade)

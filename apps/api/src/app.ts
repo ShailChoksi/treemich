@@ -15,9 +15,11 @@ import { registerCooccurrenceComputePostRoute } from "./routes/cooccurrence-comp
 import { registerCooccurrenceEdgesGetRoute } from "./routes/cooccurrence-edges.get.js";
 import { registerCooccurrencePairGetRoute } from "./routes/cooccurrence-pair.get.js";
 import { registerCooccurrenceStatusGetRoute } from "./routes/cooccurrence-status.get.js";
+import { registerGraphLayoutPostRoute } from "./routes/graph-layout.post.js";
 import { registerPeopleGetRoute } from "./routes/people.get.js";
 import { registerPeopleCooccurrenceGetRoute } from "./routes/people-cooccurrence.get.js";
 import { registerPeopleRelationshipsDeleteRoute } from "./routes/people-relationships.delete.js";
+import { registerPeopleRelationshipsPatchRoute } from "./routes/people-relationships.patch.js";
 import { registerPeoplePatchRoute } from "./routes/people.patch.js";
 import { registerPeopleRelationshipsPostRoute } from "./routes/people-relationships.post.js";
 import { registerPeopleThumbnailGetRoute } from "./routes/people-thumbnail.get.js";
@@ -170,11 +172,13 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerCooccurrenceEdgesGetRoute);
   app.register(registerCooccurrencePairGetRoute);
   app.register(registerCooccurrenceStatusGetRoute);
+  app.register(registerGraphLayoutPostRoute);
   app.register(registerPeopleGetRoute);
   app.register(registerPeopleCooccurrenceGetRoute);
   app.register(registerPeopleThumbnailGetRoute);
   app.register(registerPeopleRelationshipsPostRoute);
   app.register(registerPeopleRelationshipsDeleteRoute);
+  app.register(registerPeopleRelationshipsPatchRoute);
   app.register(registerRelationshipsGetRoute);
   app.register(registerPeoplePatchRoute);
   app.register(registerSearchGetRoute);

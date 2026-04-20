@@ -57,6 +57,12 @@ export class RelationshipService {
     profile: {
       gender?: Gender;
       birthDateOverride?: string | null;
+      givenName?: string | null;
+      surname?: string | null;
+      nicknames?: string | null;
+      deathDate?: string | null;
+      birthCity?: string | null;
+      birthCountry?: string | null;
     }
   ): Promise<PersonProfile> {
     return prisma.personProfile.upsert({
@@ -68,13 +74,25 @@ export class RelationshipService {
       },
       update: {
         ...(profile.gender !== undefined ? { gender: profile.gender } : {}),
-        ...(profile.birthDateOverride !== undefined ? { birthDateOverride: profile.birthDateOverride } : {})
+        ...(profile.birthDateOverride !== undefined ? { birthDateOverride: profile.birthDateOverride } : {}),
+        ...(profile.givenName !== undefined ? { givenName: profile.givenName } : {}),
+        ...(profile.surname !== undefined ? { surname: profile.surname } : {}),
+        ...(profile.nicknames !== undefined ? { nicknames: profile.nicknames } : {}),
+        ...(profile.deathDate !== undefined ? { deathDate: profile.deathDate } : {}),
+        ...(profile.birthCity !== undefined ? { birthCity: profile.birthCity } : {}),
+        ...(profile.birthCountry !== undefined ? { birthCountry: profile.birthCountry } : {})
       },
       create: {
         userId,
         immichPersonId,
         gender: profile.gender ?? Gender.UNKNOWN,
-        birthDateOverride: profile.birthDateOverride ?? null
+        birthDateOverride: profile.birthDateOverride ?? null,
+        givenName: profile.givenName ?? null,
+        surname: profile.surname ?? null,
+        nicknames: profile.nicknames ?? null,
+        deathDate: profile.deathDate ?? null,
+        birthCity: profile.birthCity ?? null,
+        birthCountry: profile.birthCountry ?? null
       }
     });
   }
@@ -83,9 +101,29 @@ export class RelationshipService {
     userId: string,
     fromPersonId: string,
     toPersonId: string,
-    relationshipType: RelationshipType
+    relationshipType: RelationshipType,
+    spouseDates?: {
+      marriageAnniversaryDate?: string | null;
+      divorceDate?: string | null;
+    }
   ): Promise<{ direct: Relationship; inverse: Relationship }> {
     const inverseType = inverseMapping[relationshipType];
+    const spouseRelationshipUpdate =
+      relationshipType === "SPOUSE_OF"
+        ? {
+            ...(spouseDates?.marriageAnniversaryDate !== undefined
+              ? { marriageAnniversaryDate: spouseDates.marriageAnniversaryDate }
+              : {}),
+            ...(spouseDates?.divorceDate !== undefined ? { divorceDate: spouseDates.divorceDate } : {})
+          }
+        : {};
+    const spouseRelationshipCreate =
+      relationshipType === "SPOUSE_OF"
+        ? {
+            marriageAnniversaryDate: spouseDates?.marriageAnniversaryDate ?? null,
+            divorceDate: spouseDates?.divorceDate ?? null
+          }
+        : {};
     return prisma.$transaction(async (tx) => {
       await tx.personProfile.upsert({
         where: {
@@ -117,12 +155,13 @@ export class RelationshipService {
             type: relationshipType
           }
         },
-        update: {},
+        update: spouseRelationshipUpdate,
         create: {
           userId,
           fromPersonId,
           toPersonId,
-          type: relationshipType
+          type: relationshipType,
+          ...spouseRelationshipCreate
         }
       });
 
@@ -135,16 +174,47 @@ export class RelationshipService {
             type: inverseType
           }
         },
-        update: {},
+        update: spouseRelationshipUpdate,
         create: {
           userId,
           fromPersonId: toPersonId,
           toPersonId: fromPersonId,
-          type: inverseType
+          type: inverseType,
+          ...spouseRelationshipCreate
         }
       });
 
       return { direct, inverse };
+    });
+  }
+
+  async updateSpouseRelationshipDates(
+    userId: string,
+    fromPersonId: string,
+    toPersonId: string,
+    spouseDates: {
+      marriageAnniversaryDate?: string | null;
+      divorceDate?: string | null;
+    }
+  ) {
+    return prisma.relationship.updateMany({
+      where: {
+        userId,
+        type: "SPOUSE_OF",
+        OR: [
+          { fromPersonId, toPersonId },
+          {
+            fromPersonId: toPersonId,
+            toPersonId: fromPersonId
+          }
+        ]
+      },
+      data: {
+        ...(spouseDates.marriageAnniversaryDate !== undefined
+          ? { marriageAnniversaryDate: spouseDates.marriageAnniversaryDate }
+          : {}),
+        ...(spouseDates.divorceDate !== undefined ? { divorceDate: spouseDates.divorceDate } : {})
+      }
     });
   }
 
@@ -229,7 +299,9 @@ export class RelationshipService {
         id: true,
         fromPersonId: true,
         toPersonId: true,
-        type: true
+        type: true,
+        marriageAnniversaryDate: true,
+        divorceDate: true
       }
     });
 
@@ -241,7 +313,9 @@ export class RelationshipService {
       relationships: pageItems.map((item) => ({
         fromPersonId: item.fromPersonId,
         toPersonId: item.toPersonId,
-        type: item.type
+        type: item.type,
+        marriageAnniversaryDate: item.marriageAnniversaryDate,
+        divorceDate: item.divorceDate
       })),
       nextCursor: hasMore && lastItem ? lastItem.id : null
     };

@@ -349,6 +349,33 @@ describe("RuleBasedInterpreter", () => {
     expect(result.parsed.hops).toEqual(["PARENT_OF", "PARENT_OF", "SIBLING_OF", "CHILD_OF", "CHILD_OF"]);
   });
 
+  // --- in-laws ---
+
+  it("parses mother-in-law query", () => {
+    const result = interpreter.interpret("mother-in-law of Mike");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_MOTHER_IN_LAW");
+    expect(result.parsed.requiredGender).toBe("FEMALE");
+    expect(result.parsed.hops).toEqual(["SPOUSE_OF", "PARENT_OF"]);
+  });
+
+  it("parses parent in law with spaces", () => {
+    const result = interpreter.interpret("parents in law of Mike");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_PARENTS_IN_LAW");
+    expect(result.parsed.hops).toEqual(["SPOUSE_OF", "PARENT_OF"]);
+  });
+
+  it("parses cousins-in-law query", () => {
+    const result = interpreter.interpret("cousins-in-law of Mike");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_COUSINS_IN_LAW");
+    expect(result.parsed.hops).toEqual(["SPOUSE_OF", "PARENT_OF", "SIBLING_OF", "CHILD_OF"]);
+  });
+
   // --- generic gender prefix ---
 
   it("parses female cousins via gender prefix", () => {

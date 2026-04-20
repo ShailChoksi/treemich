@@ -246,6 +246,14 @@ body {
   font-size: 12px;
 }
 
+.graph-center-view-button {
+  align-self: flex-start;
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .graph-view-mode-selector {
   position: absolute;
   left: 12px;
@@ -504,6 +512,15 @@ body {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.22);
 }
 
+.person-detail-avatar-link {
+  display: inline-flex;
+}
+
+.person-detail-name-link {
+  color: inherit;
+  text-decoration: underline;
+}
+
 .person-detail-section,
 .relationship-editor {
   padding: 12px 0 0;
@@ -528,8 +545,28 @@ body {
   gap: 12px;
 }
 
-.person-detail-section-heading-block {
+.person-detail-section-toggle {
+  display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  text-align: left;
+}
+
+.person-detail-section-toggle:hover:not(:disabled) {
+  transform: none;
+}
+
+.person-detail-section-toggle-indicator {
+  color: #94a3b8;
+  font-size: 14px;
+  line-height: 1.4;
+  margin-top: 2px;
 }
 
 .person-detail-form-grid {
@@ -744,6 +781,10 @@ select:disabled {
 @media (max-width: 768px) {
   .graph-search-form input {
     width: min(100%, 180px);
+  }
+
+  .graph-center-view-button {
+    width: 100%;
   }
 
   .graph-view-mode-selector {
