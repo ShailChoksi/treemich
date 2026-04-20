@@ -1,29 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildGraphLayoutRevision } from "@treemich/shared";
+import { buildGraphLayoutRevision, filterGraphLayoutTopologyRelationships } from "@treemich/shared";
 import type { ImmichPerson, PhotoCluster, PhotoCooccurrenceEdge, RelationshipRecord } from "../../lib/api";
 import {
   buildParentChildIndex,
-  defaultFamilyViewStyle,
   distanceSquared,
   positionPeople,
   subtractPosition,
-  type FamilyViewStyle,
   type GraphLayoutMode,
   type NodePosition
 } from "./layout";
-import {
-  relationshipKindForType,
-  relationshipFilterForType,
-  type GraphFilterVisibility,
-  type RelationshipKind
-} from "./relationshipStyles";
-import { requestPositionPeopleInWorker } from "./layoutWorkerClient";
+import { buildMergedParentGroups, buildVisibleRelationshipLines } from "./graphRelationshipLines";
+import { relationshipFilterForType, type GraphFilterVisibility } from "./relationshipStyles";
 import type { LayoutWorkerPayload } from "./layoutWorkerTypes";
+import { shouldUseLayoutWorker, TOPOLOGY_LAYOUT_CACHE_MAX_ENTRIES } from "./graphLayoutConstants";
+import { evictOldestMapEntriesToCap } from "./topologyLayoutCache";
+import { useGraphLayoutWorker } from "./useGraphLayoutWorker";
 import {
   computeCameraVisibility,
   type GraphVisibilityBucket,
   type GraphVisibilityThresholds
 } from "./graphVisibility";
+import { pickNearest } from "./pickNearest";
 
 type UseGraphLayoutStateOptions = {
   people: ImmichPerson[];
@@ -31,8 +28,6 @@ type UseGraphLayoutStateOptions = {
   photoEdges: PhotoCooccurrenceEdge[];
   photoClusters: PhotoCluster[];
   viewMode: GraphLayoutMode;
-  familyViewStyle?: FamilyViewStyle;
-  graphLineRoutingStyle?: "orthogonal" | "direct";
   primaryFamilyUnitByPersonId?: Record<string, string>;
   showSingleFamilyTree?: boolean;
   singleFamilyTreeAnchorId?: string | null;
@@ -53,7 +48,6 @@ const shouldMeasureGraphLayout =
   typeof window !== "undefined" && window.localStorage.getItem("treemich:profile-graph-layout") === "1";
 const PROGRESSIVE_RENDER_BATCH_INTERVAL_MS = 150;
 const MIN_CAMERA_CULLED_VISIBLE_COUNT = 180;
-const LAYOUT_WORKER_MIN_PEOPLE = 320;
 
 const measureGraphStep = <T>(label: string, factory: () => T): T => {
   if (!shouldMeasureGraphLayout) {
@@ -66,84 +60,7 @@ const measureGraphStep = <T>(label: string, factory: () => T): T => {
   return result;
 };
 
-export const resolveSelectedPersonForLayout = (
-  activeFamilyViewStyle: FamilyViewStyle,
-  selectedPersonId: string | null
-) =>
-  activeFamilyViewStyle === "centeredRelationshipMap" || activeFamilyViewStyle === "hybridTreeList"
-    ? selectedPersonId
-    : null;
-
-const pairKey = (firstId: string, secondId: string) =>
-  firstId < secondId ? `${firstId}|${secondId}` : `${secondId}|${firstId}`;
-
-const candidateParentPairKeys = (parentIds: string[]) => {
-  const sorted = [...new Set(parentIds)].sort();
-  if (sorted.length <= 1) {
-    return sorted.length === 1 ? [sorted[0] as string] : [];
-  }
-  if (sorted.length === 2) {
-    return [pairKey(sorted[0] as string, sorted[1] as string)];
-  }
-  const keys: string[] = [];
-  for (let firstIndex = 0; firstIndex < sorted.length; firstIndex += 1) {
-    const firstId = sorted[firstIndex];
-    if (!firstId) {
-      continue;
-    }
-    for (let secondIndex = firstIndex + 1; secondIndex < sorted.length; secondIndex += 1) {
-      const secondId = sorted[secondIndex];
-      if (!secondId) {
-        continue;
-      }
-      keys.push(pairKey(firstId, secondId));
-    }
-  }
-  return keys;
-};
-
-export const pickNearest = (
-  items: Array<{ person: ImmichPerson; position: NodePosition }>,
-  origin: NodePosition,
-  limit: number
-) => {
-  if (items.length <= limit) {
-    return items;
-  }
-
-  const nearest: Array<{ item: { person: ImmichPerson; position: NodePosition }; distance: number }> = [];
-  for (const item of items) {
-    const candidate = {
-      item,
-      distance: distanceSquared(item.position, origin)
-    };
-
-    if (nearest.length === 0) {
-      nearest.push(candidate);
-      continue;
-    }
-
-    let insertAt = nearest.length;
-    while (insertAt > 0 && nearest[insertAt - 1] && nearest[insertAt - 1]!.distance > candidate.distance) {
-      insertAt -= 1;
-    }
-
-    if (nearest.length < limit) {
-      nearest.splice(insertAt, 0, candidate);
-      continue;
-    }
-
-    const last = nearest[nearest.length - 1];
-    if (!last || candidate.distance >= last.distance) {
-      continue;
-    }
-
-    nearest.splice(insertAt, 0, candidate);
-    nearest.pop();
-  }
-
-  return nearest.map((entry) => entry.item);
-};
+export { pickNearest } from "./pickNearest";
 
 export const filterRelationshipsByLayer = (
   relationships: RelationshipRecord[],
@@ -154,16 +71,6 @@ export const filterRelationshipsByLayer = (
     return filterVisibility[filter];
   });
 
-const relationshipsForTreeTopology = (relationships: RelationshipRecord[]) =>
-  relationships.filter(
-    (relationship) =>
-      relationship.type === "PARENT_OF" ||
-      relationship.type === "CHILD_OF" ||
-      relationship.type === "SPOUSE_OF"
-  );
-
-const shouldUseLayoutWorker = (viewMode: GraphLayoutMode, peopleCount: number) =>
-  viewMode === "family" && peopleCount >= LAYOUT_WORKER_MIN_PEOPLE && typeof Worker !== "undefined";
 const SERVER_LAYOUT_ALGORITHM_VERSION = "server-hybrid-v1";
 
 const buildGraphRelationships = (
@@ -171,7 +78,7 @@ const buildGraphRelationships = (
   filterVisibility: GraphFilterVisibility
 ) => {
   const filteredRelationships = filterRelationshipsByLayer(relationships, filterVisibility);
-  const topologyRelationships = relationshipsForTreeTopology(relationships);
+  const topologyRelationships = filterGraphLayoutTopologyRelationships(relationships);
   const { parentsByChild } = buildParentChildIndex(filteredRelationships);
 
   return {
@@ -180,44 +87,6 @@ const buildGraphRelationships = (
     filteredParentsByChild: parentsByChild
   };
 };
-
-const TOPOLOGY_LAYOUT_CACHE_MAX_ENTRIES = 8;
-
-const serializePrimaryFamilyUnits = (primaryFamilyUnitByPersonId?: Record<string, string>) => {
-  if (!primaryFamilyUnitByPersonId) {
-    return "";
-  }
-  return Object.entries(primaryFamilyUnitByPersonId)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([personId, unitKey]) => `${personId}:${unitKey}`)
-    .join(",");
-};
-
-const buildTopologyCacheKey = ({
-  people,
-  topologyRelationships,
-  viewMode,
-  familyViewStyle,
-  selectedPersonForLayout,
-  primaryFamilyUnitByPersonId
-}: {
-  people: ImmichPerson[];
-  topologyRelationships: RelationshipRecord[];
-  viewMode: GraphLayoutMode;
-  familyViewStyle: FamilyViewStyle;
-  selectedPersonForLayout: string | null;
-  primaryFamilyUnitByPersonId?: Record<string, string>;
-}) =>
-  [
-    `mode=${viewMode}`,
-    `style=${familyViewStyle}`,
-    `selected=${selectedPersonForLayout ?? ""}`,
-    `people=${people.map((person) => person.id).join(",")}`,
-    `relationships=${topologyRelationships
-      .map((relationship) => `${relationship.fromPersonId}|${relationship.type}|${relationship.toPersonId}`)
-      .join(",")}`,
-    `primary=${serializePrimaryFamilyUnits(primaryFamilyUnitByPersonId)}`
-  ].join("||");
 
 export const pickSingleFamilyTreeIds = (
   relationships: RelationshipRecord[],
@@ -283,260 +152,12 @@ export const pickSingleFamilyTreeIds = (
   return new Set(largestComponent);
 };
 
-export const routeRelationshipSegment = (
-  from: NodePosition,
-  to: NodePosition,
-  kind: RelationshipKind,
-  familyViewStyle?: FamilyViewStyle,
-  graphLineRoutingStyle: "orthogonal" | "direct" = "orthogonal"
-) => {
-  void kind;
-  void familyViewStyle;
-  void graphLineRoutingStyle;
-  return [from, to] as NodePosition[];
-};
-
-type GraphLine = {
-  key: string;
-  points: NodePosition[];
-  kind: RelationshipKind;
-  opacity?: number;
-};
-
-const buildMergedParentGroups = ({
-  parentsByChild,
-  visibleIdSet,
-  primaryFamilyUnitByPersonId
-}: {
-  parentsByChild: Map<string, Set<string>>;
-  visibleIdSet: Set<string>;
-  primaryFamilyUnitByPersonId?: Record<string, string>;
-}) => {
-  const groups = new Map<string, { parentAId: string; parentBId: string; childIds: Set<string> }>();
-  for (const [childId, parentSet] of parentsByChild.entries()) {
-    if (!visibleIdSet.has(childId)) {
-      continue;
-    }
-    if (parentSet.size < 2) {
-      continue;
-    }
-    const parentIds = [...parentSet];
-    const candidates = candidateParentPairKeys(parentIds);
-    if (candidates.length === 0) {
-      continue;
-    }
-    const preferred = primaryFamilyUnitByPersonId?.[childId];
-    const selectedPairKey =
-      preferred && candidates.includes(preferred) ? preferred : (candidates[0] as string);
-    const [parentAId, parentBId] = selectedPairKey.split("|");
-    if (!parentAId || !parentBId) {
-      continue;
-    }
-    if (!visibleIdSet.has(parentAId) || !visibleIdSet.has(parentBId)) {
-      continue;
-    }
-    const key = pairKey(parentAId, parentBId);
-    const existing = groups.get(key);
-    if (existing) {
-      existing.childIds.add(childId);
-    } else {
-      groups.set(key, {
-        parentAId,
-        parentBId,
-        childIds: new Set([childId])
-      });
-    }
-  }
-  return groups;
-};
-
-const buildVisibleRelationshipLines = ({
-  viewMode,
-  photoEdges,
-  visiblePositionsById,
-  mergedParentGroups,
-  filteredRelationships,
-  visibleIdSet,
-  familyViewStyle,
-  graphLineRoutingStyle
-}: {
-  viewMode: GraphLayoutMode;
-  photoEdges: PhotoCooccurrenceEdge[];
-  visiblePositionsById: Map<string, NodePosition>;
-  mergedParentGroups: Map<string, { parentAId: string; parentBId: string; childIds: Set<string> }>;
-  filteredRelationships: RelationshipRecord[];
-  visibleIdSet: Set<string>;
-  familyViewStyle?: FamilyViewStyle;
-  graphLineRoutingStyle: "orthogonal" | "direct";
-}) => {
-  if (viewMode === "photo") {
-    const lines: GraphLine[] = [];
-    for (const edge of photoEdges) {
-      const from = visiblePositionsById.get(edge.personAId);
-      const to = visiblePositionsById.get(edge.personBId);
-      if (!from || !to) {
-        continue;
-      }
-      lines.push({
-        key: `photo:${edge.personAId}|${edge.personBId}`,
-        points: [from, to],
-        kind: "CO_OCCURRENCE",
-        opacity: Math.min(0.95, Math.max(0.2, 0.2 + edge.score * 0.75))
-      });
-    }
-    return lines;
-  }
-
-  const resolvedParentChildPairs = new Set<string>();
-  const seen = new Set<string>();
-  const lines: GraphLine[] = [];
-  for (const [parentPairKey, group] of mergedParentGroups.entries()) {
-    const parentA = visiblePositionsById.get(group.parentAId);
-    const parentB = visiblePositionsById.get(group.parentBId);
-    if (!parentA || !parentB) {
-      continue;
-    }
-
-    const childPositions: Array<{ childId: string; position: NodePosition }> = [];
-    for (const childId of group.childIds) {
-      const position = visiblePositionsById.get(childId);
-      if (!position) {
-        continue;
-      }
-      childPositions.push({ childId, position });
-    }
-    if (childPositions.length === 0) {
-      continue;
-    }
-    if (childPositions.length > 1) {
-      childPositions.sort((left, right) => left.position[0] - right.position[0]);
-    }
-
-    for (const { childId } of childPositions) {
-      resolvedParentChildPairs.add(`${group.parentAId}|${childId}`);
-      resolvedParentChildPairs.add(`${group.parentBId}|${childId}`);
-    }
-
-    const parentMid: NodePosition = [
-      (parentA[0] + parentB[0]) / 2,
-      (parentA[1] + parentB[1]) / 2,
-      (parentA[2] + parentB[2]) / 2
-    ];
-    let centroidX = 0;
-    let centroidY = 0;
-    let centroidZ = 0;
-    for (const child of childPositions) {
-      centroidX += child.position[0];
-      centroidY += child.position[1];
-      centroidZ += child.position[2];
-    }
-    const centroid: NodePosition = [
-      centroidX / childPositions.length,
-      centroidY / childPositions.length,
-      centroidZ / childPositions.length
-    ];
-    const forkBase: NodePosition = [
-      parentMid[0] * 0.5 + centroid[0] * 0.5,
-      parentMid[1] * 0.5 + centroid[1] * 0.5,
-      parentMid[2] * 0.5 + centroid[2] * 0.5
-    ];
-
-    lines.push({
-      key: `family:merge:${parentPairKey}:a`,
-      points: routeRelationshipSegment(
-        parentA,
-        parentMid,
-        "PARENT_CHILD",
-        familyViewStyle,
-        graphLineRoutingStyle
-      ),
-      kind: "PARENT_CHILD"
-    });
-    lines.push({
-      key: `family:merge:${parentPairKey}:b`,
-      points: routeRelationshipSegment(
-        parentB,
-        parentMid,
-        "PARENT_CHILD",
-        familyViewStyle,
-        graphLineRoutingStyle
-      ),
-      kind: "PARENT_CHILD"
-    });
-
-    if (childPositions.length > 1) {
-      lines.push({
-        key: `family:merge:${parentPairKey}:trunk`,
-        points: routeRelationshipSegment(
-          parentMid,
-          forkBase,
-          "PARENT_CHILD",
-          familyViewStyle,
-          graphLineRoutingStyle
-        ),
-        kind: "PARENT_CHILD"
-      });
-    }
-
-    const branchRoot = childPositions.length > 1 ? forkBase : parentMid;
-    for (const { childId, position } of childPositions) {
-      lines.push({
-        key: `family:merge:${parentPairKey}:child:${childId}`,
-        points: routeRelationshipSegment(
-          branchRoot,
-          position,
-          "PARENT_CHILD",
-          familyViewStyle,
-          graphLineRoutingStyle
-        ),
-        kind: "PARENT_CHILD"
-      });
-    }
-  }
-
-  for (const relationship of filteredRelationships) {
-    const first = relationship.fromPersonId;
-    const second = relationship.toPersonId;
-    if (!visibleIdSet.has(first) || !visibleIdSet.has(second)) {
-      continue;
-    }
-    const canonicalPair = pairKey(first, second);
-    const kind = relationshipKindForType(relationship.type);
-    if (
-      kind === "PARENT_CHILD" &&
-      (resolvedParentChildPairs.has(`${first}|${second}`) ||
-        resolvedParentChildPairs.has(`${second}|${first}`))
-    ) {
-      continue;
-    }
-    const key = `${canonicalPair}:${kind}`;
-    if (seen.has(key)) {
-      continue;
-    }
-    const from = visiblePositionsById.get(first);
-    const to = visiblePositionsById.get(second);
-    if (!from || !to) {
-      continue;
-    }
-    seen.add(key);
-    lines.push({
-      key,
-      points: routeRelationshipSegment(from, to, kind, familyViewStyle, graphLineRoutingStyle),
-      kind
-    });
-  }
-
-  return lines;
-};
-
 export const useGraphLayoutState = ({
   people,
   relationships,
   photoEdges,
   photoClusters,
   viewMode,
-  familyViewStyle,
-  graphLineRoutingStyle,
   primaryFamilyUnitByPersonId,
   filterVisibility,
   selectedPersonId,
@@ -557,30 +178,12 @@ export const useGraphLayoutState = ({
   );
   const filteredRelationships = graphRelationships.filteredRelationships;
   const topologyRelationships = graphRelationships.topologyRelationships;
-  const activeFamilyViewStyle = familyViewStyle ?? defaultFamilyViewStyle;
-  const selectedPersonForLayout = resolveSelectedPersonForLayout(activeFamilyViewStyle, selectedPersonId);
   const peopleById = useMemo(() => new Map(people.map((person) => [person.id, person])), [people]);
   const topologyLayoutCacheRef = useRef(
     new Map<string, Array<{ personId: string; position: NodePosition }>>()
   );
-  const topologyCacheKey = useMemo(
-    () =>
-      buildTopologyCacheKey({
-        people,
-        topologyRelationships,
-        viewMode,
-        familyViewStyle: activeFamilyViewStyle,
-        selectedPersonForLayout,
-        primaryFamilyUnitByPersonId
-      }),
-    [
-      activeFamilyViewStyle,
-      people,
-      primaryFamilyUnitByPersonId,
-      selectedPersonForLayout,
-      topologyRelationships,
-      viewMode
-    ]
+  const lastStableLayoutSnapshotRef = useRef<Array<{ personId: string; position: NodePosition }> | null>(
+    null
   );
   const shouldUseWorker = shouldUseLayoutWorker(viewMode, people.length);
   const topologyRevision = useMemo(
@@ -596,18 +199,11 @@ export const useGraphLayoutState = ({
           type: relationship.type
         })),
         viewMode,
-        familyViewStyle: activeFamilyViewStyle,
-        selectedPersonId: selectedPersonForLayout,
+        familyViewStyle: "generationTree",
+        selectedPersonId,
         primaryFamilyUnitByPersonId
       }),
-    [
-      activeFamilyViewStyle,
-      people,
-      primaryFamilyUnitByPersonId,
-      selectedPersonForLayout,
-      topologyRelationships,
-      viewMode
-    ]
+    [people, primaryFamilyUnitByPersonId, selectedPersonId, topologyRelationships, viewMode]
   );
   const hasCompleteServerCoverage = useMemo(() => {
     if (!serverPositionsByPersonId) {
@@ -631,13 +227,6 @@ export const useGraphLayoutState = ({
       })
       .filter((entry): entry is { person: ImmichPerson; position: NodePosition } => !!entry);
   }, [people, serverPositionsByPersonId, shouldUseServerLayout]);
-  const hasLoggedWorkerFailureRef = useRef(false);
-  const workerRequestIdRef = useRef(0);
-  const [workerPositions, setWorkerPositions] = useState<Array<{
-    personId: string;
-    position: NodePosition;
-  }> | null>(null);
-  const [isWorkerFallbackEnabled, setIsWorkerFallbackEnabled] = useState(false);
   const [progressiveRenderLimit, setProgressiveRenderLimit] = useState(baseRenderLimit);
   const workerPayload = useMemo<LayoutWorkerPayload>(
     () => ({
@@ -646,61 +235,16 @@ export const useGraphLayoutState = ({
       options: {
         mode: viewMode,
         photoClusters,
-        familyViewStyle: activeFamilyViewStyle,
-        selectedPersonId: selectedPersonForLayout,
         primaryFamilyUnitByPersonId
       }
     }),
-    [
-      activeFamilyViewStyle,
-      topologyRelationships,
-      people,
-      photoClusters,
-      primaryFamilyUnitByPersonId,
-      selectedPersonForLayout,
-      viewMode
-    ]
+    [topologyRelationships, people, photoClusters, primaryFamilyUnitByPersonId, viewMode]
   );
-
-  useEffect(() => {
-    if (!shouldUseWorker || isWorkerFallbackEnabled || shouldUseServerLayout) {
-      workerRequestIdRef.current += 1;
-      setWorkerPositions(null);
-      return;
-    }
-    const requestId = workerRequestIdRef.current + 1;
-    workerRequestIdRef.current = requestId;
-    setWorkerPositions(null);
-    let isDisposed = false;
-    void requestPositionPeopleInWorker(workerPayload)
-      .then((positions) => {
-        if (isDisposed || workerRequestIdRef.current !== requestId) {
-          return;
-        }
-        setWorkerPositions(positions);
-      })
-      .catch((error) => {
-        if (isDisposed || workerRequestIdRef.current !== requestId) {
-          return;
-        }
-        if (!hasLoggedWorkerFailureRef.current) {
-          hasLoggedWorkerFailureRef.current = true;
-          console.warn("[graph-layout] falling back to sync layout after worker failure", error);
-        }
-        setIsWorkerFallbackEnabled(true);
-        setWorkerPositions(null);
-      });
-    return () => {
-      isDisposed = true;
-    };
-  }, [isWorkerFallbackEnabled, shouldUseServerLayout, shouldUseWorker, workerPayload]);
-
-  useEffect(() => {
-    if (!shouldUseWorker) {
-      setIsWorkerFallbackEnabled(false);
-      hasLoggedWorkerFailureRef.current = false;
-    }
-  }, [shouldUseWorker]);
+  const { workerPositions, isWorkerFallbackEnabled } = useGraphLayoutWorker({
+    shouldUseWorker,
+    shouldUseServerLayout,
+    workerPayload
+  });
 
   const syncPositionedPeople = useMemo(() => {
     if (shouldUseServerLayout) {
@@ -709,7 +253,7 @@ export const useGraphLayoutState = ({
     if (shouldUseWorker && !isWorkerFallbackEnabled) {
       return [];
     }
-    const cached = topologyLayoutCacheRef.current.get(topologyCacheKey);
+    const cached = topologyLayoutCacheRef.current.get(topologyRevision);
     if (cached) {
       return cached
         .map((entry) => {
@@ -722,41 +266,31 @@ export const useGraphLayoutState = ({
       positionPeople(people, topologyRelationships, {
         mode: viewMode,
         photoClusters,
-        familyViewStyle: activeFamilyViewStyle,
-        selectedPersonId: selectedPersonForLayout,
         primaryFamilyUnitByPersonId
       })
     );
     topologyLayoutCacheRef.current.set(
-      topologyCacheKey,
+      topologyRevision,
       positioned.map((entry) => ({
         personId: entry.person.id,
         position: entry.position
       }))
     );
-    while (topologyLayoutCacheRef.current.size > TOPOLOGY_LAYOUT_CACHE_MAX_ENTRIES) {
-      const firstKey = topologyLayoutCacheRef.current.keys().next().value;
-      if (!firstKey) {
-        break;
-      }
-      topologyLayoutCacheRef.current.delete(firstKey);
-    }
+    evictOldestMapEntriesToCap(topologyLayoutCacheRef.current, TOPOLOGY_LAYOUT_CACHE_MAX_ENTRIES);
     return positioned;
   }, [
-    activeFamilyViewStyle,
     isWorkerFallbackEnabled,
-    topologyCacheKey,
+    topologyRevision,
     topologyRelationships,
     people,
     peopleById,
     photoClusters,
     primaryFamilyUnitByPersonId,
-    selectedPersonForLayout,
     shouldUseServerLayout,
     shouldUseWorker,
     viewMode
   ]);
-  const positionedPeople = useMemo(() => {
+  const computedPositionedPeople = useMemo(() => {
     if (shouldUseServerLayout) {
       return serverPositionedPeople;
     }
@@ -781,6 +315,42 @@ export const useGraphLayoutState = ({
     syncPositionedPeople,
     workerPositions
   ]);
+  useEffect(() => {
+    if (computedPositionedPeople.length === 0) {
+      return;
+    }
+    lastStableLayoutSnapshotRef.current = computedPositionedPeople.map((entry) => ({
+      personId: entry.person.id,
+      position: entry.position
+    }));
+  }, [computedPositionedPeople]);
+  const positionedPeople = useMemo(() => {
+    if (computedPositionedPeople.length > 0) {
+      return computedPositionedPeople;
+    }
+    const showStaleWorkerLayout =
+      shouldUseWorker && !shouldUseServerLayout && !isWorkerFallbackEnabled && workerPositions === null;
+    if (!showStaleWorkerLayout) {
+      return computedPositionedPeople;
+    }
+    const snapshot = lastStableLayoutSnapshotRef.current;
+    if (!snapshot?.length) {
+      return computedPositionedPeople;
+    }
+    return snapshot
+      .map((entry) => {
+        const person = peopleById.get(entry.personId);
+        return person ? { person, position: entry.position } : null;
+      })
+      .filter((entry): entry is { person: ImmichPerson; position: NodePosition } => !!entry);
+  }, [
+    computedPositionedPeople,
+    isWorkerFallbackEnabled,
+    peopleById,
+    shouldUseServerLayout,
+    shouldUseWorker,
+    workerPositions
+  ]);
   const positionedById = useMemo(
     () => new Map(positionedPeople.map((item) => [item.person.id, item])),
     [positionedPeople]
@@ -803,10 +373,7 @@ export const useGraphLayoutState = ({
     return focused?.position ?? [0, 0, 0];
   }, [focusPersonId, positionedById]);
 
-  const candidatePositionedPeople = useMemo(() => {
-    // Keep all named faces visible across view styles, including isolated components.
-    return positionedPeople;
-  }, [positionedPeople]);
+  const candidatePositionedPeople = useMemo(() => positionedPeople, [positionedPeople]);
   const effectiveRenderLimit = useMemo(
     () => Math.min(progressiveRenderLimit, candidatePositionedPeople.length),
     [candidatePositionedPeople.length, progressiveRenderLimit]
@@ -818,8 +385,6 @@ export const useGraphLayoutState = ({
     baseRenderLimit,
     candidatePositionedPeople.length,
     viewMode,
-    activeFamilyViewStyle,
-    selectedPersonForLayout,
     topologyRevision,
     shouldUseServerLayout,
     isWorkerFallbackEnabled,
@@ -1035,15 +600,11 @@ export const useGraphLayoutState = ({
           visiblePositionsById: renderVisiblePositionsById,
           mergedParentGroups: renderMergedParentGroups,
           filteredRelationships,
-          visibleIdSet: renderVisibleIdSet,
-          familyViewStyle,
-          graphLineRoutingStyle: graphLineRoutingStyle ?? "orthogonal"
+          visibleIdSet: renderVisibleIdSet
         })
       ),
     [
-      familyViewStyle,
       filteredRelationships,
-      graphLineRoutingStyle,
       photoEdges,
       renderMergedParentGroups,
       renderVisibleIdSet,
@@ -1059,6 +620,11 @@ export const useGraphLayoutState = ({
     [renderVisibilityState.bucketByPersonId, renderVisiblePeople]
   );
 
+  const isWorkerLayoutPending = useMemo(
+    () => shouldUseWorker && !shouldUseServerLayout && !isWorkerFallbackEnabled && workerPositions === null,
+    [isWorkerFallbackEnabled, shouldUseServerLayout, shouldUseWorker, workerPositions]
+  );
+
   return {
     filteredRelationships,
     peopleById,
@@ -1072,6 +638,7 @@ export const useGraphLayoutState = ({
     renderVisiblePositionsById,
     renderVisibleRelationshipLines,
     renderVisibilityBucketByPersonId: renderVisibilityState.bucketByPersonId,
-    renderNearPersonIds
+    renderNearPersonIds,
+    isWorkerLayoutPending
   };
 };

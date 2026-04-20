@@ -1,22 +1,12 @@
-import type { FamilyViewStyle } from "./layout";
 import type { GraphFilter, GraphFilterVisibility } from "./relationshipStyles";
 import { relationshipStyleByKind } from "./relationshipStyles";
 
 type Props = {
-  value: FamilyViewStyle;
-  onChange: (next: FamilyViewStyle) => void;
   filterVisibility: GraphFilterVisibility;
   onToggleFilter: (filter: GraphFilter) => void;
   showSingleFamilyTree: boolean;
   onShowSingleFamilyTreeChange: (next: boolean) => void;
 };
-
-const options: Array<{ value: FamilyViewStyle; label: string }> = [
-  { value: "generationTree", label: "Generation-based family tree" },
-  { value: "centeredRelationshipMap", label: "Centered relationship map" },
-  { value: "hybridTreeList", label: "Hybrid tree + list/search" },
-  { value: "cleaned3D", label: "Current 3D graph (cleaned up)" }
-];
 
 const legendItems: Array<{ label: string; color: string; filter: GraphFilter }> = [
   { label: "Parent/Child", color: relationshipStyleByKind.PARENT_CHILD.color, filter: "parentChild" },
@@ -26,9 +16,7 @@ const legendItems: Array<{ label: string; color: string; filter: GraphFilter }> 
   { label: "Pet", color: relationshipStyleByKind.PET.color, filter: "pets" }
 ];
 
-export const GraphViewModeSelector = ({
-  value,
-  onChange,
+export const GraphLayerControls = ({
   filterVisibility,
   onToggleFilter,
   showSingleFamilyTree,
@@ -36,18 +24,6 @@ export const GraphViewModeSelector = ({
 }: Props) => {
   return (
     <div className="graph-view-mode-selector">
-      <label htmlFor="graph-view-mode-select">View style</label>
-      <select
-        id="graph-view-mode-select"
-        value={value}
-        onChange={(event) => onChange(event.target.value as FamilyViewStyle)}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
       <div className="graph-layer-toggles" role="group" aria-label="Graph layer filters">
         <label>
           <input

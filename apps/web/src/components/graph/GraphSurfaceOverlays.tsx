@@ -1,9 +1,10 @@
 type Props = {
   isLoading: boolean;
   loadError: string | null;
+  isLayoutWorkerPending?: boolean;
 };
 
-export const GraphSurfaceOverlays = ({ isLoading, loadError }: Props) => {
+export const GraphSurfaceOverlays = ({ isLoading, loadError, isLayoutWorkerPending }: Props) => {
   return (
     <>
       {isLoading ? (
@@ -14,6 +15,11 @@ export const GraphSurfaceOverlays = ({ isLoading, loadError }: Props) => {
       {loadError ? (
         <div className="graph-overlay graph-overlay-error">
           <p>Failed to load graph: {loadError}</p>
+        </div>
+      ) : null}
+      {isLayoutWorkerPending ? (
+        <div className="graph-layout-updating-banner" role="status" aria-live="polite">
+          Updating layout…
         </div>
       ) : null}
     </>

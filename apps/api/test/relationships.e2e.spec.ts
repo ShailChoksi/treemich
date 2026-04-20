@@ -46,7 +46,6 @@ describe("Treemich API routes", () => {
     refreshEnabled: true,
     refreshIntervalDays: 7
   };
-  const defaultGraphLineRoutingStyle = "orthogonal";
   const defaultShowSingleFamilyTree = false;
   const authContext = {
     user: {
@@ -880,7 +879,6 @@ describe("Treemich API routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
-        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
@@ -908,8 +906,7 @@ describe("Treemich API routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
-        familyViewStyle: "centeredRelationshipMap",
-        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        familyViewStyle: "generationTree",
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         graphFilterVisibility: {
@@ -935,7 +932,6 @@ describe("Treemich API routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
-        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
@@ -965,14 +961,19 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...savedPrefs,
-        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        familyViewStyle: "generationTree",
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
-        data: { preferences: savedPrefs },
+        data: {
+          preferences: expect.objectContaining({
+            familyViewStyle: "generationTree",
+            graphFilterVisibility: savedPrefs.graphFilterVisibility
+          })
+        },
         select: { preferences: true }
       });
     });
@@ -1004,14 +1005,19 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...merged,
-        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
+        familyViewStyle: "generationTree",
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
-        data: { preferences: merged },
+        data: {
+          preferences: expect.objectContaining({
+            familyViewStyle: "generationTree",
+            graphFilterVisibility: existing.graphFilterVisibility
+          })
+        },
         select: { preferences: true }
       });
     });
@@ -1040,47 +1046,8 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       const json = response.json();
       expect(json.graphFilterVisibility).toEqual(existingFilters);
-      expect(json.familyViewStyle).toBe("hybridTreeList");
-      expect(json.graphLineRoutingStyle).toBe(defaultGraphLineRoutingStyle);
+      expect(json.familyViewStyle).toBe("generationTree");
       expect(json.showSingleFamilyTree).toBe(defaultShowSingleFamilyTree);
-    });
-
-    it("accepts and persists graphLineRoutingStyle preference", async () => {
-      const existing = {
-        familyViewStyle: "generationTree",
-        graphFilterVisibility: {
-          parentChild: true,
-          spouse: true,
-          sibling: true,
-          friends: true,
-          pets: true
-        }
-      };
-      const merged = {
-        ...existing,
-        graphLineRoutingStyle: "direct"
-      };
-      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: existing });
-      treemichUserUpdateMock.mockResolvedValueOnce({ preferences: merged });
-
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/user/preferences",
-        payload: { graphLineRoutingStyle: "direct" }
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({
-        ...merged,
-        showSingleFamilyTree: defaultShowSingleFamilyTree,
-        primaryFamilyUnitByPersonId: {},
-        cooccurrence: defaultCooccurrencePreferences
-      });
-      expect(treemichUserUpdateMock).toHaveBeenCalledWith({
-        where: { id: "user-1" },
-        data: { preferences: merged },
-        select: { preferences: true }
-      });
     });
 
     it("persists dismissed suggestion keys alongside existing preferences", async () => {
@@ -1110,7 +1077,6 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...merged,
-        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
@@ -1154,7 +1120,6 @@ describe("Treemich API routes", () => {
       expect(setResponse.statusCode).toBe(200);
       expect(setResponse.json()).toEqual({
         ...merged,
-        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
@@ -1177,7 +1142,6 @@ describe("Treemich API routes", () => {
       expect(clearResponse.statusCode).toBe(200);
       expect(clearResponse.json()).toEqual({
         ...cleared,
-        graphLineRoutingStyle: defaultGraphLineRoutingStyle,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences

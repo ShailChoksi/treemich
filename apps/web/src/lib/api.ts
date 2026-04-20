@@ -8,7 +8,6 @@ import type {
   LinkStatus,
   PhotoCluster,
   PhotoCooccurrenceEdge,
-  PhotoCooccurrenceResponse,
   RelationshipRecord,
   RelationshipType,
   SearchRelationshipsResponse,
@@ -24,7 +23,6 @@ export type {
   LinkStatus,
   PhotoCluster,
   PhotoCooccurrenceEdge,
-  PhotoCooccurrenceResponse,
   RelationshipRecord,
   RelationshipType,
   SearchRelationshipsResponse,
@@ -332,24 +330,6 @@ export const getRelationships = async (): Promise<RelationshipRecord[]> => {
   }
 
   return all;
-};
-
-export const getPhotoCooccurrence = async (options?: {
-  minSharedPhotos?: number;
-  minScore?: number;
-}): Promise<PhotoCooccurrenceResponse> => {
-  const query = new URLSearchParams({
-    minSharedPhotos: String(Math.max(1, Math.trunc(options?.minSharedPhotos ?? 2))),
-    minScore: String(Math.max(0, Math.min(1, options?.minScore ?? 0))),
-    t: String(Date.now())
-  });
-
-  const response = await fetchWithRetry(`${treemichApi}/people/cooccurrence?${query.toString()}`, {
-    cache: "no-store"
-  });
-  await ensureOk(response, `Failed to load co-occurrence graph (${response.status})`);
-
-  return (await response.json()) as PhotoCooccurrenceResponse;
 };
 
 export const computeGraphLayout = async (payload: GraphLayoutRequest): Promise<GraphLayoutResponse> => {

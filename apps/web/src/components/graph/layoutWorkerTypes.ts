@@ -1,5 +1,5 @@
 import type { ImmichPerson, PhotoCluster, RelationshipRecord } from "../../lib/api";
-import type { FamilyViewStyle, GraphLayoutMode, NodePosition } from "./layout";
+import type { GraphLayoutMode, NodePosition } from "./layout";
 
 export type LayoutWorkerPayload = {
   people: ImmichPerson[];
@@ -7,8 +7,6 @@ export type LayoutWorkerPayload = {
   options?: {
     mode?: GraphLayoutMode;
     photoClusters?: PhotoCluster[];
-    familyViewStyle?: FamilyViewStyle;
-    selectedPersonId?: string | null;
     primaryFamilyUnitByPersonId?: Record<string, string>;
   };
 };

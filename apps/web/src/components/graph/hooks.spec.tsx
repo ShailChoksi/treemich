@@ -7,12 +7,11 @@ import { type NodePosition } from "./layout";
 import * as layout from "./layout";
 import * as layoutWorkerClient from "./layoutWorkerClient";
 import { defaultGraphFilterVisibility } from "./relationshipStyles";
+import { createLayoutStateHookProps } from "./hooksTestFixtures";
 import {
   filterRelationshipsByLayer,
   pickNearest,
   pickSingleFamilyTreeIds,
-  resolveSelectedPersonForLayout,
-  routeRelationshipSegment,
   useGraphLayoutState
 } from "./useGraphLayoutState";
 import {
@@ -20,7 +19,7 @@ import {
   getNextKeyboardTraversal,
   resolveKeyboardDirection
 } from "./useGraphKeyboardNavigation";
-import { getFocusCameraPoseForStyle } from "./useGraphCameraControls";
+import { getFocusCameraPose } from "./useGraphCameraControls";
 import { findPersonBySearchTerm, resolveFocusPersonRequest } from "./useGraphSearch";
 import { shouldRenderDetailedNode, shouldUseLargeGraphTier } from "./scene/AnimatedNodes";
 import { shouldSkipNodeAnimationFrame } from "./scene/useAnimatedNodeTransforms";
@@ -79,28 +78,20 @@ describe("useGraphLayoutState", () => {
     let visibleIds: string[] = [];
 
     const Probe = () => {
-      const state = useGraphLayoutState({
-        people: [
-          { id: "a", name: "Alpha", hasRelationship: true },
-          { id: "b", name: "Beta", hasRelationship: true },
-          { id: "c", name: "Charlie", hasRelationship: false }
-        ],
-        relationships: [{ fromPersonId: "a", toPersonId: "b", type: "SIBLING_OF" }],
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: true,
-        singleFamilyTreeAnchorId: "a",
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: "a",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        renderLimit: 50
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people: [
+            { id: "a", name: "Alpha", hasRelationship: true },
+            { id: "b", name: "Beta", hasRelationship: true },
+            { id: "c", name: "Charlie", hasRelationship: false }
+          ],
+          relationships: [{ fromPersonId: "a", toPersonId: "b", type: "SIBLING_OF" }],
+          showSingleFamilyTree: true,
+          singleFamilyTreeAnchorId: "a",
+          selectedPersonId: "a",
+          renderLimit: 50
+        })
+      );
       visibleIds = state.displayVisiblePeople.map((item) => item.person.id).sort();
       return null;
     };
@@ -125,27 +116,19 @@ describe("useGraphLayoutState", () => {
     let visibleIds: string[] = [];
 
     const Probe = () => {
-      const state = useGraphLayoutState({
-        people: [
-          { id: "a", name: "Alpha", hasRelationship: true },
-          { id: "b", name: "Beta", hasRelationship: true }
-        ],
-        relationships: [{ fromPersonId: "a", toPersonId: "b", type: "SIBLING_OF" }],
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: true,
-        singleFamilyTreeAnchorId: "a",
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: "a",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        renderLimit: 50
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people: [
+            { id: "a", name: "Alpha", hasRelationship: true },
+            { id: "b", name: "Beta", hasRelationship: true }
+          ],
+          relationships: [{ fromPersonId: "a", toPersonId: "b", type: "SIBLING_OF" }],
+          showSingleFamilyTree: true,
+          singleFamilyTreeAnchorId: "a",
+          selectedPersonId: "a",
+          renderLimit: 50
+        })
+      );
       visibleIds = state.displayVisiblePeople.map((item) => item.person.id).sort();
       return null;
     };
@@ -179,24 +162,14 @@ describe("useGraphLayoutState", () => {
     const relationships = [{ fromPersonId: "person-0", toPersonId: "person-1", type: "SIBLING_OF" as const }];
 
     const Probe = () => {
-      const state = useGraphLayoutState({
-        people,
-        relationships,
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: false,
-        singleFamilyTreeAnchorId: null,
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: "person-0",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        renderLimit: 120
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships,
+          selectedPersonId: "person-0",
+          renderLimit: 120
+        })
+      );
       visibleCount = state.displayVisiblePeople.length;
       return null;
     };
@@ -243,24 +216,14 @@ describe("useGraphLayoutState", () => {
     ];
 
     const Probe = ({ people }: { people: ImmichPerson[] }) => {
-      const state = useGraphLayoutState({
-        people,
-        relationships: baseRelationships,
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: false,
-        singleFamilyTreeAnchorId: null,
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: "anchor",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        renderLimit: 120
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships: baseRelationships,
+          selectedPersonId: "anchor",
+          renderLimit: 120
+        })
+      );
       anchorX = state.visiblePositionsById.get("anchor")?.[0] ?? anchorX;
       return null;
     };
@@ -307,24 +270,14 @@ describe("useGraphLayoutState", () => {
     const relationships = [{ fromPersonId: "person-0", toPersonId: "person-1", type: "SIBLING_OF" as const }];
 
     const Probe = () => {
-      const state = useGraphLayoutState({
-        people,
-        relationships,
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: false,
-        singleFamilyTreeAnchorId: null,
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: "person-0",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        renderLimit: 120
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships,
+          selectedPersonId: "person-0",
+          renderLimit: 120
+        })
+      );
       visibleCount = state.displayVisiblePeople.length;
       return null;
     };
@@ -364,24 +317,14 @@ describe("useGraphLayoutState", () => {
     const relationshipsB = [{ fromPersonId: "person-0", toPersonId: "person-2", type: "PARENT_OF" as const }];
 
     const Probe = ({ relationships }: { relationships: typeof relationshipsA }) => {
-      const state = useGraphLayoutState({
-        people,
-        relationships,
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: false,
-        singleFamilyTreeAnchorId: null,
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: "person-0",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        renderLimit: 120
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships,
+          selectedPersonId: "person-0",
+          renderLimit: 120
+        })
+      );
       visibleCount = state.displayVisiblePeople.length;
       return null;
     };
@@ -419,24 +362,14 @@ describe("useGraphLayoutState", () => {
     const relationships = [{ fromPersonId: "person-0", toPersonId: "person-1", type: "SIBLING_OF" as const }];
 
     const Probe = () => {
-      const state = useGraphLayoutState({
-        people,
-        relationships,
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: false,
-        singleFamilyTreeAnchorId: null,
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: "person-279",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        renderLimit: 120
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships,
+          selectedPersonId: "person-279",
+          renderLimit: 120
+        })
+      );
       visibleIds = state.displayVisiblePeople.map((item) => item.person.id);
       return null;
     };
@@ -477,33 +410,23 @@ describe("useGraphLayoutState", () => {
       relationships: [],
       viewMode: "family",
       familyViewStyle: "generationTree",
-      selectedPersonId: null,
+      selectedPersonId: "person-0",
       primaryFamilyUnitByPersonId: {}
     });
     let anchorX = -1;
 
     const Probe = () => {
-      const state = useGraphLayoutState({
-        people,
-        relationships,
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: false,
-        singleFamilyTreeAnchorId: null,
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: "person-0",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        serverPositionsByPersonId,
-        serverLayoutRevision,
-        serverLayoutAlgorithmVersion: "server-hybrid-v1",
-        renderLimit: 120
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships,
+          selectedPersonId: "person-0",
+          serverPositionsByPersonId,
+          serverLayoutRevision,
+          serverLayoutAlgorithmVersion: "server-hybrid-v1",
+          renderLimit: 120
+        })
+      );
       anchorX = state.visiblePositionsById.get("person-0")?.[0] ?? anchorX;
       return null;
     };
@@ -537,27 +460,18 @@ describe("useGraphLayoutState", () => {
     ];
 
     const Probe = ({ friends }: { friends: boolean }) => {
-      useGraphLayoutState({
-        people,
-        relationships,
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: false,
-        singleFamilyTreeAnchorId: null,
-        filterVisibility: {
-          ...defaultGraphFilterVisibility,
-          friends
-        },
-        selectedPersonId: "p1",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        renderLimit: 120
-      });
+      useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships,
+          filterVisibility: {
+            ...defaultGraphFilterVisibility,
+            friends
+          },
+          selectedPersonId: "p1",
+          renderLimit: 120
+        })
+      );
       return null;
     };
 
@@ -588,25 +502,14 @@ describe("useGraphLayoutState", () => {
     const relationships = [{ fromPersonId: "p1", toPersonId: "p2", type: "SIBLING_OF" as const }];
 
     const Probe = ({ cameraX }: { cameraX: number }) => {
-      const state = useGraphLayoutState({
-        people,
-        relationships,
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: false,
-        singleFamilyTreeAnchorId: null,
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: null,
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        cameraPosition: [cameraX, 0, 0],
-        renderLimit: 120
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships,
+          cameraPosition: [cameraX, 0, 0],
+          renderLimit: 120
+        })
+      );
       renderIds = state.renderVisiblePeople.map((item) => item.person.id).sort();
       renderLineCount = state.renderVisibleRelationshipLines.length;
       return null;
@@ -635,33 +538,23 @@ describe("useGraphLayoutState", () => {
     let sameReference = false;
 
     const Probe = () => {
-      const state = useGraphLayoutState({
-        people: [
-          { id: "a", name: "Alpha", hasRelationship: true },
-          { id: "b", name: "Beta", hasRelationship: true },
-          { id: "c", name: "Gamma", hasRelationship: true }
-        ],
-        relationships: [
-          { fromPersonId: "a", toPersonId: "b", type: "SPOUSE_OF" },
-          { fromPersonId: "a", toPersonId: "c", type: "PARENT_OF" },
-          { fromPersonId: "b", toPersonId: "c", type: "PARENT_OF" }
-        ],
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: false,
-        singleFamilyTreeAnchorId: null,
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: "a",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        renderLimit: 120,
-        cameraPosition: [300, 0, 0]
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people: [
+            { id: "a", name: "Alpha", hasRelationship: true },
+            { id: "b", name: "Beta", hasRelationship: true },
+            { id: "c", name: "Gamma", hasRelationship: true }
+          ],
+          relationships: [
+            { fromPersonId: "a", toPersonId: "b", type: "SPOUSE_OF" },
+            { fromPersonId: "a", toPersonId: "c", type: "PARENT_OF" },
+            { fromPersonId: "b", toPersonId: "c", type: "PARENT_OF" }
+          ],
+          selectedPersonId: "a",
+          renderLimit: 120,
+          cameraPosition: [300, 0, 0]
+        })
+      );
       sameReference = state.visibleRelationshipLines === state.renderVisibleRelationshipLines;
       return null;
     };
@@ -683,25 +576,14 @@ describe("useGraphLayoutState", () => {
     let renderIds: string[] = [];
 
     const Probe = () => {
-      const state = useGraphLayoutState({
-        people: [{ id: "selected", name: "Selected", hasRelationship: true }],
-        relationships: [],
-        photoEdges: [],
-        photoClusters: [],
-        viewMode: "family",
-        familyViewStyle: "generationTree",
-        graphLineRoutingStyle: "direct",
-        primaryFamilyUnitByPersonId: {},
-        showSingleFamilyTree: false,
-        singleFamilyTreeAnchorId: null,
-        filterVisibility: defaultGraphFilterVisibility,
-        selectedPersonId: "selected",
-        hoveredPersonId: null,
-        focusPersonId: null,
-        pinnedPersonId: null,
-        cameraPosition: [500, 0, 0],
-        renderLimit: 120
-      });
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people: [{ id: "selected", name: "Selected", hasRelationship: true }],
+          selectedPersonId: "selected",
+          cameraPosition: [500, 0, 0],
+          renderLimit: 120
+        })
+      );
       renderIds = state.renderVisiblePeople.map((item) => item.person.id);
       return null;
     };
@@ -745,44 +627,6 @@ describe("pickSingleFamilyTreeIds", () => {
   it("returns selected person when graph has no relationships", () => {
     const ids = pickSingleFamilyTreeIds([], "solo");
     expect(ids).toEqual(new Set(["solo"]));
-  });
-});
-
-describe("routeRelationshipSegment", () => {
-  it("routes generation-tree parent-child links as direct segments", () => {
-    const points = routeRelationshipSegment([0, 8, 0], [6, 0, 3], "PARENT_CHILD", "generationTree");
-    expect(points).toEqual([
-      [0, 8, 0],
-      [6, 0, 3]
-    ]);
-  });
-
-  it("keeps non-parent-child links as direct segments", () => {
-    const points = routeRelationshipSegment([0, 1, 0], [6, 0, 3], "FRIEND", "generationTree");
-    expect(points).toEqual([
-      [0, 1, 0],
-      [6, 0, 3]
-    ]);
-  });
-
-  it("keeps parent-child links direct when routing style preference is direct", () => {
-    const points = routeRelationshipSegment([0, 8, 0], [6, 0, 3], "PARENT_CHILD", "generationTree", "direct");
-    expect(points).toEqual([
-      [0, 8, 0],
-      [6, 0, 3]
-    ]);
-  });
-});
-
-describe("resolveSelectedPersonForLayout", () => {
-  it("keeps selected person for focused layout styles", () => {
-    expect(resolveSelectedPersonForLayout("centeredRelationshipMap", "person-a")).toBe("person-a");
-    expect(resolveSelectedPersonForLayout("hybridTreeList", "person-a")).toBe("person-a");
-  });
-
-  it("drops selected person for layouts that do not consume it", () => {
-    expect(resolveSelectedPersonForLayout("generationTree", "person-a")).toBeNull();
-    expect(resolveSelectedPersonForLayout("cleaned3D", "person-a")).toBeNull();
   });
 });
 
@@ -1030,19 +874,11 @@ describe("animation loop helpers", () => {
 });
 
 describe("useGraphCameraControls helpers", () => {
-  it("builds a generation-tree focus pose around the target", () => {
-    const pose = getFocusCameraPoseForStyle([10, 4, -3], "generationTree");
+  it("builds a focus pose around the target", () => {
+    const pose = getFocusCameraPose([10, 4, -3]);
     expect(pose).toEqual({
       position: [10, 7.8, 4.4],
       target: [10, 4, -3]
-    });
-  });
-
-  it("builds a centered-relationship focus pose around the target", () => {
-    const pose = getFocusCameraPoseForStyle([2, -1, 5], "centeredRelationshipMap");
-    expect(pose).toEqual({
-      position: [7.4, 2.6, 11.2],
-      target: [2, -1, 5]
     });
   });
 });
