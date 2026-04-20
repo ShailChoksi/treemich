@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { PerspectiveCamera, Vector3 } from "three";
+import { Vector3, type PerspectiveCamera } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { FamilyViewStyle, NodePosition } from "./layout";
 
@@ -17,7 +17,28 @@ type UseGraphCameraControlsOptions = {
   cameraRef: React.MutableRefObject<PerspectiveCamera | null>;
   orbitControlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
   lastCameraSampleRef: React.MutableRefObject<Vector3>;
-  setCameraPosition: (position: NodePosition) => void;
+};
+
+export const getFocusCameraPoseForStyle = (
+  target: NodePosition,
+  familyViewStyle: FamilyViewStyle
+): { position: NodePosition; target: NodePosition } => {
+  if (familyViewStyle === "generationTree" || familyViewStyle === "hybridTreeList") {
+    return {
+      position: [target[0], target[1] + 3.8, target[2] + 7.4],
+      target
+    };
+  }
+  if (familyViewStyle === "centeredRelationshipMap") {
+    return {
+      position: [target[0] + 5.4, target[1] + 3.6, target[2] + 6.2],
+      target
+    };
+  }
+  return {
+    position: [target[0] + 7, target[1] + 4.8, target[2] + 8.2],
+    target
+  };
 };
 
 export const useGraphCameraControls = ({
@@ -30,8 +51,7 @@ export const useGraphCameraControls = ({
   familyViewStyle,
   cameraRef,
   orbitControlsRef,
-  lastCameraSampleRef,
-  setCameraPosition
+  lastCameraSampleRef
 }: UseGraphCameraControlsOptions) => {
   const applyCameraPose = useCallback(
     (position: NodePosition, target: NodePosition) => {
@@ -45,9 +65,8 @@ export const useGraphCameraControls = ({
       camera.updateProjectionMatrix();
       controls.update();
       lastCameraSampleRef.current.set(position[0], position[1], position[2]);
-      setCameraPosition(position);
     },
-    [cameraRef, lastCameraSampleRef, orbitControlsRef, setCameraPosition]
+    [cameraRef, lastCameraSampleRef, orbitControlsRef]
   );
 
   const frameAllNodes = useCallback(() => {
@@ -78,36 +97,27 @@ export const useGraphCameraControls = ({
     applyCameraPose([center[0] + distance * 0.55, center[1] + distance * 0.42, center[2] + distance], center);
   }, [applyCameraPose, familyViewStyle, graphBounds]);
 
+  const focusPersonById = useCallback(
+    (personId: string) => {
+      const target = visiblePositionsById.get(personId);
+      if (!target) {
+        frameAllNodes();
+        return;
+      }
+      const pose = getFocusCameraPoseForStyle(target, familyViewStyle);
+      applyCameraPose(pose.position, pose.target);
+    },
+    [applyCameraPose, familyViewStyle, frameAllNodes, visiblePositionsById]
+  );
+
   const focusActiveNode = useCallback(() => {
     const activeId = pinnedPersonId ?? hoveredPersonId ?? focusPersonId ?? selectedPersonId;
     if (!activeId) {
       frameAllNodes();
       return;
     }
-    const target = visiblePositionsById.get(activeId);
-    if (!target) {
-      frameAllNodes();
-      return;
-    }
-    if (familyViewStyle === "generationTree" || familyViewStyle === "hybridTreeList") {
-      applyCameraPose([target[0], target[1] + 3.8, target[2] + 7.4], target);
-      return;
-    }
-    if (familyViewStyle === "centeredRelationshipMap") {
-      applyCameraPose([target[0] + 5.4, target[1] + 3.6, target[2] + 6.2], target);
-      return;
-    }
-    applyCameraPose([target[0] + 7, target[1] + 4.8, target[2] + 8.2], target);
-  }, [
-    applyCameraPose,
-    familyViewStyle,
-    focusPersonId,
-    frameAllNodes,
-    hoveredPersonId,
-    pinnedPersonId,
-    selectedPersonId,
-    visiblePositionsById
-  ]);
+    focusPersonById(activeId);
+  }, [focusPersonById, focusPersonId, frameAllNodes, hoveredPersonId, pinnedPersonId, selectedPersonId]);
 
   const topDownView = useCallback(() => {
     if (!graphBounds) {
@@ -124,9 +134,48 @@ export const useGraphCameraControls = ({
     applyCameraPose([center[0], center[1] + topHeight, center[2] + 0.1], center);
   }, [applyCameraPose, graphBounds]);
 
+  const nudgeCamera = useCallback(
+    (forwardUnits: number, rightUnits: number) => {
+      if (forwardUnits === 0 && rightUnits === 0) {
+        return;
+      }
+
+      const camera = cameraRef.current;
+      const controls = orbitControlsRef.current;
+      if (!camera || !controls) {
+        return;
+      }
+
+      const step = 1.6;
+      const worldUp = new Vector3(0, 1, 0);
+      const viewDirection = controls.target.clone().sub(camera.position);
+      viewDirection.y = 0;
+      if (viewDirection.lengthSq() < 0.000001) {
+        viewDirection.set(0, 0, -1);
+      } else {
+        viewDirection.normalize();
+      }
+
+      const rightDirection = new Vector3().crossVectors(viewDirection, worldUp).normalize();
+      const delta = new Vector3()
+        .addScaledVector(viewDirection, forwardUnits * step)
+        .addScaledVector(rightDirection, rightUnits * step);
+
+      const nextPosition = camera.position.clone().add(delta);
+      const nextTarget = controls.target.clone().add(delta);
+      applyCameraPose(
+        [nextPosition.x, nextPosition.y, nextPosition.z],
+        [nextTarget.x, nextTarget.y, nextTarget.z]
+      );
+    },
+    [applyCameraPose, cameraRef, orbitControlsRef]
+  );
+
   return {
     frameAllNodes,
+    focusPersonById,
     focusActiveNode,
-    topDownView
+    topDownView,
+    nudgeCamera
   };
 };

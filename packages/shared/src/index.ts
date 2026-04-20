@@ -16,6 +16,8 @@ export type GenderValue = (typeof genderValues)[number];
 
 export const genderSchema = z.enum(genderValues);
 export const relationshipTypeSchema = z.enum(relationshipTypes);
+export const graphLayoutModeValues = ["family", "photo"] as const;
+export const graphLayoutModeSchema = z.enum(graphLayoutModeValues);
 
 export type ImmichPerson = {
   id: string;
@@ -28,12 +30,20 @@ export type TreemichPersonProfile = {
   immichPersonId: string;
   gender: GenderValue;
   birthDateOverride?: string | null;
+  givenName?: string | null;
+  surname?: string | null;
+  nicknames?: string | null;
+  deathDate?: string | null;
+  birthCity?: string | null;
+  birthCountry?: string | null;
 };
 
 export type RelationshipRecord = {
   fromPersonId: string;
   toPersonId: string;
   type: RelationshipType;
+  marriageAnniversaryDate?: string | null;
+  divorceDate?: string | null;
 };
 
 export type PhotoCooccurrenceEdge = {
@@ -150,6 +160,11 @@ export const familyViewStyleValues = [
   "cleaned3D"
 ] as const;
 export const familyViewStyleSchema = z.enum(familyViewStyleValues);
+export const graphLineRoutingStyleValues = ["orthogonal", "direct"] as const;
+export const graphLineRoutingStyleSchema = z.enum(graphLineRoutingStyleValues);
+export type GraphLineRoutingStyle = z.infer<typeof graphLineRoutingStyleSchema>;
+export const defaultGraphLineRoutingStyle: GraphLineRoutingStyle = "orthogonal";
+export const defaultShowSingleFamilyTree = false;
 
 export const cooccurrencePreferencesSchema = z.object({
   refreshEnabled: z.boolean(),
@@ -165,6 +180,10 @@ export const defaultCooccurrencePreferences: CooccurrencePreferences = {
 export const userPreferencesSchema = z.object({
   graphFilterVisibility: graphFilterVisibilitySchema.optional(),
   familyViewStyle: familyViewStyleSchema.optional(),
+  graphLineRoutingStyle: graphLineRoutingStyleSchema.optional(),
+  showSingleFamilyTree: z.boolean().optional(),
+  lastSelectedPersonId: z.string().nullable().optional(),
+  primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional(),
   dismissedSuggestions: z.array(z.string()).optional(),
   cooccurrence: cooccurrencePreferencesSchema.optional()
 });
@@ -172,3 +191,72 @@ export const userPreferencesSchema = z.object({
 export type GraphFilterVisibility = z.infer<typeof graphFilterVisibilitySchema>;
 export type FamilyViewStyle = z.infer<typeof familyViewStyleSchema>;
 export type UserPreferences = z.infer<typeof userPreferencesSchema>;
+export type GraphLayoutMode = z.infer<typeof graphLayoutModeSchema>;
+
+export const graphLayoutPersonInputSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1)
+});
+export const nodePositionSchema = z.tuple([z.number(), z.number(), z.number()]);
+export const graphLayoutRequestSchema = z.object({
+  people: z.array(graphLayoutPersonInputSchema),
+  relationships: z.array(
+    z.object({
+      fromPersonId: z.string().min(1),
+      toPersonId: z.string().min(1),
+      type: relationshipTypeSchema
+    })
+  ),
+  viewMode: graphLayoutModeSchema.default("family"),
+  familyViewStyle: familyViewStyleSchema.optional(),
+  selectedPersonId: z.string().nullable().optional(),
+  primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional()
+});
+export const graphLayoutResponseSchema = z.object({
+  layoutRevision: z.string().min(1),
+  algorithmVersion: z.string().min(1),
+  positionsByPersonId: z.record(z.string(), nodePositionSchema)
+});
+
+export type GraphLayoutRequest = z.infer<typeof graphLayoutRequestSchema>;
+export type GraphLayoutResponse = z.infer<typeof graphLayoutResponseSchema>;
+export type GraphLayoutPersonInput = z.infer<typeof graphLayoutPersonInputSchema>;
+export type NodePosition = z.infer<typeof nodePositionSchema>;
+
+const hashString = (input: string) => {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+};
+
+export const buildGraphLayoutRevision = (request: GraphLayoutRequest) => {
+  const peopleSignature = [...request.people]
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map((person) => `${person.id}:${person.name}`)
+    .join(",");
+  const relationshipSignature = [...request.relationships]
+    .sort((left, right) => {
+      const leftKey = `${left.fromPersonId}|${left.type}|${left.toPersonId}`;
+      const rightKey = `${right.fromPersonId}|${right.type}|${right.toPersonId}`;
+      return leftKey.localeCompare(rightKey);
+    })
+    .map((relationship) => `${relationship.fromPersonId}|${relationship.type}|${relationship.toPersonId}`)
+    .join(",");
+  const primaryFamilySignature = request.primaryFamilyUnitByPersonId
+    ? Object.entries(request.primaryFamilyUnitByPersonId)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([personId, unitKey]) => `${personId}:${unitKey}`)
+        .join(",")
+    : "";
+  return [
+    `mode=${request.viewMode}`,
+    `style=${request.familyViewStyle ?? ""}`,
+    `selected=${request.selectedPersonId ?? ""}`,
+    `people=${hashString(peopleSignature)}`,
+    `relationships=${hashString(relationshipSignature)}`,
+    `primary=${hashString(primaryFamilySignature)}`
+  ].join("|");
+};

@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType, UserPreferences } from "../lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  Gender,
+  GraphLayoutResponse,
+  ImmichPerson,
+  RelationshipRecord,
+  RelationshipType,
+  UserPreferences
+} from "../lib/api";
 import {
+  computeGraphLayout,
   createRelationship,
   deleteRelationship,
   getImmichPeople,
   getRelationships,
   getUserPreferences,
+  updateSpouseRelationshipDates,
   updatePersonProfile,
   updateUserPreferences
 } from "../lib/api";
@@ -44,19 +53,120 @@ const sortRelationshipsStable = (relationships: RelationshipRecord[]) =>
       left.type.localeCompare(right.type)
   );
 
-export const PeoplePage = () => {
+const normalizeName = (value: string | null | undefined) => value?.trim().toLocaleLowerCase() ?? "";
+
+const noRelationshipsGraphFilterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]> = {
+  parentChild: false,
+  spouse: false,
+  sibling: false,
+  friends: false,
+  pets: false
+};
+
+export const findBestPersonMatchByName = (
+  people: ImmichPerson[],
+  currentUserName: string | null | undefined
+) => {
+  const normalizedName = normalizeName(currentUserName);
+  if (!normalizedName) {
+    return null;
+  }
+
+  const exactMatches = people.filter((person) => normalizeName(person.name) === normalizedName);
+  if (exactMatches.length > 0) {
+    return [...exactMatches].sort(
+      (left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+    )[0];
+  }
+
+  const containsMatches = people.filter((person) => normalizeName(person.name).includes(normalizedName));
+  if (containsMatches.length > 0) {
+    return [...containsMatches].sort(
+      (left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+    )[0];
+  }
+
+  return null;
+};
+
+type ResolvePeopleSelectionOptions = {
+  people: ImmichPerson[];
+  relationships: RelationshipRecord[];
+  currentSelectedPersonId: string | null;
+  lastSelectedPersonId: string | null | undefined;
+  currentUserName: string | null | undefined;
+};
+
+export const resolvePeopleSelection = ({
+  people,
+  relationships,
+  currentSelectedPersonId,
+  lastSelectedPersonId,
+  currentUserName
+}: ResolvePeopleSelectionOptions) => {
+  const personIds = new Set(people.map((person) => person.id));
+  const hasRelationships = relationships.length > 0;
+
+  if (!hasRelationships) {
+    return {
+      selectedPersonId: null,
+      cameraFocusPersonId: findBestPersonMatchByName(people, currentUserName)?.id ?? null
+    };
+  }
+
+  if (currentSelectedPersonId && personIds.has(currentSelectedPersonId)) {
+    return {
+      selectedPersonId: currentSelectedPersonId,
+      cameraFocusPersonId: null
+    };
+  }
+
+  if (lastSelectedPersonId && personIds.has(lastSelectedPersonId)) {
+    return {
+      selectedPersonId: lastSelectedPersonId,
+      cameraFocusPersonId: lastSelectedPersonId
+    };
+  }
+
+  return {
+    selectedPersonId: people[0]?.id ?? null,
+    cameraFocusPersonId: null
+  };
+};
+
+type Props = {
+  immichBaseUrl?: string | null;
+  currentUserName?: string | null;
+};
+
+export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Props) => {
   const [people, setPeople] = useState<ImmichPerson[]>([]);
   const [relationships, setRelationships] = useState<RelationshipRecord[]>([]);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [graphFocusPersonId, setGraphFocusPersonId] = useState<string | null>(null);
+  const [graphCameraFocusPersonId, setGraphCameraFocusPersonId] = useState<string | null>(null);
   const [genderByPersonId, setGenderByPersonId] = useState<Record<string, Gender>>({});
   const [birthDateByPersonId, setBirthDateByPersonId] = useState<Record<string, string>>({});
+  const [givenNameByPersonId, setGivenNameByPersonId] = useState<Record<string, string>>({});
+  const [surnameByPersonId, setSurnameByPersonId] = useState<Record<string, string>>({});
+  const [nicknamesByPersonId, setNicknamesByPersonId] = useState<Record<string, string>>({});
+  const [deathDateByPersonId, setDeathDateByPersonId] = useState<Record<string, string>>({});
+  const [birthCityByPersonId, setBirthCityByPersonId] = useState<Record<string, string>>({});
+  const [birthCountryByPersonId, setBirthCountryByPersonId] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingRelationship, setIsSavingRelationship] = useState(false);
   const [savedPreferences, setSavedPreferences] = useState<UserPreferences | null>(null);
+  const [serverLayout, setServerLayout] = useState<GraphLayoutResponse | null>(null);
+  const selectedPersonIdRef = useRef<string | null>(null);
+  const lastPersistedSelectionRef = useRef<string | null>(null);
+  const layoutRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    selectedPersonIdRef.current = selectedPersonId;
+  }, [selectedPersonId]);
 
   const refreshGraphData = useCallback(async () => {
     setIsLoading(true);
@@ -84,14 +194,82 @@ export const PeoplePage = () => {
           return acc;
         }, {})
       );
-      setSelectedPersonId((current) => current ?? sortedPeople[0]?.id ?? null);
+      setGivenNameByPersonId(
+        sortedPeople.reduce<Record<string, string>>((acc, person) => {
+          acc[person.id] = person.profile?.givenName ?? "";
+          return acc;
+        }, {})
+      );
+      setSurnameByPersonId(
+        sortedPeople.reduce<Record<string, string>>((acc, person) => {
+          acc[person.id] = person.profile?.surname ?? "";
+          return acc;
+        }, {})
+      );
+      setNicknamesByPersonId(
+        sortedPeople.reduce<Record<string, string>>((acc, person) => {
+          acc[person.id] = person.profile?.nicknames ?? "";
+          return acc;
+        }, {})
+      );
+      setDeathDateByPersonId(
+        sortedPeople.reduce<Record<string, string>>((acc, person) => {
+          acc[person.id] = toDateInputValue(person.profile?.deathDate);
+          return acc;
+        }, {})
+      );
+      setBirthCityByPersonId(
+        sortedPeople.reduce<Record<string, string>>((acc, person) => {
+          acc[person.id] = person.profile?.birthCity ?? "";
+          return acc;
+        }, {})
+      );
+      setBirthCountryByPersonId(
+        sortedPeople.reduce<Record<string, string>>((acc, person) => {
+          acc[person.id] = person.profile?.birthCountry ?? "";
+          return acc;
+        }, {})
+      );
+      const nextSelection = resolvePeopleSelection({
+        people: sortedPeople,
+        relationships: sortedRelationships,
+        currentSelectedPersonId: selectedPersonIdRef.current,
+        lastSelectedPersonId: preferencesResponse.lastSelectedPersonId,
+        currentUserName
+      });
+      setSelectedPersonId(nextSelection.selectedPersonId);
+      setGraphCameraFocusPersonId(nextSelection.cameraFocusPersonId);
+
+      const layoutRequestId = layoutRequestIdRef.current + 1;
+      layoutRequestIdRef.current = layoutRequestId;
+      setServerLayout(null);
+      computeGraphLayout({
+        people: sortedPeople.map((person) => ({ id: person.id, name: person.name })),
+        relationships: sortedRelationships,
+        viewMode: "family",
+        familyViewStyle: preferencesResponse.familyViewStyle,
+        selectedPersonId: nextSelection.selectedPersonId,
+        primaryFamilyUnitByPersonId: preferencesResponse.primaryFamilyUnitByPersonId
+      })
+        .then((layout) => {
+          if (layoutRequestIdRef.current !== layoutRequestId) {
+            return;
+          }
+          setServerLayout(layout);
+        })
+        .catch(() => {
+          if (layoutRequestIdRef.current !== layoutRequestId) {
+            return;
+          }
+          setServerLayout(null);
+        });
     } catch (error: unknown) {
       setLoadError(getErrorMessage(error));
       throw error;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentUserName]);
 
   useEffect(() => {
     refreshGraphData().catch((error: unknown) => {
@@ -120,7 +298,10 @@ export const PeoplePage = () => {
       ...prefs,
       dismissedSuggestions: prefs.dismissedSuggestions ?? current?.dismissedSuggestions,
       familyViewStyle: prefs.familyViewStyle ?? current?.familyViewStyle,
-      graphFilterVisibility: prefs.graphFilterVisibility ?? current?.graphFilterVisibility
+      graphFilterVisibility: prefs.graphFilterVisibility ?? current?.graphFilterVisibility,
+      lastSelectedPersonId:
+        prefs.lastSelectedPersonId !== undefined ? prefs.lastSelectedPersonId : current?.lastSelectedPersonId,
+      primaryFamilyUnitByPersonId: prefs.primaryFamilyUnitByPersonId ?? current?.primaryFamilyUnitByPersonId
     }));
     updateUserPreferences(prefs)
       .then((nextPrefs) => {
@@ -128,6 +309,20 @@ export const PeoplePage = () => {
       })
       .catch(() => {});
   }, []);
+
+  const onPrimaryFamilyUnitChange = useCallback(
+    (personId: string, unitKey: string | null) => {
+      const current = savedPreferences?.primaryFamilyUnitByPersonId ?? {};
+      const next = { ...current };
+      if (!unitKey) {
+        delete next[personId];
+      } else {
+        next[personId] = unitKey;
+      }
+      onPreferencesChange({ primaryFamilyUnitByPersonId: next });
+    },
+    [onPreferencesChange, savedPreferences?.primaryFamilyUnitByPersonId]
+  );
 
   const onDismissSuggestion = useCallback(
     (suggestionKey: string) => {
@@ -141,6 +336,7 @@ export const PeoplePage = () => {
   );
 
   const clearGraphFocus = useCallback(() => setGraphFocusPersonId(null), []);
+  const clearGraphCameraFocus = useCallback(() => setGraphCameraFocusPersonId(null), []);
 
   const focusPersonInGraph = useCallback((personId: string) => {
     setGraphFocusPersonId(personId);
@@ -151,13 +347,29 @@ export const PeoplePage = () => {
     if (!selectedPerson) {
       return;
     }
+    const normalizeOptionalString = (value: string) => {
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    };
     const selectedGender = genderByPersonId[selectedPerson.id] ?? "UNKNOWN";
     const selectedBirthDate = birthDateByPersonId[selectedPerson.id] || null;
+    const selectedGivenName = normalizeOptionalString(givenNameByPersonId[selectedPerson.id] ?? "");
+    const selectedSurname = normalizeOptionalString(surnameByPersonId[selectedPerson.id] ?? "");
+    const selectedNicknames = normalizeOptionalString(nicknamesByPersonId[selectedPerson.id] ?? "");
+    const selectedDeathDate = deathDateByPersonId[selectedPerson.id] || null;
+    const selectedBirthCity = normalizeOptionalString(birthCityByPersonId[selectedPerson.id] ?? "");
+    const selectedBirthCountry = normalizeOptionalString(birthCountryByPersonId[selectedPerson.id] ?? "");
     setIsSavingProfile(true);
     try {
       const savedProfile = await updatePersonProfile(selectedPerson.id, {
         gender: selectedGender,
-        birthDate: selectedBirthDate
+        birthDate: selectedBirthDate,
+        givenName: selectedGivenName,
+        surname: selectedSurname,
+        nicknames: selectedNicknames,
+        deathDate: selectedDeathDate,
+        birthCity: selectedBirthCity,
+        birthCountry: selectedBirthCountry
       });
       setPeople((current) =>
         current.map((person) =>
@@ -174,13 +386,47 @@ export const PeoplePage = () => {
         ...current,
         [selectedPerson.id]: savedProfile.gender
       }));
+      setGivenNameByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: savedProfile.givenName ?? ""
+      }));
+      setSurnameByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: savedProfile.surname ?? ""
+      }));
+      setNicknamesByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: savedProfile.nicknames ?? ""
+      }));
+      setDeathDateByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: toDateInputValue(savedProfile.deathDate)
+      }));
+      setBirthCityByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: savedProfile.birthCity ?? ""
+      }));
+      setBirthCountryByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: savedProfile.birthCountry ?? ""
+      }));
       setStatus("Profile saved");
     } catch (error: unknown) {
       setStatus(getErrorMessage(error));
     } finally {
       setIsSavingProfile(false);
     }
-  }, [birthDateByPersonId, genderByPersonId, selectedPerson]);
+  }, [
+    birthCityByPersonId,
+    birthCountryByPersonId,
+    birthDateByPersonId,
+    deathDateByPersonId,
+    genderByPersonId,
+    givenNameByPersonId,
+    nicknamesByPersonId,
+    selectedPerson,
+    surnameByPersonId
+  ]);
 
   const onCreateRelationship = useCallback(
     async (sourcePersonId: string, targetPersonId: string, relationshipType: RelationshipType) => {
@@ -217,15 +463,35 @@ export const PeoplePage = () => {
   );
 
   const onUpdateExistingRelationship = useCallback(
-    async (relationship: RelationshipRecord, relatedPersonId: string, relationshipType: RelationshipType) => {
+    async (
+      relationship: RelationshipRecord,
+      relatedPersonId: string,
+      relationshipType: RelationshipType,
+      spouseDates?: {
+        marriageAnniversaryDate?: string | null;
+        divorceDate?: string | null;
+      }
+    ) => {
       if (!selectedPerson) {
         throw new Error("Select a person first.");
       }
 
       setIsSavingRelationship(true);
       try {
+        const relationshipTypeUnchanged = relationship.type === relationshipType;
+        if (relationshipTypeUnchanged && relationshipType === "SPOUSE_OF") {
+          await updateSpouseRelationshipDates(selectedPerson.id, relatedPersonId, spouseDates ?? {});
+          await refreshGraphData();
+          setStatus("Relationship updated");
+          return;
+        }
         await deleteRelationship(relationship.fromPersonId, relationship.toPersonId, relationship.type);
-        await createRelationship(selectedPerson.id, relatedPersonId, relationshipType);
+        await createRelationship(
+          selectedPerson.id,
+          relatedPersonId,
+          relationshipType,
+          relationshipType === "SPOUSE_OF" ? spouseDates : undefined
+        );
         await refreshGraphData();
         setStatus("Relationship updated");
       } catch (error: unknown) {
@@ -264,20 +530,135 @@ export const PeoplePage = () => {
     [selectedPerson]
   );
 
+  const handleGivenNameChange = useCallback(
+    (givenName: string) => {
+      if (!selectedPerson) {
+        return;
+      }
+      setGivenNameByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: givenName
+      }));
+    },
+    [selectedPerson]
+  );
+
+  const handleSurnameChange = useCallback(
+    (surname: string) => {
+      if (!selectedPerson) {
+        return;
+      }
+      setSurnameByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: surname
+      }));
+    },
+    [selectedPerson]
+  );
+
+  const handleNicknamesChange = useCallback(
+    (nicknames: string) => {
+      if (!selectedPerson) {
+        return;
+      }
+      setNicknamesByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: nicknames
+      }));
+    },
+    [selectedPerson]
+  );
+
+  const handleDeathDateChange = useCallback(
+    (deathDate: string) => {
+      if (!selectedPerson) {
+        return;
+      }
+      setDeathDateByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: deathDate
+      }));
+    },
+    [selectedPerson]
+  );
+
+  const handleBirthCityChange = useCallback(
+    (birthCity: string) => {
+      if (!selectedPerson) {
+        return;
+      }
+      setBirthCityByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: birthCity
+      }));
+    },
+    [selectedPerson]
+  );
+
+  const handleBirthCountryChange = useCallback(
+    (birthCountry: string) => {
+      if (!selectedPerson) {
+        return;
+      }
+      setBirthCountryByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: birthCountry
+      }));
+    },
+    [selectedPerson]
+  );
+
+  const hasRelationships = relationships.length > 0;
+
+  useEffect(() => {
+    if (!hasRelationships || !selectedPersonId) {
+      lastPersistedSelectionRef.current = null;
+      return;
+    }
+    if (!people.some((person) => person.id === selectedPersonId)) {
+      return;
+    }
+    if (savedPreferences?.lastSelectedPersonId === selectedPersonId) {
+      lastPersistedSelectionRef.current = selectedPersonId;
+      return;
+    }
+    if (lastPersistedSelectionRef.current === selectedPersonId) {
+      return;
+    }
+
+    lastPersistedSelectionRef.current = selectedPersonId;
+    onPreferencesChange({ lastSelectedPersonId: selectedPersonId });
+  }, [
+    hasRelationships,
+    onPreferencesChange,
+    people,
+    savedPreferences?.lastSelectedPersonId,
+    selectedPersonId
+  ]);
+
+  const noRelationshipsDefaultsEnabled = !hasRelationships && !savedPreferences?.graphFilterVisibility;
+
   return (
     <main className="people-layout">
       <section className="people-main-column">
         <PeopleGraph3D
           people={people}
           relationships={relationships}
+          serverPositionsByPersonId={serverLayout?.positionsByPersonId}
+          serverLayoutRevision={serverLayout?.layoutRevision ?? null}
+          serverLayoutAlgorithmVersion={serverLayout?.algorithmVersion ?? null}
           selectedPersonId={selectedPersonId}
           status={status}
           isLoading={isLoading}
           isSavingRelationship={isSavingRelationship}
           loadError={loadError}
           focusPersonRequest={graphFocusPersonId}
+          cameraFocusPersonRequest={graphCameraFocusPersonId}
+          noRelationshipsGraphFilterVisibility={noRelationshipsGraphFilterVisibility}
+          defaultToNoRelationshipsGraphState={noRelationshipsDefaultsEnabled}
           savedPreferences={savedPreferences}
           onFocusPersonConsumed={clearGraphFocus}
+          onCameraFocusPersonConsumed={clearGraphCameraFocus}
           onSelectedPersonChange={setSelectedPersonId}
           onCreateRelationship={onCreateRelationship}
           onPreferencesChange={onPreferencesChange}
@@ -295,6 +676,18 @@ export const PeoplePage = () => {
           onGenderChange={handleGenderChange}
           birthDateValue={selectedPerson ? (birthDateByPersonId[selectedPerson.id] ?? "") : ""}
           onBirthDateChange={handleBirthDateChange}
+          givenNameValue={selectedPerson ? (givenNameByPersonId[selectedPerson.id] ?? "") : ""}
+          surnameValue={selectedPerson ? (surnameByPersonId[selectedPerson.id] ?? "") : ""}
+          nicknamesValue={selectedPerson ? (nicknamesByPersonId[selectedPerson.id] ?? "") : ""}
+          deathDateValue={selectedPerson ? (deathDateByPersonId[selectedPerson.id] ?? "") : ""}
+          birthCityValue={selectedPerson ? (birthCityByPersonId[selectedPerson.id] ?? "") : ""}
+          birthCountryValue={selectedPerson ? (birthCountryByPersonId[selectedPerson.id] ?? "") : ""}
+          onGivenNameChange={handleGivenNameChange}
+          onSurnameChange={handleSurnameChange}
+          onNicknamesChange={handleNicknamesChange}
+          onDeathDateChange={handleDeathDateChange}
+          onBirthCityChange={handleBirthCityChange}
+          onBirthCountryChange={handleBirthCountryChange}
           onProfileSave={onProfileSave}
           isSavingProfile={isSavingProfile}
           onFocusPerson={focusPersonInGraph}
@@ -303,6 +696,9 @@ export const PeoplePage = () => {
           onDeleteRelationship={onDeleteExistingRelationship}
           onDismissSuggestion={onDismissSuggestion}
           isSavingRelationship={isSavingRelationship}
+          immichBaseUrl={immichBaseUrl}
+          primaryFamilyUnitByPersonId={savedPreferences?.primaryFamilyUnitByPersonId ?? {}}
+          onPrimaryFamilyUnitChange={onPrimaryFamilyUnitChange}
         />
       </aside>
     </main>

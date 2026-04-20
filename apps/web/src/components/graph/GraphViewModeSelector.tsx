@@ -7,6 +7,8 @@ type Props = {
   onChange: (next: FamilyViewStyle) => void;
   filterVisibility: GraphFilterVisibility;
   onToggleFilter: (filter: GraphFilter) => void;
+  showSingleFamilyTree: boolean;
+  onShowSingleFamilyTreeChange: (next: boolean) => void;
 };
 
 const options: Array<{ value: FamilyViewStyle; label: string }> = [
@@ -24,7 +26,14 @@ const legendItems: Array<{ label: string; color: string; filter: GraphFilter }> 
   { label: "Pet", color: relationshipStyleByKind.PET.color, filter: "pets" }
 ];
 
-export const GraphViewModeSelector = ({ value, onChange, filterVisibility, onToggleFilter }: Props) => {
+export const GraphViewModeSelector = ({
+  value,
+  onChange,
+  filterVisibility,
+  onToggleFilter,
+  showSingleFamilyTree,
+  onShowSingleFamilyTreeChange
+}: Props) => {
   return (
     <div className="graph-view-mode-selector">
       <label htmlFor="graph-view-mode-select">View style</label>
@@ -77,6 +86,14 @@ export const GraphViewModeSelector = ({ value, onChange, filterVisibility, onTog
           Pets
         </label>
       </div>
+      <label className="graph-single-tree-toggle">
+        <input
+          type="checkbox"
+          checked={showSingleFamilyTree}
+          onChange={(event) => onShowSingleFamilyTreeChange(event.target.checked)}
+        />
+        Show only one family tree
+      </label>
       <div className="graph-edge-legend" role="list" aria-label="Relationship color legend">
         {legendItems.map((item) => (
           <span

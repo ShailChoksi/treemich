@@ -22,7 +22,22 @@ export type InterpreterIntent =
   | "FIND_NIECES"
   | "FIND_NEPHEWS"
   | "FIND_COUSINS"
-  | "FIND_SECOND_COUSINS";
+  | "FIND_SECOND_COUSINS"
+  | "FIND_PARENTS_IN_LAW"
+  | "FIND_FATHER_IN_LAW"
+  | "FIND_MOTHER_IN_LAW"
+  | "FIND_CHILDREN_IN_LAW"
+  | "FIND_SON_IN_LAW"
+  | "FIND_DAUGHTER_IN_LAW"
+  | "FIND_SIBLINGS_IN_LAW"
+  | "FIND_BROTHER_IN_LAW"
+  | "FIND_SISTER_IN_LAW"
+  | "FIND_GRANDPARENTS_IN_LAW"
+  | "FIND_GRANDFATHER_IN_LAW"
+  | "FIND_GRANDMOTHER_IN_LAW"
+  | "FIND_UNCLES_IN_LAW"
+  | "FIND_AUNTS_IN_LAW"
+  | "FIND_COUSINS_IN_LAW";
 
 export type AgeFilter =
   | { kind: "minAge"; years: number }
@@ -157,6 +172,93 @@ const matchers: MatcherEntry[] = [
     pattern: /^second cousins? of (.+)$/i,
     intent: "FIND_SECOND_COUSINS",
     hops: ["PARENT_OF", "PARENT_OF", "SIBLING_OF", "CHILD_OF", "CHILD_OF"]
+  },
+
+  // --- in-laws ---
+  {
+    pattern: /^father(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_FATHER_IN_LAW",
+    hops: ["SPOUSE_OF", "PARENT_OF"],
+    requiredGender: "MALE"
+  },
+  {
+    pattern: /^mother(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_MOTHER_IN_LAW",
+    hops: ["SPOUSE_OF", "PARENT_OF"],
+    requiredGender: "FEMALE"
+  },
+  {
+    pattern: /^parents?(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_PARENTS_IN_LAW",
+    hops: ["SPOUSE_OF", "PARENT_OF"]
+  },
+  {
+    pattern: /^sons?(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_SON_IN_LAW",
+    hops: ["CHILD_OF", "SPOUSE_OF"],
+    requiredGender: "MALE"
+  },
+  {
+    pattern: /^daughters?(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_DAUGHTER_IN_LAW",
+    hops: ["CHILD_OF", "SPOUSE_OF"],
+    requiredGender: "FEMALE"
+  },
+  {
+    pattern: /^children(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_CHILDREN_IN_LAW",
+    hops: ["CHILD_OF", "SPOUSE_OF"]
+  },
+  {
+    pattern: /^brothers?(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_BROTHER_IN_LAW",
+    hops: ["SPOUSE_OF", "SIBLING_OF"],
+    requiredGender: "MALE"
+  },
+  {
+    pattern: /^sisters?(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_SISTER_IN_LAW",
+    hops: ["SPOUSE_OF", "SIBLING_OF"],
+    requiredGender: "FEMALE"
+  },
+  {
+    pattern: /^siblings?(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_SIBLINGS_IN_LAW",
+    hops: ["SPOUSE_OF", "SIBLING_OF"]
+  },
+  {
+    pattern: /^grandfather(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_GRANDFATHER_IN_LAW",
+    hops: ["SPOUSE_OF", "PARENT_OF", "PARENT_OF"],
+    requiredGender: "MALE"
+  },
+  {
+    pattern: /^grandmother(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_GRANDMOTHER_IN_LAW",
+    hops: ["SPOUSE_OF", "PARENT_OF", "PARENT_OF"],
+    requiredGender: "FEMALE"
+  },
+  {
+    pattern: /^grandparents?(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_GRANDPARENTS_IN_LAW",
+    hops: ["SPOUSE_OF", "PARENT_OF", "PARENT_OF"]
+  },
+  {
+    pattern: /^uncles?(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_UNCLES_IN_LAW",
+    hops: ["SPOUSE_OF", "PARENT_OF", "SIBLING_OF"],
+    requiredGender: "MALE"
+  },
+  {
+    pattern: /^aunts?(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_AUNTS_IN_LAW",
+    hops: ["SPOUSE_OF", "PARENT_OF", "SIBLING_OF"],
+    requiredGender: "FEMALE"
+  },
+  {
+    pattern: /^cousins?(?:-|\s)+in(?:-|\s)+law of (.+)$/i,
+    intent: "FIND_COUSINS_IN_LAW",
+    hops: ["SPOUSE_OF", "PARENT_OF", "SIBLING_OF", "CHILD_OF"]
   }
 ];
 
@@ -232,6 +334,10 @@ const SUPPORTED_QUERIES = [
   "uncle/aunt of NAME",
   "nephew/niece of NAME",
   "cousin/first cousin/second cousin of NAME",
+  "mother/father/parents-in-law of NAME",
+  "brother/sister/siblings-in-law of NAME",
+  "son/daughter/children-in-law of NAME",
+  "grandparents-in-law / uncle/aunt-in-law / cousins-in-law of NAME",
   "NAME's uncle/sister/cousins (possessive form)",
   "Prefix with male/female for gender filter",
   "Suffix with age filter: older than N, under N, born in YYYY, etc."

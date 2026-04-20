@@ -1,5 +1,7 @@
 import {
   defaultCooccurrencePreferences,
+  defaultGraphLineRoutingStyle,
+  defaultShowSingleFamilyTree,
   userPreferencesSchema,
   type CooccurrencePreferences,
   type UserPreferences
@@ -24,6 +26,9 @@ export const withUserPreferenceDefaults = (
 
   return {
     ...parsed,
+    graphLineRoutingStyle: parsed.graphLineRoutingStyle ?? defaultGraphLineRoutingStyle,
+    showSingleFamilyTree: parsed.showSingleFamilyTree ?? defaultShowSingleFamilyTree,
+    primaryFamilyUnitByPersonId: parsed.primaryFamilyUnitByPersonId ?? {},
     cooccurrence: getCooccurrencePreferences(parsed)
   };
 };
@@ -36,6 +41,13 @@ export const mergeUserPreferences = (
   ...incoming,
   graphFilterVisibility: incoming.graphFilterVisibility ?? current.graphFilterVisibility,
   familyViewStyle: incoming.familyViewStyle ?? current.familyViewStyle,
+  graphLineRoutingStyle: incoming.graphLineRoutingStyle ?? current.graphLineRoutingStyle,
+  showSingleFamilyTree: incoming.showSingleFamilyTree ?? current.showSingleFamilyTree,
+  lastSelectedPersonId:
+    incoming.lastSelectedPersonId !== undefined
+      ? incoming.lastSelectedPersonId
+      : current.lastSelectedPersonId,
+  primaryFamilyUnitByPersonId: incoming.primaryFamilyUnitByPersonId ?? current.primaryFamilyUnitByPersonId,
   dismissedSuggestions: incoming.dismissedSuggestions ?? current.dismissedSuggestions,
   cooccurrence: incoming.cooccurrence ?? current.cooccurrence
 });

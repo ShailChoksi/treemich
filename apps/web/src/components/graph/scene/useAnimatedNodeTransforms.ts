@@ -10,11 +10,28 @@ type DisplayPositionEntry = {
 
 type UseAnimatedNodeTransformsOptions = {
   displayPositions: DisplayPositionEntry[];
+  prioritizedPersonIds?: Set<string>;
+  reduceWorkForLargeGraph?: boolean;
 };
 
-export const useAnimatedNodeTransforms = ({ displayPositions }: UseAnimatedNodeTransformsOptions) => {
+export const shouldSkipNodeAnimationFrame = ({
+  reduceWorkForLargeGraph,
+  isPriorityNode,
+  frameTick
+}: {
+  reduceWorkForLargeGraph: boolean;
+  isPriorityNode: boolean;
+  frameTick: number;
+}) => reduceWorkForLargeGraph && !isPriorityNode && frameTick % 2 !== 0;
+
+export const useAnimatedNodeTransforms = ({
+  displayPositions,
+  prioritizedPersonIds,
+  reduceWorkForLargeGraph = false
+}: UseAnimatedNodeTransformsOptions) => {
   const groupRefsByPersonIdRef = useRef(new Map<string, Group>());
   const targetPositionByPersonIdRef = useRef(new Map<string, Vector3>());
+  const frameTickRef = useRef(0);
 
   useEffect(() => {
     const nextIds = new Set(displayPositions.map((entry) => entry.personId));
@@ -44,17 +61,38 @@ export const useAnimatedNodeTransforms = ({ displayPositions }: UseAnimatedNodeT
   }, [displayPositions]);
 
   useFrame((_, delta) => {
+    frameTickRef.current += 1;
+    const frameTick = frameTickRef.current;
     const alpha = 1 - Math.exp(-delta * 9);
+    const snappedDistanceSq = 0.000064;
     for (const [personId, group] of groupRefsByPersonIdRef.current) {
       const target = targetPositionByPersonIdRef.current.get(personId);
       if (!target) {
+        continue;
+      }
+      const isPriorityNode = prioritizedPersonIds?.has(personId) ?? false;
+      if (
+        shouldSkipNodeAnimationFrame({
+          reduceWorkForLargeGraph,
+          isPriorityNode,
+          frameTick
+        })
+      ) {
         continue;
       }
       if (group.position.lengthSq() === 0) {
         group.position.copy(target);
         continue;
       }
-      group.position.lerp(target, alpha);
+      const distanceSq = group.position.distanceToSquared(target);
+      if (distanceSq <= snappedDistanceSq) {
+        if (distanceSq > 0) {
+          group.position.copy(target);
+        }
+        continue;
+      }
+      const appliedAlpha = reduceWorkForLargeGraph && !isPriorityNode ? Math.min(alpha, 0.22) : alpha;
+      group.position.lerp(target, appliedAlpha);
     }
   });
 

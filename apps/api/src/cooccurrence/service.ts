@@ -45,6 +45,20 @@ const toErrorMessage = (error: unknown) => (error instanceof Error ? error.messa
 
 const toIsoStringOrNull = (value?: Date | null) => value?.toISOString() ?? null;
 
+const isMissingCooccurrenceScheduleTableError = (error: unknown) => {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return false;
+  }
+
+  const prismaError = error as { code?: unknown; meta?: unknown };
+  if (prismaError.code !== "P2021") {
+    return false;
+  }
+
+  const table = (prismaError.meta as { table?: unknown } | undefined)?.table;
+  return table === "public.CooccurrenceSchedule";
+};
+
 const buildScheduleInfo = (
   schedule: { enabled: boolean; intervalDays: number; nextRunAt: Date; lastRunAt: Date | null } | null,
   preferences: ReturnType<typeof getCooccurrencePreferences>
@@ -338,25 +352,32 @@ export class CooccurrenceService {
   }
 
   async getDueSchedules(now = this.now(), limit = 25) {
-    return this.prismaClient.cooccurrenceSchedule.findMany({
-      where: {
-        enabled: true,
-        nextRunAt: {
-          lte: now
-        }
-      },
-      include: {
-        user: {
-          include: {
-            linkedAccount: true
+    try {
+      return await this.prismaClient.cooccurrenceSchedule.findMany({
+        where: {
+          enabled: true,
+          nextRunAt: {
+            lte: now
           }
-        }
-      },
-      orderBy: {
-        nextRunAt: "asc"
-      },
-      take: limit
-    });
+        },
+        include: {
+          user: {
+            include: {
+              linkedAccount: true
+            }
+          }
+        },
+        orderBy: {
+          nextRunAt: "asc"
+        },
+        take: limit
+      });
+    } catch (error) {
+      if (isMissingCooccurrenceScheduleTableError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async getStatus(userId: string): Promise<CooccurrenceJobResponse> {

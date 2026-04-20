@@ -4,7 +4,12 @@ export type NodePosition = [number, number, number];
 export type GraphLayoutMode = "family" | "photo";
 export type FamilyViewStyle = "generationTree" | "centeredRelationshipMap" | "hybridTreeList" | "cleaned3D";
 export const defaultFamilyViewStyle: FamilyViewStyle = "generationTree";
-export type ParentChildEdge = { parentId: string; childId: string };
+type ParentChildEdge = { parentId: string; childId: string };
+export type DirectionalNeighborBuckets = {
+  up: string[];
+  down: string[];
+  side: string[];
+};
 type SpousePair = { firstPersonId: string; secondPersonId: string };
 type SiblingPair = { firstPersonId: string; secondPersonId: string };
 
@@ -96,10 +101,57 @@ export const buildParentChildIndex = (relationships: RelationshipRecord[]) => {
   };
 };
 
-const deriveSpousePairs = (relationships: RelationshipRecord[]) => {
+export const buildDirectionalNeighborBuckets = (
+  selectedPersonId: string,
+  relationships: RelationshipRecord[]
+): DirectionalNeighborBuckets => {
+  const up = new Set<string>();
+  const down = new Set<string>();
+  const side = new Set<string>();
+
+  for (const relationship of relationships) {
+    if (relationship.type === "PARENT_OF") {
+      if (relationship.toPersonId === selectedPersonId) {
+        up.add(relationship.fromPersonId);
+      } else if (relationship.fromPersonId === selectedPersonId) {
+        down.add(relationship.toPersonId);
+      }
+      continue;
+    }
+
+    if (relationship.type === "CHILD_OF") {
+      if (relationship.fromPersonId === selectedPersonId) {
+        up.add(relationship.toPersonId);
+      } else if (relationship.toPersonId === selectedPersonId) {
+        down.add(relationship.fromPersonId);
+      }
+      continue;
+    }
+
+    if (relationship.fromPersonId === selectedPersonId && relationship.toPersonId !== selectedPersonId) {
+      side.add(relationship.toPersonId);
+      continue;
+    }
+
+    if (relationship.toPersonId === selectedPersonId && relationship.fromPersonId !== selectedPersonId) {
+      side.add(relationship.fromPersonId);
+    }
+  }
+
+  return {
+    up: [...up],
+    down: [...down],
+    side: [...side]
+  };
+};
+
+const derivePairsByType = (
+  relationships: RelationshipRecord[],
+  relationshipType: "SPOUSE_OF" | "SIBLING_OF"
+) => {
   const pairs = new Map<string, SpousePair>();
   for (const relationship of relationships) {
-    if (relationship.type !== "SPOUSE_OF") {
+    if (relationship.type !== relationshipType) {
       continue;
     }
     const firstPersonId =
@@ -118,54 +170,11 @@ const deriveSpousePairs = (relationships: RelationshipRecord[]) => {
   return [...pairs.values()];
 };
 
-const deriveSiblingPairs = (relationships: RelationshipRecord[]) => {
-  const pairs = new Map<string, SiblingPair>();
-  for (const relationship of relationships) {
-    if (relationship.type !== "SIBLING_OF") {
-      continue;
-    }
-    const firstPersonId =
-      relationship.fromPersonId < relationship.toPersonId
-        ? relationship.fromPersonId
-        : relationship.toPersonId;
-    const secondPersonId =
-      relationship.fromPersonId < relationship.toPersonId
-        ? relationship.toPersonId
-        : relationship.fromPersonId;
-    if (!firstPersonId || !secondPersonId) {
-      continue;
-    }
-    pairs.set(`${firstPersonId}|${secondPersonId}`, { firstPersonId, secondPersonId });
-  }
-  return [...pairs.values()];
-};
+const deriveSpousePairs = (relationships: RelationshipRecord[]) =>
+  derivePairsByType(relationships, "SPOUSE_OF");
 
-const indexPairsByPerson = <TPair extends { firstPersonId: string; secondPersonId: string }>(
-  pairs: TPair[]
-) => {
-  const byPerson = new Map<string, TPair[]>();
-  for (const pair of pairs) {
-    const firstList = byPerson.get(pair.firstPersonId);
-    if (firstList) {
-      firstList.push(pair);
-    } else {
-      byPerson.set(pair.firstPersonId, [pair]);
-    }
-
-    const secondList = byPerson.get(pair.secondPersonId);
-    if (secondList) {
-      secondList.push(pair);
-    } else {
-      byPerson.set(pair.secondPersonId, [pair]);
-    }
-  }
-  return byPerson;
-};
-
-const canonicalPairKey = (firstPersonId: string, secondPersonId: string) =>
-  firstPersonId < secondPersonId
-    ? `${firstPersonId}|${secondPersonId}`
-    : `${secondPersonId}|${firstPersonId}`;
+const deriveSiblingPairs = (relationships: RelationshipRecord[]) =>
+  derivePairsByType(relationships, "SIBLING_OF");
 
 const collectConnectedComponents = (undirected: Map<string, Set<string>>) => {
   const components: string[][] = [];
@@ -320,31 +329,6 @@ const sortPersonIdsByName = (ids: Iterable<string>, peopleById: Map<string, Immi
     personNameById(peopleById, left).localeCompare(personNameById(peopleById, right))
   );
 
-const pickPrimaryParent = (
-  parentIds: string[],
-  depthById: Map<string, number>,
-  peopleById: Map<string, ImmichPerson>
-) => {
-  let selectedParentId: string | null = null;
-  let selectedDepth = Number.NEGATIVE_INFINITY;
-  for (const parentId of parentIds) {
-    const depth = depthById.get(parentId) ?? 0;
-    if (selectedParentId === null || depth > selectedDepth) {
-      selectedParentId = parentId;
-      selectedDepth = depth;
-      continue;
-    }
-    if (depth === selectedDepth && selectedParentId) {
-      const selectedName = personNameById(peopleById, selectedParentId);
-      const candidateName = personNameById(peopleById, parentId);
-      if (candidateName.localeCompare(selectedName) < 0) {
-        selectedParentId = parentId;
-      }
-    }
-  }
-  return selectedParentId;
-};
-
 const assignDepthsForComponent = (
   component: string[],
   componentSet: Set<string>,
@@ -431,289 +415,872 @@ const assignDepthsForComponent = (
   return depthById;
 };
 
-const buildPrimaryChildrenByParent = (
-  component: string[],
-  parentsByChild: Map<string, string[]>,
-  depthById: Map<string, number>,
-  peopleById: Map<string, ImmichPerson>
-) => {
-  const primaryChildrenByParent = new Map<string, string[]>();
-  for (const personId of component) {
-    primaryChildrenByParent.set(personId, []);
-  }
-  for (const childId of component) {
-    const parents = parentsByChild.get(childId) ?? [];
-    if (parents.length === 0) {
-      continue;
-    }
-    const selectedParent = pickPrimaryParent(parents, depthById, peopleById);
-    if (selectedParent) {
-      primaryChildrenByParent.get(selectedParent)?.push(childId);
-    }
-  }
-  for (const children of primaryChildrenByParent.values()) {
-    children.sort((a, b) => personNameById(peopleById, a).localeCompare(personNameById(peopleById, b)));
-  }
-  return primaryChildrenByParent;
-};
-
-const applySpouseAlignment = (
-  spousePairsInComponent: SpousePair[],
-  xById: Map<string, number>,
-  depthById: Map<string, number>,
-  peopleById: Map<string, ImmichPerson>,
-  spouseGap: number
-) => {
-  for (const pair of spousePairsInComponent) {
-    const firstX = xById.get(pair.firstPersonId);
-    const secondX = xById.get(pair.secondPersonId);
-    if (firstX === undefined || secondX === undefined) {
-      continue;
-    }
-
-    const firstDepth = depthById.get(pair.firstPersonId) ?? 0;
-    const secondDepth = depthById.get(pair.secondPersonId) ?? 0;
-    const sharedDepth = Math.max(firstDepth, secondDepth);
-    depthById.set(pair.firstPersonId, sharedDepth);
-    depthById.set(pair.secondPersonId, sharedDepth);
-
-    const midpoint = (firstX + secondX) / 2;
-    const firstName = personNameById(peopleById, pair.firstPersonId);
-    const secondName = personNameById(peopleById, pair.secondPersonId);
-    const [leftId, rightId] =
-      firstName.localeCompare(secondName) <= 0
-        ? [pair.firstPersonId, pair.secondPersonId]
-        : [pair.secondPersonId, pair.firstPersonId];
-    xById.set(leftId, midpoint - spouseGap / 2);
-    xById.set(rightId, midpoint + spouseGap / 2);
-  }
-};
-
-const buildSiblingAdjacency = (
-  component: string[],
+const normalizeParentChildDepths = (
   componentSet: Set<string>,
-  siblingPairsInComponent: SiblingPair[],
-  parentsInComponentByChild: Map<string, string[]>
+  parentChildEdges: ParentChildEdge[],
+  depthByPerson: Map<string, number>
 ) => {
-  const siblingAdjacency = new Map<string, Set<string>>();
-  for (const personId of component) {
-    siblingAdjacency.set(personId, new Set());
-  }
-  const connectSiblings = (firstPersonId: string, secondPersonId: string) => {
-    if (
-      !componentSet.has(firstPersonId) ||
-      !componentSet.has(secondPersonId) ||
-      firstPersonId === secondPersonId
-    ) {
-      return;
-    }
-    siblingAdjacency.get(firstPersonId)?.add(secondPersonId);
-    siblingAdjacency.get(secondPersonId)?.add(firstPersonId);
-  };
-
-  for (const pair of siblingPairsInComponent) {
-    connectSiblings(pair.firstPersonId, pair.secondPersonId);
-  }
-
-  const childrenByParentKey = new Map<string, string[]>();
-  for (const childId of component) {
-    const parents = parentsInComponentByChild.get(childId) ?? [];
-    if (parents.length === 0) {
-      continue;
-    }
-    const key = parents.join("|");
-    const siblings = childrenByParentKey.get(key);
-    if (siblings) {
-      siblings.push(childId);
-    } else {
-      childrenByParentKey.set(key, [childId]);
-    }
-  }
-  for (const siblings of childrenByParentKey.values()) {
-    for (let index = 0; index < siblings.length; index += 1) {
-      const firstSiblingId = siblings[index];
-      for (let nextIndex = index + 1; nextIndex < siblings.length; nextIndex += 1) {
-        const secondSiblingId = siblings[nextIndex];
-        if (!firstSiblingId || !secondSiblingId) {
-          continue;
-        }
-        connectSiblings(firstSiblingId, secondSiblingId);
-      }
-    }
-  }
-
-  return siblingAdjacency;
-};
-
-const alignSiblingDepths = (
-  component: string[],
-  siblingAdjacency: Map<string, Set<string>>,
-  depthById: Map<string, number>
-) => {
-  const depthAlignedSiblings = new Set<string>();
-  for (const startSiblingId of component) {
-    if (depthAlignedSiblings.has(startSiblingId)) {
-      continue;
-    }
-    const stack = [startSiblingId];
-    const siblingGroup: string[] = [];
-    depthAlignedSiblings.add(startSiblingId);
-    while (stack.length > 0) {
-      const currentSiblingId = stack.pop();
-      if (!currentSiblingId) {
+  const passLimit = Math.max(componentSet.size, 1);
+  for (let pass = 0; pass < passLimit; pass += 1) {
+    let changed = false;
+    for (const edge of parentChildEdges) {
+      if (!componentSet.has(edge.parentId) || !componentSet.has(edge.childId)) {
         continue;
       }
-      siblingGroup.push(currentSiblingId);
-      for (const adjacentSiblingId of siblingAdjacency.get(currentSiblingId) ?? []) {
-        if (depthAlignedSiblings.has(adjacentSiblingId)) {
-          continue;
-        }
-        depthAlignedSiblings.add(adjacentSiblingId);
-        stack.push(adjacentSiblingId);
-      }
-    }
-    if (siblingGroup.length < 2) {
-      continue;
-    }
-    const alignedDepth = Math.max(...siblingGroup.map((personId) => depthById.get(personId) ?? 0));
-    for (const siblingId of siblingGroup) {
-      depthById.set(siblingId, alignedDepth);
-    }
-  }
-};
-
-const applySameLevelSpacing = (
-  component: string[],
-  depthById: Map<string, number>,
-  xById: Map<string, number>,
-  peopleById: Map<string, ImmichPerson>,
-  minLevelGap: number
-) => {
-  const levelGroups = new Map<number, string[]>();
-  for (const personId of component) {
-    const depth = depthById.get(personId) ?? 0;
-    const peopleAtDepth = levelGroups.get(depth);
-    if (peopleAtDepth) {
-      peopleAtDepth.push(personId);
-    } else {
-      levelGroups.set(depth, [personId]);
-    }
-  }
-
-  for (const personIdsAtDepth of levelGroups.values()) {
-    const ordered = [...personIdsAtDepth].sort((leftId, rightId) => {
-      const xDelta = (xById.get(leftId) ?? 0) - (xById.get(rightId) ?? 0);
-      if (Math.abs(xDelta) > 0.0001) {
-        return xDelta;
-      }
-      const leftName = personNameById(peopleById, leftId);
-      const rightName = personNameById(peopleById, rightId);
-      return leftName.localeCompare(rightName);
-    });
-    let lastX: number | null = null;
-    for (const personId of ordered) {
-      const currentX = xById.get(personId) ?? 0;
-      if (lastX === null) {
-        xById.set(personId, currentX);
-        lastX = currentX;
+      const parentDepth = depthByPerson.get(edge.parentId) ?? 0;
+      const childDepth = depthByPerson.get(edge.childId) ?? 0;
+      const requiredChildDepth = parentDepth + 1;
+      if (childDepth >= requiredChildDepth) {
         continue;
       }
-      const nextX = Math.max(currentX, lastX + minLevelGap);
-      xById.set(personId, nextX);
-      lastX = nextX;
+      depthByPerson.set(edge.childId, requiredChildDepth);
+      changed = true;
+    }
+    if (!changed) {
+      break;
     }
   }
 };
 
-const shiftSubtree = (
-  rootId: string,
-  deltaX: number,
-  xById: Map<string, number>,
-  primaryChildrenByParent: Map<string, string[]>,
-  seen = new Set<string>()
-) => {
-  if (Math.abs(deltaX) < 0.001 || seen.has(rootId)) {
-    return;
-  }
-  seen.add(rootId);
-  xById.set(rootId, (xById.get(rootId) ?? 0) + deltaX);
-  for (const childId of primaryChildrenByParent.get(rootId) ?? []) {
-    shiftSubtree(childId, deltaX, xById, primaryChildrenByParent, seen);
-  }
-};
-
-const applySharedChildrenSpouseCentering = (
-  spousePairsInComponent: SpousePair[],
-  xById: Map<string, number>,
-  childrenByParent: Map<string, Set<string>>,
+// Ensures spouses and co-parents share a row, and cascades the change to every
+// descendant so a partner who married in does not pull the couple up to their
+// (rootless, depth-0) level.
+const alignCoupleDepths = (
   componentSet: Set<string>,
-  peopleById: Map<string, ImmichPerson>,
-  primaryChildrenByParent: Map<string, string[]>,
-  childGap: number
+  parentChildEdges: ParentChildEdge[],
+  spousePairs: SpousePair[],
+  parentsByChild: Map<string, Set<string>>,
+  depthByPerson: Map<string, number>
 ) => {
-  for (const pair of spousePairsInComponent) {
-    const firstX = xById.get(pair.firstPersonId);
-    const secondX = xById.get(pair.secondPersonId);
-    if (firstX === undefined || secondX === undefined) {
-      continue;
-    }
+  const passLimit = Math.max(componentSet.size, 1);
+  for (let pass = 0; pass < passLimit; pass += 1) {
+    let changed = false;
 
-    const midpoint = (firstX + secondX) / 2;
-    const firstChildren = childrenByParent.get(pair.firstPersonId) ?? new Set<string>();
-    const secondChildren = childrenByParent.get(pair.secondPersonId) ?? new Set<string>();
-    const sharedChildren = sortPersonIdsByName(
-      [...firstChildren].filter((childId) => secondChildren.has(childId) && componentSet.has(childId)),
-      peopleById
-    );
-
-    if (sharedChildren.length === 0) {
-      continue;
-    }
-
-    const startX = midpoint - ((sharedChildren.length - 1) * childGap) / 2;
-    sharedChildren.forEach((childId, index) => {
-      const targetX = startX + index * childGap;
-      const currentX = xById.get(childId) ?? targetX;
-      const deltaX = targetX - currentX;
-      shiftSubtree(childId, deltaX, xById, primaryChildrenByParent);
-    });
-  }
-};
-
-const collectComponentPairs = <TPair extends { firstPersonId: string; secondPersonId: string }>(
-  component: string[],
-  componentSet: Set<string>,
-  pairsByPerson: Map<string, TPair[]>
-) => {
-  const pairsByKey = new Map<string, TPair>();
-  for (const personId of component) {
-    const pairs = pairsByPerson.get(personId) ?? [];
-    for (const pair of pairs) {
+    for (const pair of spousePairs) {
       if (!componentSet.has(pair.firstPersonId) || !componentSet.has(pair.secondPersonId)) {
         continue;
       }
-      const key = canonicalPairKey(pair.firstPersonId, pair.secondPersonId);
-      if (!pairsByKey.has(key)) {
-        pairsByKey.set(key, pair);
+      const left = depthByPerson.get(pair.firstPersonId) ?? 0;
+      const right = depthByPerson.get(pair.secondPersonId) ?? 0;
+      const aligned = Math.max(left, right);
+      if (left !== aligned) {
+        depthByPerson.set(pair.firstPersonId, aligned);
+        changed = true;
+      }
+      if (right !== aligned) {
+        depthByPerson.set(pair.secondPersonId, aligned);
+        changed = true;
+      }
+    }
+
+    for (const parentIds of parentsByChild.values()) {
+      const inComponent = [...parentIds].filter((id) => componentSet.has(id));
+      if (inComponent.length < 2) {
+        continue;
+      }
+      const aligned = Math.max(...inComponent.map((id) => depthByPerson.get(id) ?? 0));
+      for (const parentId of inComponent) {
+        if ((depthByPerson.get(parentId) ?? 0) !== aligned) {
+          depthByPerson.set(parentId, aligned);
+          changed = true;
+        }
+      }
+    }
+
+    for (const edge of parentChildEdges) {
+      if (!componentSet.has(edge.parentId) || !componentSet.has(edge.childId)) {
+        continue;
+      }
+      const requiredChildDepth = (depthByPerson.get(edge.parentId) ?? 0) + 1;
+      if ((depthByPerson.get(edge.childId) ?? 0) < requiredChildDepth) {
+        depthByPerson.set(edge.childId, requiredChildDepth);
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      break;
+    }
+  }
+};
+
+// When one spouse has a much smaller ancestor/sibling side than their partner,
+// rotate that smaller side into a perpendicular plane. The minor spouse stays
+// where Buchheim placed them (anchored to the couple); everyone on their side
+// has their X-displacement collapsed and re-projected into Z, so the minor
+// family ends up tucked in front of or behind the major family instead of
+// stretching horizontally alongside it.
+//
+// This used to do two full component BFSes per spouse pair (O(P·V)), which
+// slowed layout noticeably on large graphs. The current implementation does
+// bounded ancestor walks plus memoized per-person "family side" closures, so
+// the total work is roughly O(V · avg_side) with an early-exit fast path for
+// the common case where a partner has no visible ancestors.
+const applyPerpendicularMinorSpouseBranches = (
+  component: string[],
+  spousePairs: SpousePair[],
+  parentsByChild: Map<string, Set<string>>,
+  childrenByParent: Map<string, Set<string>>,
+  positions: Map<string, NodePosition>
+) => {
+  if (component.length < 4) {
+    return;
+  }
+  const componentSet = new Set(component);
+  const spouseAdjacency = new Map<string, Set<string>>();
+  const pairsInComponent: SpousePair[] = [];
+  for (const pair of spousePairs) {
+    if (!componentSet.has(pair.firstPersonId) || !componentSet.has(pair.secondPersonId)) {
+      continue;
+    }
+    pairsInComponent.push(pair);
+    if (!spouseAdjacency.has(pair.firstPersonId)) {
+      spouseAdjacency.set(pair.firstPersonId, new Set());
+    }
+    if (!spouseAdjacency.has(pair.secondPersonId)) {
+      spouseAdjacency.set(pair.secondPersonId, new Set());
+    }
+    spouseAdjacency.get(pair.firstPersonId)?.add(pair.secondPersonId);
+    spouseAdjacency.get(pair.secondPersonId)?.add(pair.firstPersonId);
+  }
+  if (pairsInComponent.length === 0) {
+    return;
+  }
+
+  // Memoized ancestor closure (strictly upward through parent edges).
+  const ancestorsCache = new Map<string, Set<string>>();
+  const getAncestors = (personId: string): Set<string> => {
+    const cached = ancestorsCache.get(personId);
+    if (cached) {
+      return cached;
+    }
+    const result = new Set<string>();
+    const stack: string[] = [personId];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current) {
+        continue;
+      }
+      for (const parentId of parentsByChild.get(current) ?? []) {
+        if (!componentSet.has(parentId) || parentId === personId || result.has(parentId)) {
+          continue;
+        }
+        result.add(parentId);
+        stack.push(parentId);
+      }
+    }
+    ancestorsCache.set(personId, result);
+    return result;
+  };
+
+  // Memoized full "family side" for a person: ancestors, spouses of ancestors,
+  // and every descendant of those ancestors that isn't the person themselves
+  // (siblings, uncles/aunts, cousins, their kids, and so on). We purposely skip
+  // the person's own descendants — they belong to the couple, not to this side.
+  const sideCache = new Map<string, Set<string>>();
+  const getSide = (personId: string): Set<string> => {
+    const cached = sideCache.get(personId);
+    if (cached) {
+      return cached;
+    }
+    const ancestors = getAncestors(personId);
+    const side = new Set<string>([personId]);
+    for (const ancestorId of ancestors) {
+      side.add(ancestorId);
+    }
+    for (const ancestorId of ancestors) {
+      for (const spouseId of spouseAdjacency.get(ancestorId) ?? []) {
+        if (componentSet.has(spouseId)) {
+          side.add(spouseId);
+        }
+      }
+    }
+    const descendStack: string[] = [...ancestors];
+    while (descendStack.length > 0) {
+      const current = descendStack.pop();
+      if (!current) {
+        continue;
+      }
+      for (const childId of childrenByParent.get(current) ?? []) {
+        if (!componentSet.has(childId) || childId === personId || side.has(childId)) {
+          continue;
+        }
+        side.add(childId);
+        descendStack.push(childId);
+      }
+    }
+    // Pull in spouses of every non-anchor member (step-uncles, in-married
+    // aunts, etc.). Snapshot the set first so we don't mutate during iteration.
+    const snapshot = [...side];
+    for (const memberId of snapshot) {
+      if (memberId === personId) {
+        continue;
+      }
+      for (const spouseId of spouseAdjacency.get(memberId) ?? []) {
+        if (componentSet.has(spouseId)) {
+          side.add(spouseId);
+        }
+      }
+    }
+    sideCache.set(personId, side);
+    return side;
+  };
+
+  const sizeRatioThreshold = 1.5;
+  const collapseFactor = 0.35;
+  const zProjection = 1.6;
+  const minPerpendicularShift = 3.4;
+  const shiftedByOtherPair = new Set<string>();
+
+  for (const pair of pairsInComponent) {
+    // Fast reject: if either partner has no visible ancestors, there's nothing
+    // to rotate. This kicks out the vast majority of in-married spouses in a
+    // single map lookup each, avoiding the heavier "side" computation.
+    const ancestorsFirst = getAncestors(pair.firstPersonId);
+    if (ancestorsFirst.size === 0) {
+      continue;
+    }
+    const ancestorsSecond = getAncestors(pair.secondPersonId);
+    if (ancestorsSecond.size === 0) {
+      continue;
+    }
+
+    // Shared ancestor → the couple is a cousin-style marriage; leave them on
+    // the main plane.
+    let sharesAncestor = false;
+    const smallerAncestors = ancestorsFirst.size <= ancestorsSecond.size ? ancestorsFirst : ancestorsSecond;
+    const largerAncestors = smallerAncestors === ancestorsFirst ? ancestorsSecond : ancestorsFirst;
+    for (const ancestorId of smallerAncestors) {
+      if (largerAncestors.has(ancestorId)) {
+        sharesAncestor = true;
+        break;
+      }
+    }
+    if (sharesAncestor) {
+      continue;
+    }
+
+    const sideFirst = getSide(pair.firstPersonId);
+    const sideSecond = getSide(pair.secondPersonId);
+
+    // If the two full sides intermix (e.g., deeply tangled extended family),
+    // bail out rather than produce a messy rotation.
+    let overlapCount = 0;
+    const smallerSide = sideFirst.size <= sideSecond.size ? sideFirst : sideSecond;
+    const largerSide = smallerSide === sideFirst ? sideSecond : sideFirst;
+    for (const memberId of smallerSide) {
+      if (memberId !== pair.firstPersonId && memberId !== pair.secondPersonId && largerSide.has(memberId)) {
+        overlapCount += 1;
+        break;
+      }
+    }
+    if (overlapCount > 0) {
+      continue;
+    }
+
+    const firstCount = sideFirst.size;
+    const secondCount = sideSecond.size;
+    const minorIsFirst = firstCount < secondCount;
+    const minorCount = minorIsFirst ? firstCount : secondCount;
+    const majorCount = minorIsFirst ? secondCount : firstCount;
+    if (majorCount < minorCount * sizeRatioThreshold) {
+      continue;
+    }
+
+    const minorSpouseId = minorIsFirst ? pair.firstPersonId : pair.secondPersonId;
+    const majorSpouseId = minorIsFirst ? pair.secondPersonId : pair.firstPersonId;
+    const minorSide = minorIsFirst ? sideFirst : sideSecond;
+
+    let minorHasPrecedence = false;
+    for (const memberId of minorSide) {
+      if (memberId !== minorSpouseId && shiftedByOtherPair.has(memberId)) {
+        minorHasPrecedence = true;
+        break;
+      }
+    }
+    if (minorHasPrecedence) {
+      continue;
+    }
+
+    const anchor = positions.get(minorSpouseId);
+    const majorAnchor = positions.get(majorSpouseId);
+    if (!anchor || !majorAnchor) {
+      continue;
+    }
+    const anchorX = anchor[0];
+    const branchDirection = anchorX >= majorAnchor[0] ? 1 : -1;
+
+    for (const personId of minorSide) {
+      if (personId === minorSpouseId) {
+        continue;
+      }
+      const position = positions.get(personId);
+      if (!position) {
+        continue;
+      }
+      const [x, y, z] = position;
+      const dx = x - anchorX;
+      positions.set(personId, [
+        anchorX + dx * collapseFactor,
+        y,
+        z + dx * zProjection + branchDirection * minPerpendicularShift
+      ]);
+      shiftedByOtherPair.add(personId);
+    }
+  }
+};
+
+type ComponentBounds = {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+};
+
+const computeComponentBounds = (
+  component: string[],
+  positions: Map<string, NodePosition>
+): ComponentBounds => {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+
+  for (const personId of component) {
+    const position = positions.get(personId);
+    if (!position) {
+      continue;
+    }
+    minX = Math.min(minX, position[0]);
+    maxX = Math.max(maxX, position[0]);
+    minZ = Math.min(minZ, position[2]);
+    maxZ = Math.max(maxZ, position[2]);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minZ) || !Number.isFinite(maxZ)) {
+    return { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  }
+
+  return { minX, maxX, minZ, maxZ };
+};
+
+const separateOverlappingComponents = (components: string[][], positions: Map<string, NodePosition>) => {
+  if (components.length < 2) {
+    return;
+  }
+
+  const paddingX = 3.6;
+  const paddingZ = 4.4;
+  // The previous implementation recomputed every component's bounding box from
+  // scratch on every pair check and ran up to 5·C² passes. That's O(C⁴·V) in
+  // the worst case, which dominates layout time on graphs with many isolated
+  // families. We now cache per-component bounds, translate them in-place when
+  // a component shifts, and cap passes at a small constant — more than enough
+  // for convergence in practice because each pass monotonically pushes the
+  // "second" component of every overlapping pair away.
+  const boundsArray: ComponentBounds[] = components.map((component) =>
+    computeComponentBounds(component, positions)
+  );
+  const maxPasses = Math.min(24, components.length + 4);
+
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    let changed = false;
+    for (let firstIndex = 0; firstIndex < components.length; firstIndex += 1) {
+      const firstBounds = boundsArray[firstIndex];
+      if (!firstBounds) {
+        continue;
+      }
+      for (let secondIndex = firstIndex + 1; secondIndex < components.length; secondIndex += 1) {
+        const secondBounds = boundsArray[secondIndex];
+        if (!secondBounds) {
+          continue;
+        }
+
+        const overlapsX =
+          firstBounds.minX - paddingX < secondBounds.maxX && secondBounds.minX < firstBounds.maxX + paddingX;
+        const overlapsZ =
+          firstBounds.minZ - paddingZ < secondBounds.maxZ && secondBounds.minZ < firstBounds.maxZ + paddingZ;
+        if (!overlapsX || !overlapsZ) {
+          continue;
+        }
+
+        const firstCenterX = (firstBounds.minX + firstBounds.maxX) / 2;
+        const secondCenterX = (secondBounds.minX + secondBounds.maxX) / 2;
+        const firstCenterZ = (firstBounds.minZ + firstBounds.maxZ) / 2;
+        const secondCenterZ = (secondBounds.minZ + secondBounds.maxZ) / 2;
+
+        const shiftRight = firstBounds.maxX + paddingX - (secondBounds.minX - paddingX);
+        const shiftLeft = secondBounds.maxX + paddingX - (firstBounds.minX - paddingX);
+        const shiftForward = firstBounds.maxZ + paddingZ - (secondBounds.minZ - paddingZ);
+        const shiftBackward = secondBounds.maxZ + paddingZ - (firstBounds.minZ - paddingZ);
+
+        const shiftX = secondCenterX >= firstCenterX ? Math.max(0, shiftRight) : -Math.max(0, shiftLeft);
+        const shiftZ =
+          secondCenterZ >= firstCenterZ ? Math.max(0, shiftForward) : -Math.max(0, shiftBackward);
+
+        const preferX =
+          Math.abs(shiftX) <= Math.abs(shiftZ) ||
+          Math.abs(secondCenterX - firstCenterX) < Math.abs(secondCenterZ - firstCenterZ) * 0.8;
+        const appliedShiftX = preferX ? shiftX : 0;
+        const appliedShiftZ = preferX ? 0 : shiftZ;
+
+        if (appliedShiftX === 0 && appliedShiftZ === 0) {
+          continue;
+        }
+
+        const secondComponent = components[secondIndex] ?? [];
+        for (const personId of secondComponent) {
+          const position = positions.get(personId);
+          if (!position) {
+            continue;
+          }
+          positions.set(personId, [position[0] + appliedShiftX, position[1], position[2] + appliedShiftZ]);
+        }
+        boundsArray[secondIndex] = {
+          minX: secondBounds.minX + appliedShiftX,
+          maxX: secondBounds.maxX + appliedShiftX,
+          minZ: secondBounds.minZ + appliedShiftZ,
+          maxZ: secondBounds.maxZ + appliedShiftZ
+        };
+        changed = true;
+      }
+    }
+    if (!changed) {
+      break;
+    }
+  }
+};
+
+type FamilyUnit = {
+  key: string;
+  parentIds: string[];
+  childIds: Set<string>;
+};
+
+type BuchheimNode = {
+  id: string;
+  width: number;
+  children: BuchheimNode[];
+  parent: BuchheimNode | null;
+  number: number;
+  prelim: number;
+  mod: number;
+  change: number;
+  shift: number;
+  thread: BuchheimNode | null;
+  ancestor: BuchheimNode;
+  x: number;
+  y: number;
+};
+
+const familyUnitKeyFromParents = (parentIds: string[]) => [...parentIds].sort().join("|");
+
+const enumerateCandidateUnitKeys = (parentIds: string[], peopleById: Map<string, ImmichPerson>) => {
+  const sorted = sortPersonIdsByName(parentIds, peopleById);
+  if (sorted.length <= 1) {
+    return sorted.length === 1 ? [familyUnitKeyFromParents([sorted[0] as string])] : [];
+  }
+  if (sorted.length === 2) {
+    return [familyUnitKeyFromParents(sorted)];
+  }
+  const keys: string[] = [];
+  for (let firstIndex = 0; firstIndex < sorted.length; firstIndex += 1) {
+    const firstId = sorted[firstIndex];
+    if (!firstId) {
+      continue;
+    }
+    for (let secondIndex = firstIndex + 1; secondIndex < sorted.length; secondIndex += 1) {
+      const secondId = sorted[secondIndex];
+      if (!secondId) {
+        continue;
+      }
+      keys.push(familyUnitKeyFromParents([firstId, secondId]));
+    }
+  }
+  return keys;
+};
+
+const resolvePrimaryUnitByChild = (
+  component: string[],
+  parentsByChild: Map<string, Set<string>>,
+  peopleById: Map<string, ImmichPerson>,
+  primaryFamilyUnitByPersonId?: Record<string, string>
+) => {
+  const primaryByChild = new Map<string, string>();
+  for (const childId of component) {
+    const parentIds = [...(parentsByChild.get(childId) ?? [])].filter((parentId) => peopleById.has(parentId));
+    if (parentIds.length === 0) {
+      continue;
+    }
+    const candidates = enumerateCandidateUnitKeys(parentIds, peopleById);
+    if (candidates.length === 0) {
+      continue;
+    }
+    const preferred = primaryFamilyUnitByPersonId?.[childId];
+    if (preferred && candidates.includes(preferred)) {
+      primaryByChild.set(childId, preferred);
+      continue;
+    }
+    primaryByChild.set(childId, candidates[0] as string);
+  }
+  return primaryByChild;
+};
+
+const buildFamilyUnitsForComponent = (
+  component: string[],
+  parentsByChild: Map<string, Set<string>>,
+  spousePairs: SpousePair[],
+  peopleById: Map<string, ImmichPerson>,
+  primaryFamilyUnitByPersonId?: Record<string, string>
+) => {
+  const componentSet = new Set(component);
+  const primaryUnitByChild = resolvePrimaryUnitByChild(
+    component,
+    parentsByChild,
+    peopleById,
+    primaryFamilyUnitByPersonId
+  );
+  const unitsByKey = new Map<string, FamilyUnit>();
+  const ensureUnit = (key: string, parentIds: string[]) => {
+    const existing = unitsByKey.get(key);
+    if (existing) {
+      return existing;
+    }
+    const unit: FamilyUnit = {
+      key,
+      parentIds,
+      childIds: new Set()
+    };
+    unitsByKey.set(key, unit);
+    return unit;
+  };
+
+  for (const childId of component) {
+    const unitKey = primaryUnitByChild.get(childId);
+    if (!unitKey) {
+      continue;
+    }
+    const parentIds = unitKey.split("|").filter((id) => componentSet.has(id));
+    if (parentIds.length === 0) {
+      continue;
+    }
+    ensureUnit(unitKey, parentIds).childIds.add(childId);
+  }
+
+  for (const pair of spousePairs) {
+    if (!componentSet.has(pair.firstPersonId) || !componentSet.has(pair.secondPersonId)) {
+      continue;
+    }
+    const parentIds = sortPersonIdsByName([pair.firstPersonId, pair.secondPersonId], peopleById);
+    const key = familyUnitKeyFromParents(parentIds);
+    ensureUnit(key, parentIds);
+  }
+
+  const parentMembershipCount = new Map<string, number>();
+  for (const unit of unitsByKey.values()) {
+    for (const parentId of unit.parentIds) {
+      parentMembershipCount.set(parentId, (parentMembershipCount.get(parentId) ?? 0) + 1);
+    }
+  }
+  for (const personId of component) {
+    if ((parentMembershipCount.get(personId) ?? 0) > 0) {
+      continue;
+    }
+    const key = familyUnitKeyFromParents([personId]);
+    ensureUnit(key, [personId]);
+  }
+
+  return {
+    units: [...unitsByKey.values()],
+    primaryUnitByChild
+  };
+};
+
+const buildFamilyUnitTreeEdges = (units: FamilyUnit[], primaryUnitByChild: Map<string, string>) => {
+  const parentUnitKeysByPerson = new Map<string, string[]>();
+  for (const unit of units) {
+    for (const parentId of unit.parentIds) {
+      const list = parentUnitKeysByPerson.get(parentId);
+      if (list) {
+        list.push(unit.key);
+      } else {
+        parentUnitKeysByPerson.set(parentId, [unit.key]);
       }
     }
   }
-  return [...pairsByKey.values()];
+  const unitSet = new Set(units.map((unit) => unit.key));
+  const childrenByUnit = new Map<string, Set<string>>();
+  for (const unit of units) {
+    childrenByUnit.set(unit.key, new Set());
+  }
+  for (const [personId, parentUnitKey] of primaryUnitByChild.entries()) {
+    if (!unitSet.has(parentUnitKey)) {
+      continue;
+    }
+    for (const childParentUnitKey of parentUnitKeysByPerson.get(personId) ?? []) {
+      if (childParentUnitKey === parentUnitKey || !unitSet.has(childParentUnitKey)) {
+        continue;
+      }
+      childrenByUnit.get(parentUnitKey)?.add(childParentUnitKey);
+    }
+  }
+  return childrenByUnit;
+};
+
+const layoutFamilyUnitTree = (
+  units: FamilyUnit[],
+  childrenByUnit: Map<string, Set<string>>,
+  unitDepthByKey: Map<string, number>,
+  peopleById: Map<string, ImmichPerson>
+) => {
+  const personRadius = 0.72;
+  const coupleGap = 1.9;
+  const siblingSeparation = 0.9;
+  const subtreeSeparation = 1.5;
+  const widthForUnit = (unit: FamilyUnit) =>
+    unit.parentIds.length > 1 ? personRadius * 2 + coupleGap : personRadius * 2;
+
+  const nodeById = new Map<string, BuchheimNode>();
+  for (const unit of units) {
+    nodeById.set(unit.key, {
+      id: unit.key,
+      width: widthForUnit(unit),
+      children: [],
+      parent: null,
+      number: 1,
+      prelim: 0,
+      mod: 0,
+      change: 0,
+      shift: 0,
+      thread: null,
+      ancestor: null as unknown as BuchheimNode,
+      x: 0,
+      y: unitDepthByKey.get(unit.key) ?? 0
+    });
+  }
+  for (const node of nodeById.values()) {
+    node.ancestor = node;
+  }
+
+  const unitLabelByKey = new Map(
+    units.map((unit) => [unit.key, unit.parentIds.map((id) => personNameById(peopleById, id)).join(" & ")])
+  );
+  for (const [parentKey, childSet] of childrenByUnit.entries()) {
+    const parent = nodeById.get(parentKey);
+    if (!parent) {
+      continue;
+    }
+    const sortedChildren = [...childSet].sort((left, right) => {
+      const leftName = unitLabelByKey.get(left) ?? left;
+      const rightName = unitLabelByKey.get(right) ?? right;
+      return leftName.localeCompare(rightName);
+    });
+    sortedChildren.forEach((childKey, index) => {
+      const child = nodeById.get(childKey);
+      if (!child || child.parent) {
+        return;
+      }
+      child.parent = parent;
+      child.number = index + 1;
+      parent.children.push(child);
+    });
+  }
+
+  const roots = [...nodeById.values()].filter((node) => !node.parent);
+  if (roots.length === 0) {
+    roots.push(...nodeById.values());
+    roots.forEach((node, index) => {
+      node.number = index + 1;
+      node.parent = null;
+    });
+  }
+  roots
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .forEach((root, index) => {
+      root.number = index + 1;
+    });
+
+  const leftSibling = (node: BuchheimNode) => {
+    if (!node.parent) {
+      return null;
+    }
+    const siblings = node.parent.children;
+    const siblingIndex = siblings.indexOf(node);
+    if (siblingIndex <= 0) {
+      return null;
+    }
+    return siblings[siblingIndex - 1] ?? null;
+  };
+
+  const distance = (left: BuchheimNode, right: BuchheimNode) =>
+    left.width / 2 + right.width / 2 + (left.parent === right.parent ? siblingSeparation : subtreeSeparation);
+
+  const nextLeft = (node: BuchheimNode | null) => (node ? (node.children[0] ?? node.thread) : null);
+  const nextRight = (node: BuchheimNode | null) =>
+    node ? (node.children[node.children.length - 1] ?? node.thread) : null;
+  const moveSubtree = (left: BuchheimNode, right: BuchheimNode, shift: number) => {
+    const subtrees = right.number - left.number;
+    if (subtrees === 0) {
+      return;
+    }
+    right.change -= shift / subtrees;
+    right.shift += shift;
+    left.change += shift / subtrees;
+    right.prelim += shift;
+    right.mod += shift;
+  };
+  const executeShifts = (node: BuchheimNode) => {
+    let shift = 0;
+    let change = 0;
+    for (let index = node.children.length - 1; index >= 0; index -= 1) {
+      const child = node.children[index];
+      if (!child) {
+        continue;
+      }
+      child.prelim += shift;
+      child.mod += shift;
+      change += child.change;
+      shift += child.shift + change;
+    }
+  };
+  const ancestor = (leftInner: BuchheimNode, node: BuchheimNode, defaultAncestor: BuchheimNode) => {
+    if (!node.parent) {
+      return defaultAncestor;
+    }
+    return node.parent.children.includes(leftInner.ancestor) ? leftInner.ancestor : defaultAncestor;
+  };
+  const apportion = (node: BuchheimNode, defaultAncestor: BuchheimNode) => {
+    const sibling = leftSibling(node);
+    if (!sibling || !node.parent) {
+      return defaultAncestor;
+    }
+    let innerRight: BuchheimNode | null = node;
+    let outerRight: BuchheimNode | null = node;
+    let innerLeft: BuchheimNode | null = sibling;
+    let outerLeft: BuchheimNode | null = node.parent.children[0] ?? null;
+    let modInnerRight = innerRight.mod;
+    let modOuterRight = outerRight.mod;
+    let modInnerLeft = innerLeft.mod;
+    let modOuterLeft = outerLeft?.mod ?? 0;
+
+    while (nextRight(innerLeft) && nextLeft(innerRight)) {
+      innerLeft = nextRight(innerLeft);
+      innerRight = nextLeft(innerRight);
+      outerLeft = nextLeft(outerLeft);
+      outerRight = nextRight(outerRight);
+      if (!innerLeft || !innerRight || !outerRight) {
+        break;
+      }
+      outerRight.ancestor = node;
+      const shift =
+        innerLeft.prelim +
+        modInnerLeft -
+        (innerRight.prelim + modInnerRight) +
+        distance(innerLeft, innerRight);
+      if (shift > 0) {
+        moveSubtree(ancestor(innerLeft, node, defaultAncestor), node, shift);
+        modInnerRight += shift;
+        modOuterRight += shift;
+      }
+      modInnerLeft += innerLeft.mod;
+      modInnerRight += innerRight.mod;
+      modOuterLeft += outerLeft?.mod ?? 0;
+      modOuterRight += outerRight.mod;
+    }
+
+    if (nextRight(innerLeft) && !nextRight(outerRight) && outerRight) {
+      outerRight.thread = nextRight(innerLeft);
+      outerRight.mod += modInnerLeft - modOuterRight;
+    }
+    if (nextLeft(innerRight) && !nextLeft(outerLeft) && outerLeft) {
+      outerLeft.thread = nextLeft(innerRight);
+      outerLeft.mod += modInnerRight - modOuterLeft;
+      defaultAncestor = node;
+    }
+
+    return defaultAncestor;
+  };
+  const firstWalk = (node: BuchheimNode) => {
+    if (node.children.length === 0) {
+      const sibling = leftSibling(node);
+      node.prelim = sibling ? sibling.prelim + distance(sibling, node) : 0;
+      return;
+    }
+    let defaultAncestor = node.children[0] as BuchheimNode;
+    for (const child of node.children) {
+      firstWalk(child);
+      defaultAncestor = apportion(child, defaultAncestor);
+    }
+    executeShifts(node);
+    const first = node.children[0] as BuchheimNode;
+    const last = node.children[node.children.length - 1] as BuchheimNode;
+    const midpoint = (first.prelim + last.prelim) / 2;
+    const sibling = leftSibling(node);
+    if (sibling) {
+      node.prelim = sibling.prelim + distance(sibling, node);
+      node.mod = node.prelim - midpoint;
+    } else {
+      node.prelim = midpoint;
+    }
+  };
+  let minX = Number.POSITIVE_INFINITY;
+  const secondWalk = (node: BuchheimNode, modSum: number, depth: number) => {
+    node.x = node.prelim + modSum;
+    node.y = depth;
+    minX = Math.min(minX, node.x - node.width / 2);
+    for (const child of node.children) {
+      secondWalk(child, modSum + node.mod, depth + 1);
+    }
+  };
+  const thirdWalk = (node: BuchheimNode, shift: number) => {
+    node.x += shift;
+    for (const child of node.children) {
+      thirdWalk(child, shift);
+    }
+  };
+  const maxRightSpan = (node: BuchheimNode): number => {
+    let maxRight = node.x + node.width / 2;
+    for (const child of node.children) {
+      maxRight = Math.max(maxRight, maxRightSpan(child));
+    }
+    return maxRight;
+  };
+
+  let forestOffset = 0;
+  for (const root of roots) {
+    firstWalk(root);
+    secondWalk(root, forestOffset, unitDepthByKey.get(root.id) ?? 0);
+    if (minX < 0) {
+      thirdWalk(root, -minX + 0.5);
+    }
+    const span = Math.max(0, maxRightSpan(root));
+    forestOffset = span + 2.5;
+    minX = Number.POSITIVE_INFINITY;
+  }
+
+  const xByUnit = new Map<string, number>();
+  for (const node of nodeById.values()) {
+    xByUnit.set(node.id, node.x);
+  }
+  return xByUnit;
 };
 
 const buildTreePositions = (
   people: ImmichPerson[],
   parentChildEdges: ParentChildEdge[],
   spousePairs: SpousePair[],
-  siblingPairs: SiblingPair[]
+  _siblingPairs: SiblingPair[],
+  primaryFamilyUnitByPersonId?: Record<string, string>
 ) => {
+  void _siblingPairs;
   const peopleById = new Map(people.map((person) => [person.id, person]));
-  const spousePairsByPerson = indexPairsByPerson(spousePairs);
-  const siblingPairsByPerson = indexPairsByPerson(siblingPairs);
   const childrenByParent = new Map<string, Set<string>>();
   const parentsByChild = new Map<string, Set<string>>();
   const undirected = new Map<string, Set<string>>();
 
+  for (const person of people) {
+    undirected.set(person.id, undirected.get(person.id) ?? new Set());
+  }
   for (const edge of parentChildEdges) {
     if (!peopleById.has(edge.parentId) || !peopleById.has(edge.childId)) {
       continue;
@@ -722,31 +1289,28 @@ const buildTreePositions = (
       childrenByParent.set(edge.parentId, new Set());
     }
     childrenByParent.get(edge.parentId)?.add(edge.childId);
-
     if (!parentsByChild.has(edge.childId)) {
       parentsByChild.set(edge.childId, new Set());
     }
     parentsByChild.get(edge.childId)?.add(edge.parentId);
-
-    if (!undirected.has(edge.parentId)) {
-      undirected.set(edge.parentId, new Set());
-    }
-    if (!undirected.has(edge.childId)) {
-      undirected.set(edge.childId, new Set());
-    }
     undirected.get(edge.parentId)?.add(edge.childId);
     undirected.get(edge.childId)?.add(edge.parentId);
   }
+  for (const pair of spousePairs) {
+    if (!peopleById.has(pair.firstPersonId) || !peopleById.has(pair.secondPersonId)) {
+      continue;
+    }
+    undirected.get(pair.firstPersonId)?.add(pair.secondPersonId);
+    undirected.get(pair.secondPersonId)?.add(pair.firstPersonId);
+  }
 
   const components = collectConnectedComponents(undirected);
-
   const positions = new Map<string, NodePosition>();
-  const componentGapX = 8;
-  const componentGapZ = 10;
-  const componentCenterByIndex = buildComponentCenters(components, componentGapX, componentGapZ);
-  const levelSpacingX = 2.2;
+  const componentCenterByIndex = buildComponentCenters(components, 8, 10);
   const treeTopY = 7;
   const levelStepY = 3.2;
+  const levelSpacingX = 2.1;
+  const coupleGap = 1.8;
 
   components.forEach((component, componentIndex) => {
     const componentSet = new Set(component);
@@ -754,131 +1318,96 @@ const buildTreePositions = (
       const parents = parentsByChild.get(personId);
       return !parents || [...parents].every((parentId) => !componentSet.has(parentId));
     });
-    const rootIds = roots.length > 0 ? roots : [component[0]];
-
-    const depthById = assignDepthsForComponent(
+    const depthByPerson = assignDepthsForComponent(
       component,
       componentSet,
-      rootIds,
+      roots.length > 0 ? roots : [component[0]],
       childrenByParent,
       parentsByChild
     );
-
-    const parentsInComponentByChild = new Map<string, string[]>();
-    for (const childId of component) {
-      const parents = sortPersonIdsByName(
-        [...(parentsByChild.get(childId) ?? [])].filter((parentId) => componentSet.has(parentId)),
-        peopleById
-      );
-      parentsInComponentByChild.set(childId, parents);
-    }
-
-    const primaryChildrenByParent = buildPrimaryChildrenByParent(
+    normalizeParentChildDepths(componentSet, parentChildEdges, depthByPerson);
+    alignCoupleDepths(componentSet, parentChildEdges, spousePairs, parentsByChild, depthByPerson);
+    const { units, primaryUnitByChild } = buildFamilyUnitsForComponent(
       component,
-      parentsInComponentByChild,
-      depthById,
-      peopleById
+      parentsByChild,
+      spousePairs,
+      peopleById,
+      primaryFamilyUnitByPersonId
     );
+    const unitDepthByKey = new Map<string, number>();
+    for (const unit of units) {
+      const depthCandidates = unit.parentIds.map((parentId) => depthByPerson.get(parentId) ?? 0);
+      unitDepthByKey.set(unit.key, depthCandidates.length > 0 ? Math.max(...depthCandidates) : 0);
+    }
+    const unitChildren = buildFamilyUnitTreeEdges(units, primaryUnitByChild);
+    const unitXByKey = layoutFamilyUnitTree(units, unitChildren, unitDepthByKey, peopleById);
+    const memberUnitsByPerson = new Map<string, FamilyUnit[]>();
+    for (const unit of units) {
+      for (const parentId of unit.parentIds) {
+        const list = memberUnitsByPerson.get(parentId);
+        if (list) {
+          list.push(unit);
+        } else {
+          memberUnitsByPerson.set(parentId, [unit]);
+        }
+      }
+    }
+    const sortedMemberUnitsByPerson = new Map<string, FamilyUnit[]>();
+    for (const [personId, memberUnits] of memberUnitsByPerson.entries()) {
+      sortedMemberUnitsByPerson.set(
+        personId,
+        [...memberUnits].sort((left, right) => {
+          const leftDepth = unitDepthByKey.get(left.key) ?? 0;
+          const rightDepth = unitDepthByKey.get(right.key) ?? 0;
+          if (leftDepth !== rightDepth) {
+            return leftDepth - rightDepth;
+          }
+          return left.key.localeCompare(right.key);
+        })
+      );
+    }
+    const parentOrderByUnitKey = new Map<string, string[]>();
+    for (const unit of units) {
+      parentOrderByUnitKey.set(unit.key, sortPersonIdsByName(unit.parentIds, peopleById));
+    }
 
     const [componentCenterX, , componentCenterZ] = componentCenterByIndex.get(componentIndex) ?? [0, 0, 0];
-    const widthMemo = new Map<string, number>();
-    const computing = new Set<string>();
-    const subtreeWidth = (personId: string): number => {
-      if (widthMemo.has(personId)) {
-        return widthMemo.get(personId) ?? 1;
-      }
-      if (computing.has(personId)) {
-        return 1;
-      }
-      computing.add(personId);
-      const children = primaryChildrenByParent.get(personId) ?? [];
-      const width =
-        children.length === 0 ? 1 : children.reduce((total, childId) => total + subtreeWidth(childId), 0);
-      computing.delete(personId);
-      widthMemo.set(personId, width);
-      return width;
-    };
-
-    const xById = new Map<string, number>();
-    const placeSubtree = (personId: string, leftUnit: number) => {
-      const children = primaryChildrenByParent.get(personId) ?? [];
-      if (children.length === 0) {
-        xById.set(personId, leftUnit + 0.5);
-        return leftUnit + 1;
-      }
-
-      let cursor = leftUnit;
-      for (const childId of children) {
-        placeSubtree(childId, cursor);
-        cursor += subtreeWidth(childId);
-      }
-
-      const firstChild = children[0];
-      const lastChild = children[children.length - 1];
-      const firstX = firstChild ? (xById.get(firstChild) ?? leftUnit) : leftUnit;
-      const lastX = lastChild ? (xById.get(lastChild) ?? leftUnit + 1) : leftUnit + 1;
-      xById.set(personId, (firstX + lastX) / 2);
-      return cursor;
-    };
-
-    const sortedRoots = sortPersonIdsByName(
-      new Set(rootIds.filter((id): id is string => Boolean(id))),
-      peopleById
-    );
-
-    let forestCursor = 0;
-    for (const rootId of sortedRoots) {
-      placeSubtree(rootId, forestCursor);
-      forestCursor += subtreeWidth(rootId) + 1;
-    }
-
-    const assigned = new Set(xById.keys());
-    const dangling = component.filter((personId) => !assigned.has(personId));
-    for (const personId of dangling) {
-      xById.set(personId, forestCursor + 0.5);
-      forestCursor += 1;
-    }
-
-    const spousePairsInComponent = collectComponentPairs(component, componentSet, spousePairsByPerson);
-    const spouseGap = 1.2;
-    applySpouseAlignment(spousePairsInComponent, xById, depthById, peopleById, spouseGap);
-
-    const siblingPairsInComponent = collectComponentPairs(component, componentSet, siblingPairsByPerson);
-    const siblingAdjacency = buildSiblingAdjacency(
-      component,
-      componentSet,
-      siblingPairsInComponent,
-      parentsInComponentByChild
-    );
-    alignSiblingDepths(component, siblingAdjacency, depthById);
-
-    const childGap = 1.7;
-    applySharedChildrenSpouseCentering(
-      spousePairsInComponent,
-      xById,
-      childrenByParent,
-      componentSet,
-      peopleById,
-      primaryChildrenByParent,
-      childGap
-    );
-
-    const minLevelGap = 0.92;
-    applySameLevelSpacing(component, depthById, xById, peopleById, minLevelGap);
-
-    const placedXs = [...xById.values()];
-    const minX = placedXs.length > 0 ? Math.min(...placedXs) : 0;
-    const maxX = placedXs.length > 0 ? Math.max(...placedXs) : 0;
-    const midX = (minX + maxX) / 2;
-
     for (const personId of component) {
-      const localXUnits = xById.get(personId) ?? 0;
-      const localX = (localXUnits - midX) * levelSpacingX;
-      const depth = depthById.get(personId) ?? 0;
-      positions.set(personId, [componentCenterX + localX, treeTopY - depth * levelStepY, componentCenterZ]);
+      const memberUnits = sortedMemberUnitsByPerson.get(personId) ?? [];
+      const anchorUnit = memberUnits[0];
+      const personDepth = depthByPerson.get(personId) ?? 0;
+      if (!anchorUnit) {
+        positions.set(personId, [componentCenterX, treeTopY - personDepth * levelStepY, componentCenterZ]);
+        continue;
+      }
+      const unitX = unitXByKey.get(anchorUnit.key) ?? 0;
+      const parentOrder = parentOrderByUnitKey.get(anchorUnit.key) ?? anchorUnit.parentIds;
+      let personX = unitX;
+      if (parentOrder.length === 2) {
+        if (parentOrder[0] === personId) {
+          personX = unitX - coupleGap / 2;
+        } else if (parentOrder[1] === personId) {
+          personX = unitX + coupleGap / 2;
+        }
+      }
+      const unitDepth = unitDepthByKey.get(anchorUnit.key) ?? personDepth;
+      positions.set(personId, [
+        componentCenterX + personX * levelSpacingX,
+        treeTopY - unitDepth * levelStepY,
+        componentCenterZ
+      ]);
     }
+
+    applyPerpendicularMinorSpouseBranches(
+      component,
+      spousePairs,
+      parentsByChild,
+      childrenByParent,
+      positions
+    );
   });
 
+  separateOverlappingComponents(components, positions);
   return positions;
 };
 
@@ -946,6 +1475,49 @@ const positionPeopleByPhotoClusters = (
 
 type PositionedPerson = { person: ImmichPerson; position: NodePosition };
 
+const staircaseStep = {
+  x: 0.9,
+  y: -0.32,
+  z: 1.05
+} as const;
+
+const buildStaircaseOffsetsById = (items: PositionedPerson[]) => {
+  const roundedLevels = [...new Set(items.map((item) => item.position[1].toFixed(3)))]
+    .map((value) => Number.parseFloat(value))
+    .sort((left, right) => right - left);
+  const levelIndexByY = new Map<number, number>();
+  roundedLevels.forEach((level, index) => levelIndexByY.set(level, index));
+
+  const offsetsById = new Map<string, NodePosition>();
+  items.forEach((item) => {
+    const roundedY = Number.parseFloat(item.position[1].toFixed(3));
+    const depthIndex = levelIndexByY.get(roundedY) ?? 0;
+    offsetsById.set(item.person.id, [
+      depthIndex * staircaseStep.x,
+      depthIndex * staircaseStep.y,
+      depthIndex * staircaseStep.z
+    ]);
+  });
+  return offsetsById;
+};
+
+const applyStaircaseOffsets = (
+  items: PositionedPerson[],
+  offsetsById: Map<string, NodePosition>,
+  scale = 1
+): PositionedPerson[] =>
+  items.map((item) => {
+    const offset = offsetsById.get(item.person.id) ?? [0, 0, 0];
+    return {
+      person: item.person,
+      position: [
+        item.position[0] + offset[0] * scale,
+        item.position[1] + offset[1] * scale,
+        item.position[2] + offset[2] * scale
+      ]
+    };
+  });
+
 const toGenerationTreePositions = (items: PositionedPerson[]): PositionedPerson[] => {
   if (items.length === 0) {
     return items;
@@ -988,7 +1560,8 @@ const toCenteredRelationshipMapPositions = (
   selectedPersonId: string | null,
   parentChildEdges: ParentChildEdge[],
   spousePairs: SpousePair[],
-  siblingPairs: SiblingPair[]
+  siblingPairs: SiblingPair[],
+  staircaseOffsetsById: Map<string, NodePosition>
 ): PositionedPerson[] => {
   if (!selectedPersonId) {
     return toGenerationTreePositions(items);
@@ -1046,16 +1619,25 @@ const toCenteredRelationshipMapPositions = (
     ]);
   });
 
-  return items.map((item) => ({
-    person: item.person,
-    position: positionedById.get(item.person.id) ?? item.position
-  }));
+  return items.map((item) => {
+    const basePosition = positionedById.get(item.person.id) ?? item.position;
+    const offset = staircaseOffsetsById.get(item.person.id) ?? [0, 0, 0];
+    return {
+      person: item.person,
+      position: [
+        basePosition[0] + offset[0] * 0.62,
+        basePosition[1] + offset[1] * 0.62,
+        basePosition[2] + offset[2] * 0.62
+      ]
+    };
+  });
 };
 
 const toHybridTreeListPositions = (
   items: PositionedPerson[],
   selectedPersonId: string | null,
-  relationships: RelationshipRecord[]
+  relationships: RelationshipRecord[],
+  staircaseOffsetsById: Map<string, NodePosition>
 ): PositionedPerson[] => {
   if (!selectedPersonId) {
     return toGenerationTreePositions(items);
@@ -1123,10 +1705,18 @@ const toHybridTreeListPositions = (
     ]);
   });
 
-  return items.map((item) => ({
-    person: item.person,
-    position: positionedById.get(item.person.id) ?? item.position
-  }));
+  return items.map((item) => {
+    const basePosition = positionedById.get(item.person.id) ?? item.position;
+    const offset = staircaseOffsetsById.get(item.person.id) ?? [0, 0, 0];
+    return {
+      person: item.person,
+      position: [
+        basePosition[0] + offset[0] * 0.55,
+        basePosition[1] + offset[1] * 0.55,
+        basePosition[2] + offset[2] * 0.55
+      ]
+    };
+  });
 };
 
 export const positionPeople = (
@@ -1137,6 +1727,7 @@ export const positionPeople = (
     photoClusters?: PhotoCluster[];
     familyViewStyle?: FamilyViewStyle;
     selectedPersonId?: string | null;
+    primaryFamilyUnitByPersonId?: Record<string, string>;
   }
 ) => {
   if (options?.mode === "photo") {
@@ -1146,7 +1737,13 @@ export const positionPeople = (
   const { edges: parentChildEdges } = buildParentChildIndex(relationships);
   const spousePairs = deriveSpousePairs(relationships);
   const siblingPairs = deriveSiblingPairs(relationships);
-  const treePositions = buildTreePositions(people, parentChildEdges, spousePairs, siblingPairs);
+  const treePositions = buildTreePositions(
+    people,
+    parentChildEdges,
+    spousePairs,
+    siblingPairs,
+    options?.primaryFamilyUnitByPersonId
+  );
   const withoutTreePosition = people.filter((person) => !treePositions.has(person.id));
   const connectedPeople = people.filter((person) => treePositions.has(person.id));
 
@@ -1227,22 +1824,30 @@ export const positionPeople = (
       position: treePositions.get(person.id) ?? [0, 0, 0]
     }));
   const familyPositions = [...positionedTreePeople, ...positionedUnconnected];
+  const staircaseOffsetsById = buildStaircaseOffsetsById(familyPositions);
+  const staircaseFamilyPositions = applyStaircaseOffsets(familyPositions, staircaseOffsetsById);
 
   switch (options?.familyViewStyle ?? defaultFamilyViewStyle) {
     case "centeredRelationshipMap":
       return toCenteredRelationshipMapPositions(
-        familyPositions,
+        staircaseFamilyPositions,
         options?.selectedPersonId ?? null,
         parentChildEdges,
         spousePairs,
-        siblingPairs
+        siblingPairs,
+        staircaseOffsetsById
       );
     case "hybridTreeList":
-      return toHybridTreeListPositions(familyPositions, options?.selectedPersonId ?? null, relationships);
+      return toHybridTreeListPositions(
+        staircaseFamilyPositions,
+        options?.selectedPersonId ?? null,
+        relationships,
+        staircaseOffsetsById
+      );
     case "cleaned3D":
-      return toCleaned3DPositions(familyPositions);
+      return toCleaned3DPositions(staircaseFamilyPositions);
     case "generationTree":
     default:
-      return toGenerationTreePositions(familyPositions);
+      return toGenerationTreePositions(staircaseFamilyPositions);
   }
 };

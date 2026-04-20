@@ -303,4 +303,18 @@ describe("CooccurrenceService", () => {
       take: 10
     });
   });
+
+  it("returns no due schedules when cooccurrence table is not migrated yet", async () => {
+    const { prisma, mocks } = createMockPrisma();
+    const service = new CooccurrenceService({ prismaClient: prisma as never });
+
+    mocks.cooccurrenceScheduleFindMany.mockRejectedValue({
+      code: "P2021",
+      meta: {
+        table: "public.CooccurrenceSchedule"
+      }
+    });
+
+    await expect(service.getDueSchedules()).resolves.toEqual([]);
+  });
 });

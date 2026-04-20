@@ -1,6 +1,8 @@
 import type {
   AuthState,
   AuthUser,
+  GraphLayoutRequest,
+  GraphLayoutResponse,
   GenderValue as Gender,
   ImmichPerson as SharedImmichPerson,
   LinkStatus,
@@ -16,6 +18,8 @@ import type {
 export type {
   AuthState,
   AuthUser,
+  GraphLayoutRequest,
+  GraphLayoutResponse,
   Gender,
   LinkStatus,
   PhotoCluster,
@@ -37,6 +41,11 @@ export type ImmichPerson = SharedImmichPerson & {
   name: string;
   profile?: TreemichPersonProfile | null;
   hasRelationship?: boolean;
+};
+
+export type SpouseRelationshipDates = {
+  marriageAnniversaryDate?: string | null;
+  divorceDate?: string | null;
 };
 
 const sleep = (delayMs: number) => new Promise((resolve) => window.setTimeout(resolve, delayMs));
@@ -151,7 +160,16 @@ export const getImmichPeople = async (): Promise<ImmichPerson[]> => {
 
 export const updatePersonProfile = async (
   personId: string,
-  profile: { gender?: Gender; birthDate?: string | null }
+  profile: {
+    gender?: Gender;
+    birthDate?: string | null;
+    givenName?: string | null;
+    surname?: string | null;
+    nicknames?: string | null;
+    deathDate?: string | null;
+    birthCity?: string | null;
+    birthCountry?: string | null;
+  }
 ) => {
   const response = await fetch(
     `${treemichApi}/people/${personId}`,
@@ -170,7 +188,8 @@ export const updatePersonProfile = async (
 export const createRelationship = async (
   fromPersonId: string,
   toPersonId: string,
-  relationshipType: RelationshipType
+  relationshipType: RelationshipType,
+  spouseDates?: SpouseRelationshipDates
 ) => {
   const response = await fetch(
     `${treemichApi}/people/${fromPersonId}/relationships`,
@@ -179,11 +198,37 @@ export const createRelationship = async (
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ toPersonId, relationshipType })
+      body: JSON.stringify({
+        toPersonId,
+        relationshipType,
+        ...(spouseDates ?? {})
+      })
     })
   );
   await ensureOk(response, "Failed to create relationship");
   return response.json();
+};
+
+export const updateSpouseRelationshipDates = async (
+  fromPersonId: string,
+  toPersonId: string,
+  spouseDates: SpouseRelationshipDates
+) => {
+  const response = await fetch(
+    `${treemichApi}/people/${fromPersonId}/relationships`,
+    withSession({
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        toPersonId,
+        ...spouseDates
+      })
+    })
+  );
+  await ensureOk(response, "Failed to update spouse dates");
+  return response.json() as Promise<{ updatedCount: number }>;
 };
 
 export const deleteRelationship = async (
@@ -217,6 +262,24 @@ export const searchRelationships = async (query: string): Promise<SearchRelation
 
 export const personThumbnailUrl = (personId: string) =>
   `${treemichApi}/people/${encodeURIComponent(personId)}/thumbnail`;
+
+export const immichPersonUrl = (personId: string, immichBaseUrl?: string | null) => {
+  if (!immichBaseUrl) {
+    return null;
+  }
+
+  const normalizedBase = immichBaseUrl.trim().replace(/\/+$/, "");
+  if (!normalizedBase) {
+    return null;
+  }
+
+  const appBase = normalizedBase.endsWith("/api") ? normalizedBase.slice(0, -4) : normalizedBase;
+  if (!appBase) {
+    return null;
+  }
+
+  return `${appBase}/people/${encodeURIComponent(personId)}`;
+};
 
 export const getUserPreferences = async (): Promise<UserPreferences> => {
   const response = await fetchWithRetry(`${treemichApi}/user/preferences`, {
@@ -287,4 +350,16 @@ export const getPhotoCooccurrence = async (options?: {
   await ensureOk(response, `Failed to load co-occurrence graph (${response.status})`);
 
   return (await response.json()) as PhotoCooccurrenceResponse;
+};
+
+export const computeGraphLayout = async (payload: GraphLayoutRequest): Promise<GraphLayoutResponse> => {
+  const response = await fetchWithRetry(`${treemichApi}/graph/layout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  await ensureOk(response, `Failed to compute graph layout (${response.status})`);
+  return (await response.json()) as GraphLayoutResponse;
 };

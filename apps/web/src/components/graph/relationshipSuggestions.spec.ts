@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
-import { computeSuggestions } from "./relationshipSuggestions";
+import { computeSuggestions, getSuggestionRelationshipLabel } from "./relationshipSuggestions";
 
 const person = (id: string, name: string): ImmichPerson => ({
   id,
@@ -34,6 +34,17 @@ const summary = (
     suggestedType: suggestion.suggestedType,
     reason: suggestion.reason
   }));
+
+describe("getSuggestionRelationshipLabel", () => {
+  it("returns short labels used in suggestion UI (e.g. Add as … tooltips)", () => {
+    expect(getSuggestionRelationshipLabel("SPOUSE_OF")).toBe("Spouse");
+    expect(getSuggestionRelationshipLabel("PARENT_OF")).toBe("Child");
+    expect(getSuggestionRelationshipLabel("CHILD_OF")).toBe("Parent");
+    expect(getSuggestionRelationshipLabel("SIBLING_OF")).toBe("Sibling");
+    expect(getSuggestionRelationshipLabel("FRIEND_OF")).toBe("Friend");
+    expect(getSuggestionRelationshipLabel("PET_OF")).toBe("Pet");
+  });
+});
 
 describe("computeSuggestions", () => {
   it("suggests a missing sibling when two people share a parent", () => {

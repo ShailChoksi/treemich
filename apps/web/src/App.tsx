@@ -119,7 +119,10 @@ export const App = () => {
           {isSubmittingAuth ? "Signing out..." : "Sign out"}
         </button>
       </header>
-      <PeoplePage />
+      <PeoplePage
+        immichBaseUrl={linkStatus?.immichBaseUrl ?? null}
+        currentUserName={linkStatus?.immichName ?? currentUser.name}
+      />
     </main>
   );
 };

@@ -5,11 +5,14 @@ import { MOUSE, PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { ImmichPerson } from "../../lib/api";
 import type { AddRelativeSlot } from "./NodeActionButtons";
+import type { GraphVisibilityBucket } from "./graphVisibility";
 import type { NodePosition } from "./layout";
 import type { RelationshipKind } from "./relationshipStyles";
 import { AnimatedNodes } from "./scene/AnimatedNodes";
 import { createWebGlRenderer } from "./scene/createWebGlRenderer";
 import { useOrbitPositionSync } from "./scene/useOrbitPositionSync";
+import { useThumbnailLoader } from "./useThumbnailLoader";
+import { useGraphLifecycle } from "./useGraphLifecycle";
 
 type VisibleLine = {
   key: string;
@@ -33,15 +36,18 @@ type Props = {
   showNodeActionButtons: boolean;
   hoveredPersonId: string | null;
   highlightedPersonIds: Set<string>;
-  thumbnailNodeIds: Set<string>;
+  peopleIds: string[];
+  prioritizedNodeIds: Set<string>;
+  renderVisibilityBucketByPersonId: Map<string, GraphVisibilityBucket>;
+  renderNearPersonIds: string[];
   setHoveredPersonId: (updater: (current: string | null) => string | null) => void;
   onNodeClick: (personId: string) => void;
   onNodeActionOpen: (slot: AddRelativeSlot) => void;
   onCanvasMissed: () => void;
+  onCameraSample: (position: NodePosition) => void;
   cameraRef: React.MutableRefObject<PerspectiveCamera | null>;
   orbitControlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
   lastCameraSampleRef: React.MutableRefObject<Vector3>;
-  setCameraPosition: (position: NodePosition) => void;
 };
 
 export const GraphCanvasScene = ({
@@ -52,15 +58,18 @@ export const GraphCanvasScene = ({
   showNodeActionButtons,
   hoveredPersonId,
   highlightedPersonIds,
-  thumbnailNodeIds,
+  peopleIds,
+  prioritizedNodeIds,
+  renderVisibilityBucketByPersonId,
+  renderNearPersonIds,
   setHoveredPersonId,
   onNodeClick,
   onNodeActionOpen,
   onCanvasMissed,
+  onCameraSample,
   cameraRef,
   orbitControlsRef,
-  lastCameraSampleRef,
-  setCameraPosition
+  lastCameraSampleRef
 }: Props) => {
   const handleNodeHover = useCallback(
     (personId: string, hovered: boolean) => {
@@ -89,15 +98,29 @@ export const GraphCanvasScene = ({
     },
     [cameraRef]
   );
+  const handleCameraSample = useCallback(
+    (position: Vector3) => {
+      onCameraSample([position.x, position.y, position.z]);
+    },
+    [onCameraSample]
+  );
   const { handleOrbitChange, handleOrbitEnd } = useOrbitPositionSync({
     lastCameraSampleRef,
-    setCameraPosition
+    onSampledPosition: handleCameraSample
   });
+  const { thumbnailNodeIds, thumbnailTextures } = useThumbnailLoader({
+    peopleIds,
+    prioritizedNodeIds,
+    renderNearPersonIds,
+    displayVisiblePeople,
+    cameraSampleRef: lastCameraSampleRef
+  });
+  useGraphLifecycle({ thumbnailNodeIds });
 
   return (
     <Canvas
       camera={{ position: [0, 2, 18], fov: 55 }}
-      dpr={1}
+      dpr={[1, 1.5]}
       frameloop="demand"
       onPointerMissed={onCanvasMissed}
       onCreated={handleCanvasCreated}
@@ -138,6 +161,9 @@ export const GraphCanvasScene = ({
         hoveredPersonId={hoveredPersonId}
         highlightedPersonIds={highlightedPersonIds}
         thumbnailNodeIds={thumbnailNodeIds}
+        thumbnailTextures={thumbnailTextures}
+        prioritizedNodeIds={prioritizedNodeIds}
+        visibilityBucketByPersonId={renderVisibilityBucketByPersonId}
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
         onNodeActionOpen={onNodeActionOpen}

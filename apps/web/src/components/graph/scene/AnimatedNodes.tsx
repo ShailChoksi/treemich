@@ -1,7 +1,9 @@
 import { Suspense, useMemo } from "react";
+import type { Texture } from "three";
 import type { ImmichPerson } from "../../../lib/api";
 import { NodeActionButtons, type AddRelativeSlot } from "../NodeActionButtons";
-import { PersonNode, PersonNodeFallback } from "../PersonNode";
+import type { GraphVisibilityBucket } from "../graphVisibility";
+import { PersonNode, PersonNodeFallback, PersonNodeMinimal } from "../PersonNode";
 import type { NodePosition } from "../layout";
 import { useAnimatedNodeTransforms } from "./useAnimatedNodeTransforms";
 
@@ -17,9 +19,55 @@ type Props = {
   hoveredPersonId: string | null;
   highlightedPersonIds: Set<string>;
   thumbnailNodeIds: Set<string>;
+  thumbnailTextures: Map<string, Texture>;
+  prioritizedNodeIds: Set<string>;
+  visibilityBucketByPersonId: Map<string, GraphVisibilityBucket>;
   onNodeClick: (personId: string, event: { stopPropagation: () => void }) => void;
   onNodeHover: (personId: string, hovered: boolean) => void;
   onNodeActionOpen: (slot: AddRelativeSlot) => void;
+};
+
+const LARGE_GRAPH_NODE_THRESHOLD = 280;
+
+export const shouldUseLargeGraphTier = (visiblePeopleCount: number) =>
+  visiblePeopleCount >= LARGE_GRAPH_NODE_THRESHOLD;
+
+export const shouldRenderDetailedNode = ({
+  largeGraphTierEnabled,
+  isPriorityNode,
+  visibilityBucket = "near"
+}: {
+  largeGraphTierEnabled: boolean;
+  isPriorityNode: boolean;
+  visibilityBucket?: GraphVisibilityBucket;
+}) =>
+  (!largeGraphTierEnabled || isPriorityNode) && visibilityBucket !== "far" && visibilityBucket !== "culled";
+
+const resolveNodeRenderTier = ({
+  visibilityBucket,
+  isPriorityNode,
+  largeGraphTierEnabled
+}: {
+  visibilityBucket: GraphVisibilityBucket;
+  isPriorityNode: boolean;
+  largeGraphTierEnabled: boolean;
+}) => {
+  if (isPriorityNode) {
+    return "detailed" as const;
+  }
+  if (visibilityBucket === "culled") {
+    return "minimal" as const;
+  }
+  if (visibilityBucket === "mid" || visibilityBucket === "far") {
+    return "thumbnail" as const;
+  }
+  return shouldRenderDetailedNode({
+    largeGraphTierEnabled,
+    isPriorityNode,
+    visibilityBucket
+  })
+    ? ("detailed" as const)
+    : ("minimal" as const);
 };
 
 export const AnimatedNodes = ({
@@ -29,10 +77,14 @@ export const AnimatedNodes = ({
   hoveredPersonId,
   highlightedPersonIds,
   thumbnailNodeIds,
+  thumbnailTextures,
+  prioritizedNodeIds,
+  visibilityBucketByPersonId,
   onNodeClick,
   onNodeHover,
   onNodeActionOpen
 }: Props) => {
+  const largeGraphTierEnabled = shouldUseLargeGraphTier(displayVisiblePeople.length);
   const displayPositions = useMemo(
     () =>
       displayVisiblePeople.map(({ person, displayPosition }) => ({
@@ -42,7 +94,9 @@ export const AnimatedNodes = ({
     [displayVisiblePeople]
   );
   const { registerGroupRef } = useAnimatedNodeTransforms({
-    displayPositions
+    displayPositions,
+    prioritizedPersonIds: prioritizedNodeIds,
+    reduceWorkForLargeGraph: largeGraphTierEnabled
   });
 
   return (
@@ -51,11 +105,29 @@ export const AnimatedNodes = ({
         const isSelected = selectedPersonId === person.id;
         const isHovered = hoveredPersonId === person.id;
         const isHighlighted = highlightedPersonIds.has(person.id);
+        const isPriorityNode = isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(person.id);
+        const visibilityBucket = visibilityBucketByPersonId.get(person.id) ?? "near";
+        const renderTier = resolveNodeRenderTier({
+          visibilityBucket,
+          isPriorityNode,
+          largeGraphTierEnabled
+        });
+        const showLabel = isPriorityNode || visibilityBucket === "near" || visibilityBucket === "mid";
         const showThumbnail = thumbnailNodeIds.has(person.id);
 
         return (
           <group key={person.id} ref={(group) => registerGroupRef(person.id, group)}>
-            {showThumbnail ? (
+            {renderTier === "minimal" ? (
+              <PersonNodeMinimal
+                person={person}
+                isSelected={isSelected}
+                isHovered={isHovered}
+                isHighlighted={isHighlighted}
+                showLabel={false}
+                onClick={onNodeClick}
+                onHover={onNodeHover}
+              />
+            ) : (renderTier === "detailed" || renderTier === "thumbnail") && showThumbnail ? (
               <Suspense
                 fallback={
                   <PersonNodeFallback
@@ -63,6 +135,7 @@ export const AnimatedNodes = ({
                     isSelected={isSelected}
                     isHovered={isHovered}
                     isHighlighted={isHighlighted}
+                    showLabel={showLabel}
                     onClick={onNodeClick}
                     onHover={onNodeHover}
                   />
@@ -73,6 +146,8 @@ export const AnimatedNodes = ({
                   isSelected={isSelected}
                   isHovered={isHovered}
                   isHighlighted={isHighlighted}
+                  showLabel={showLabel}
+                  preloadedTexture={thumbnailTextures.get(person.id)}
                   onClick={onNodeClick}
                   onHover={onNodeHover}
                 />
@@ -83,6 +158,7 @@ export const AnimatedNodes = ({
                 isSelected={isSelected}
                 isHovered={isHovered}
                 isHighlighted={isHighlighted}
+                showLabel={showLabel}
                 onClick={onNodeClick}
                 onHover={onNodeHover}
               />
