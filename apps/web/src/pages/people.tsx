@@ -30,9 +30,8 @@ import {
 } from "../lib/api";
 import {
   buildBirthPlaceInput,
-  deriveProfileDisplayValues,
-  parseDateInputToParts,
-  toDateInputValue
+  deriveProfileDisplayValuesFromLifeEvents,
+  parseDateInputToParts
 } from "../lib/lifeEventUi";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
@@ -54,7 +53,11 @@ const sortRelationshipsStable = (relationships: RelationshipRecord[]) =>
 
 const normalizeName = (value: string | null | undefined) => value?.trim().toLocaleLowerCase() ?? "";
 
-export { deriveProfileDisplayValues, parseDateInputToParts, buildBirthPlaceInput } from "../lib/lifeEventUi";
+export {
+  deriveProfileDisplayValuesFromLifeEvents,
+  parseDateInputToParts,
+  buildBirthPlaceInput
+} from "../lib/lifeEventUi";
 
 const noRelationshipsGraphFilterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]> = {
   parentChild: false,
@@ -147,13 +150,13 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [graphFocusPersonId, setGraphFocusPersonId] = useState<string | null>(null);
   const [graphCameraFocusPersonId, setGraphCameraFocusPersonId] = useState<string | null>(null);
   const [genderByPersonId, setGenderByPersonId] = useState<Record<string, Gender>>({});
-  const [birthDateByPersonId, setBirthDateByPersonId] = useState<Record<string, string>>({});
   const [givenNameByPersonId, setGivenNameByPersonId] = useState<Record<string, string>>({});
   const [surnameByPersonId, setSurnameByPersonId] = useState<Record<string, string>>({});
   const [nicknamesByPersonId, setNicknamesByPersonId] = useState<Record<string, string>>({});
-  const [deathDateByPersonId, setDeathDateByPersonId] = useState<Record<string, string>>({});
-  const [birthCityByPersonId, setBirthCityByPersonId] = useState<Record<string, string>>({});
-  const [birthCountryByPersonId, setBirthCountryByPersonId] = useState<Record<string, string>>({});
+  /** Quick-edit birth/death/place strings; merged with life-event derive when a key is absent. */
+  const [profileEventFieldsByPersonId, setProfileEventFieldsByPersonId] = useState<
+    Record<string, { birthDate: string; deathDate: string; birthCity: string; birthCountry: string }>
+  >({});
   const [lifeEventsByPersonId, setLifeEventsByPersonId] = useState<Record<string, LifeEventRecord[]>>({});
   const [relationshipLifeEventsById, setRelationshipLifeEventsById] = useState<
     Record<string, LifeEventRecord[]>
@@ -189,15 +192,10 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setLoadError(null);
       setLifeEventsByPersonId({});
       setRelationshipLifeEventsById({});
+      setProfileEventFieldsByPersonId({});
       setGenderByPersonId(
         sortedPeople.reduce<Record<string, Gender>>((acc, person) => {
           acc[person.id] = person.profile?.gender ?? "UNKNOWN";
-          return acc;
-        }, {})
-      );
-      setBirthDateByPersonId(
-        sortedPeople.reduce<Record<string, string>>((acc, person) => {
-          acc[person.id] = toDateInputValue(person.birthDate);
           return acc;
         }, {})
       );
@@ -216,24 +214,6 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setNicknamesByPersonId(
         sortedPeople.reduce<Record<string, string>>((acc, person) => {
           acc[person.id] = person.profile?.nicknames ?? "";
-          return acc;
-        }, {})
-      );
-      setDeathDateByPersonId(
-        sortedPeople.reduce<Record<string, string>>((acc, person) => {
-          acc[person.id] = toDateInputValue(person.profile?.deathDate);
-          return acc;
-        }, {})
-      );
-      setBirthCityByPersonId(
-        sortedPeople.reduce<Record<string, string>>((acc, person) => {
-          acc[person.id] = person.profile?.birthCity ?? "";
-          return acc;
-        }, {})
-      );
-      setBirthCountryByPersonId(
-        sortedPeople.reduce<Record<string, string>>((acc, person) => {
-          acc[person.id] = person.profile?.birthCountry ?? "";
           return acc;
         }, {})
       );
@@ -289,6 +269,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     [people, selectedPersonId]
   );
 
+  const selectedProfileEventFields = useMemo(() => {
+    if (!selectedPerson) {
+      return { birthDate: "", deathDate: "", birthCity: "", birthCountry: "" };
+    }
+    const pid = selectedPerson.id;
+    return (
+      profileEventFieldsByPersonId[pid] ?? deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid])
+    );
+  }, [selectedPerson, profileEventFieldsByPersonId, lifeEventsByPersonId]);
+
   useEffect(() => {
     if (!selectedPerson) {
       return;
@@ -306,11 +296,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           ...current,
           [selectedPerson.id]: events
         }));
-        const values = deriveProfileDisplayValues(selectedPerson, events);
-        setBirthDateByPersonId((current) => ({ ...current, [selectedPerson.id]: values.birthDate }));
-        setDeathDateByPersonId((current) => ({ ...current, [selectedPerson.id]: values.deathDate }));
-        setBirthCityByPersonId((current) => ({ ...current, [selectedPerson.id]: values.birthCity }));
-        setBirthCountryByPersonId((current) => ({ ...current, [selectedPerson.id]: values.birthCountry }));
+        const values = deriveProfileDisplayValuesFromLifeEvents(events);
+        setProfileEventFieldsByPersonId((current) => ({
+          ...current,
+          [selectedPerson.id]: values
+        }));
       })
       .catch(() => {
         if (cancelled) {
@@ -319,6 +309,10 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         setLifeEventsByPersonId((current) => ({
           ...current,
           [selectedPerson.id]: []
+        }));
+        setProfileEventFieldsByPersonId((current) => ({
+          ...current,
+          [selectedPerson.id]: deriveProfileDisplayValuesFromLifeEvents([])
         }));
       });
     return () => {
@@ -435,13 +429,17 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       return trimmed ? trimmed : null;
     };
     const selectedGender = genderByPersonId[selectedPerson.id] ?? "UNKNOWN";
-    const selectedBirthDate = birthDateByPersonId[selectedPerson.id] || null;
+    const pid = selectedPerson.id;
+    const eventFormFields =
+      profileEventFieldsByPersonId[pid] ??
+      deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
+    const selectedBirthDate = eventFormFields.birthDate || null;
     const selectedGivenName = normalizeOptionalString(givenNameByPersonId[selectedPerson.id] ?? "");
     const selectedSurname = normalizeOptionalString(surnameByPersonId[selectedPerson.id] ?? "");
     const selectedNicknames = normalizeOptionalString(nicknamesByPersonId[selectedPerson.id] ?? "");
-    const selectedDeathDate = deathDateByPersonId[selectedPerson.id] || null;
-    const selectedBirthCity = normalizeOptionalString(birthCityByPersonId[selectedPerson.id] ?? "");
-    const selectedBirthCountry = normalizeOptionalString(birthCountryByPersonId[selectedPerson.id] ?? "");
+    const selectedDeathDate = eventFormFields.deathDate || null;
+    const selectedBirthCity = normalizeOptionalString(eventFormFields.birthCity ?? "");
+    const selectedBirthCountry = normalizeOptionalString(eventFormFields.birthCountry ?? "");
     const birthParts = selectedBirthDate ? parseDateInputToParts(selectedBirthDate) : null;
     const deathParts = selectedDeathDate ? parseDateInputToParts(selectedDeathDate) : null;
     if (selectedBirthDate && !birthParts) {
@@ -456,7 +454,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     try {
       const resolvedEvents =
         lifeEventsByPersonId[selectedPerson.id] ??
-          (await getPersonLifeEvents(selectedPerson.id, { includeCitations: true }));
+        (await getPersonLifeEvents(selectedPerson.id, { includeCitations: true }));
       const nextLifeEvents = [...resolvedEvents];
       const findEvent = (eventType: "BIRTH" | "DEATH") =>
         nextLifeEvents.find((event) => event.eventType === eventType) ?? null;
@@ -536,19 +534,13 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         surname: selectedSurname,
         nicknames: selectedNicknames
       });
-      const mergedPerson: ImmichPerson = {
-        ...selectedPerson,
-        profile: savedProfile,
-        birthDate: selectedPerson.birthDate
-      };
-      const displayValues = deriveProfileDisplayValues(mergedPerson, nextLifeEvents);
+      const displayValues = deriveProfileDisplayValuesFromLifeEvents(nextLifeEvents);
       setPeople((current) =>
         current.map((person) =>
           person.id === selectedPerson.id
             ? {
                 ...person,
-                profile: savedProfile,
-                birthDate: person.birthDate
+                profile: savedProfile
               }
             : person
         )
@@ -573,21 +565,9 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         ...current,
         [selectedPerson.id]: savedProfile.nicknames ?? ""
       }));
-      setBirthDateByPersonId((current) => ({
+      setProfileEventFieldsByPersonId((current) => ({
         ...current,
-        [selectedPerson.id]: displayValues.birthDate
-      }));
-      setDeathDateByPersonId((current) => ({
-        ...current,
-        [selectedPerson.id]: displayValues.deathDate
-      }));
-      setBirthCityByPersonId((current) => ({
-        ...current,
-        [selectedPerson.id]: displayValues.birthCity
-      }));
-      setBirthCountryByPersonId((current) => ({
-        ...current,
-        [selectedPerson.id]: displayValues.birthCountry
+        [selectedPerson.id]: displayValues
       }));
       setStatus("Profile saved");
     } catch (error: unknown) {
@@ -596,14 +576,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setIsSavingProfile(false);
     }
   }, [
-    birthCityByPersonId,
-    birthCountryByPersonId,
-    birthDateByPersonId,
-    deathDateByPersonId,
     genderByPersonId,
     givenNameByPersonId,
     lifeEventsByPersonId,
     nicknamesByPersonId,
+    profileEventFieldsByPersonId,
     selectedPerson,
     surnameByPersonId
   ]);
@@ -681,7 +658,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           }
 
           let resolved =
-            relationshipLifeEventsById[rid] ?? (await getRelationshipLifeEvents(rid, { includeCitations: true }));
+            relationshipLifeEventsById[rid] ??
+            (await getRelationshipLifeEvents(rid, { includeCitations: true }));
           const next = [...resolved];
           const findEvent = (eventType: "MARRIAGE" | "DIVORCE") =>
             next.find((event) => event.eventType === eventType) ?? null;
@@ -760,12 +738,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           return;
         }
         await deleteRelationship(relationship.fromPersonId, relationship.toPersonId, relationship.type);
-        await createRelationship(
-          selectedPerson.id,
-          relatedPersonId,
-          relationshipType,
-          relationshipType === "SPOUSE_OF" ? spouseDates : undefined
-        );
+        await createRelationship(selectedPerson.id, relatedPersonId, relationshipType);
         await refreshGraphData();
         setStatus("Relationship updated");
       } catch (error: unknown) {
@@ -778,24 +751,18 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     [refreshGraphData, selectedPerson, relationshipLifeEventsById]
   );
 
-  const afterPersonLifeEventsUpdated = useCallback(
-    async (personId: string) => {
-      const ev = await getPersonLifeEvents(personId, { includeCitations: true });
-      setLifeEventsByPersonId((current) => ({
-        ...current,
-        [personId]: ev
-      }));
-      const p = people.find((person) => person.id === personId);
-      if (p) {
-        const dv = deriveProfileDisplayValues(p, ev);
-        setBirthDateByPersonId((prev) => ({ ...prev, [personId]: dv.birthDate }));
-        setDeathDateByPersonId((prev) => ({ ...prev, [personId]: dv.deathDate }));
-        setBirthCityByPersonId((prev) => ({ ...prev, [personId]: dv.birthCity }));
-        setBirthCountryByPersonId((prev) => ({ ...prev, [personId]: dv.birthCountry }));
-      }
-    },
-    [people]
-  );
+  const afterPersonLifeEventsUpdated = useCallback(async (personId: string) => {
+    const ev = await getPersonLifeEvents(personId, { includeCitations: true });
+    setLifeEventsByPersonId((current) => ({
+      ...current,
+      [personId]: ev
+    }));
+    const dv = deriveProfileDisplayValuesFromLifeEvents(ev);
+    setProfileEventFieldsByPersonId((prev) => ({
+      ...prev,
+      [personId]: dv
+    }));
+  }, []);
 
   const handlePersonLifeEventCreate = useCallback(
     async (body: CreateLifeEventBody) => {
@@ -914,12 +881,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
-      setBirthDateByPersonId((current) => ({
-        ...current,
-        [selectedPerson.id]: birthDate
-      }));
+      const pid = selectedPerson.id;
+      setProfileEventFieldsByPersonId((current) => {
+        const base = current[pid] ?? deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
+        return {
+          ...current,
+          [pid]: { ...base, birthDate }
+        };
+      });
     },
-    [selectedPerson]
+    [lifeEventsByPersonId, selectedPerson]
   );
 
   const handleGivenNameChange = useCallback(
@@ -966,12 +937,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
-      setDeathDateByPersonId((current) => ({
-        ...current,
-        [selectedPerson.id]: deathDate
-      }));
+      const pid = selectedPerson.id;
+      setProfileEventFieldsByPersonId((current) => {
+        const base = current[pid] ?? deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
+        return {
+          ...current,
+          [pid]: { ...base, deathDate }
+        };
+      });
     },
-    [selectedPerson]
+    [lifeEventsByPersonId, selectedPerson]
   );
 
   const handleBirthCityChange = useCallback(
@@ -979,12 +954,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
-      setBirthCityByPersonId((current) => ({
-        ...current,
-        [selectedPerson.id]: birthCity
-      }));
+      const pid = selectedPerson.id;
+      setProfileEventFieldsByPersonId((current) => {
+        const base = current[pid] ?? deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
+        return {
+          ...current,
+          [pid]: { ...base, birthCity }
+        };
+      });
     },
-    [selectedPerson]
+    [lifeEventsByPersonId, selectedPerson]
   );
 
   const handleBirthCountryChange = useCallback(
@@ -992,12 +971,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
-      setBirthCountryByPersonId((current) => ({
-        ...current,
-        [selectedPerson.id]: birthCountry
-      }));
+      const pid = selectedPerson.id;
+      setProfileEventFieldsByPersonId((current) => {
+        const base = current[pid] ?? deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
+        return {
+          ...current,
+          [pid]: { ...base, birthCountry }
+        };
+      });
     },
-    [selectedPerson]
+    [lifeEventsByPersonId, selectedPerson]
   );
 
   const hasRelationships = relationships.length > 0;
@@ -1066,14 +1049,14 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           genders={genders}
           genderValue={selectedPerson ? (genderByPersonId[selectedPerson.id] ?? "UNKNOWN") : "UNKNOWN"}
           onGenderChange={handleGenderChange}
-          birthDateValue={selectedPerson ? (birthDateByPersonId[selectedPerson.id] ?? "") : ""}
+          birthDateValue={selectedProfileEventFields.birthDate}
           onBirthDateChange={handleBirthDateChange}
           givenNameValue={selectedPerson ? (givenNameByPersonId[selectedPerson.id] ?? "") : ""}
           surnameValue={selectedPerson ? (surnameByPersonId[selectedPerson.id] ?? "") : ""}
           nicknamesValue={selectedPerson ? (nicknamesByPersonId[selectedPerson.id] ?? "") : ""}
-          deathDateValue={selectedPerson ? (deathDateByPersonId[selectedPerson.id] ?? "") : ""}
-          birthCityValue={selectedPerson ? (birthCityByPersonId[selectedPerson.id] ?? "") : ""}
-          birthCountryValue={selectedPerson ? (birthCountryByPersonId[selectedPerson.id] ?? "") : ""}
+          deathDateValue={selectedProfileEventFields.deathDate}
+          birthCityValue={selectedProfileEventFields.birthCity}
+          birthCountryValue={selectedProfileEventFields.birthCountry}
           onGivenNameChange={handleGivenNameChange}
           onSurnameChange={handleSurnameChange}
           onNicknamesChange={handleNicknamesChange}

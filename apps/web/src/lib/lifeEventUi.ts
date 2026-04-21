@@ -1,4 +1,4 @@
-import type { ImmichPerson, LifeEventRecord, RelationshipRecord } from "./api";
+import type { LifeEventRecord } from "./api";
 
 export const toDateInputValue = (value?: string | null) => {
   if (!value) {
@@ -66,42 +66,48 @@ export const buildBirthPlaceInput = (city: string | null, country: string | null
   };
 };
 
-export const deriveProfileDisplayValues = (
-  person: ImmichPerson,
+const emptyProfileEventFields = (): {
+  birthDate: string;
+  deathDate: string;
+  birthCity: string;
+  birthCountry: string;
+} => ({
+  birthDate: "",
+  deathDate: "",
+  birthCity: "",
+  birthCountry: ""
+});
+
+/**
+ * Quick-edit / profile form values: derived only from BIRTH and DEATH life events.
+ * When `lifeEvents` is undefined (not loaded yet), returns empty strings — no legacy profile fallback.
+ */
+export const deriveProfileDisplayValuesFromLifeEvents = (
   lifeEvents: LifeEventRecord[] | undefined
 ): { birthDate: string; deathDate: string; birthCity: string; birthCountry: string } => {
-  const fallback = {
-    birthDate: toDateInputValue(person.birthDate),
-    deathDate: toDateInputValue(person.profile?.deathDate),
-    birthCity: person.profile?.birthCity ?? "",
-    birthCountry: person.profile?.birthCountry ?? ""
-  };
-  if (!lifeEvents) {
-    return fallback;
+  if (lifeEvents === undefined) {
+    return emptyProfileEventFields();
   }
   const birthEvent = lifeEvents.find((event) => event.eventType === "BIRTH") ?? null;
   const deathEvent = lifeEvents.find((event) => event.eventType === "DEATH") ?? null;
   return {
-    birthDate: birthEvent ? toDateInputValueFromEvent(birthEvent) : fallback.birthDate,
-    deathDate: deathEvent ? toDateInputValueFromEvent(deathEvent) : fallback.deathDate,
-    birthCity: birthEvent ? (birthEvent.place?.locality ?? "") : fallback.birthCity,
-    birthCountry: birthEvent ? (birthEvent.place?.countryCode ?? "") : fallback.birthCountry
+    birthDate: birthEvent ? toDateInputValueFromEvent(birthEvent) : "",
+    deathDate: deathEvent ? toDateInputValueFromEvent(deathEvent) : "",
+    birthCity: birthEvent ? (birthEvent.place?.locality ?? "") : "",
+    birthCountry: birthEvent ? (birthEvent.place?.countryCode ?? "") : ""
   };
 };
 
 /**
- * Marriage / divorce shown in the relationship editor: life-event dates first, then legacy relationship columns.
+ * Marriage / divorce quick-edit fields from relationship-scoped life events only.
  */
 export const deriveSpouseDatesFromRelationshipEvents = (
-  events: LifeEventRecord[],
-  legacy: Pick<RelationshipRecord, "marriageAnniversaryDate" | "divorceDate">
+  events: LifeEventRecord[]
 ): { marriage: string; divorce: string } => {
   const marriageEvent = events.find((e) => e.eventType === "MARRIAGE") ?? null;
   const divorceEvent = events.find((e) => e.eventType === "DIVORCE") ?? null;
   return {
-    marriage: marriageEvent
-      ? toDateInputValueFromEvent(marriageEvent)
-      : toDateInputValue(legacy.marriageAnniversaryDate),
-    divorce: divorceEvent ? toDateInputValueFromEvent(divorceEvent) : toDateInputValue(legacy.divorceDate)
+    marriage: marriageEvent ? toDateInputValueFromEvent(marriageEvent) : "",
+    divorce: divorceEvent ? toDateInputValueFromEvent(divorceEvent) : ""
   };
 };

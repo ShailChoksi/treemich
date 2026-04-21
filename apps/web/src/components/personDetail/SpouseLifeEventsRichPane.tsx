@@ -10,21 +10,15 @@ type Props = {
   disabled?: boolean;
 };
 
-export const SpouseLifeEventsRichPane = ({
-  events,
-  onCreate,
-  onPatch,
-  onDelete,
-  disabled
-}: Props) => {
+export const SpouseLifeEventsRichPane = ({ events, onCreate, onPatch, onDelete, disabled }: Props) => {
   const marriage = events.find((e) => e.eventType === "MARRIAGE") ?? null;
   const divorce = events.find((e) => e.eventType === "DIVORCE") ?? null;
 
   return (
     <div className="spouse-life-events-rich stack">
       <p className="hint">
-        Advanced fields for marriage and divorce life events (partial dates, qualifiers, notes, place, citations).
-        Quick anniversary/divorce dates above still update the same events when saved.
+        Advanced fields for marriage and divorce life events (partial dates, qualifiers, notes, place,
+        citations). Quick anniversary/divorce dates above still update the same events when saved.
       </p>
       <details className="spouse-life-events-details">
         <summary className="field-label">Marriage event (advanced)</summary>

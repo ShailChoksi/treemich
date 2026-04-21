@@ -82,7 +82,11 @@ type Props = {
   onPersonLifeEventPatch?: (eventId: string, body: PatchLifeEventBody) => Promise<void>;
   onPersonLifeEventDelete?: (eventId: string) => Promise<void>;
   onRelationshipLifeEventCreate?: (relationshipId: string, body: CreateLifeEventBody) => Promise<void>;
-  onRelationshipLifeEventPatch?: (relationshipId: string, eventId: string, body: PatchLifeEventBody) => Promise<void>;
+  onRelationshipLifeEventPatch?: (
+    relationshipId: string,
+    eventId: string,
+    body: PatchLifeEventBody
+  ) => Promise<void>;
   onRelationshipLifeEventDelete?: (relationshipId: string, eventId: string) => Promise<void>;
 };
 
@@ -282,7 +286,7 @@ const PersonDetailPanelComponent = ({
     }
     const rid = activeRelationship.record.id;
     const events = rid ? (relationshipLifeEventsById[rid] ?? []) : [];
-    return deriveSpouseDatesFromRelationshipEvents(events, activeRelationship.record);
+    return deriveSpouseDatesFromRelationshipEvents(events);
   }, [activeRelationship, relationshipLifeEventsById]);
 
   const spouseDatesChanged =
@@ -434,7 +438,7 @@ const PersonDetailPanelComponent = ({
                 </select>
               </label>
               <label className="field-group">
-                <span className="field-label">Birth date override</span>
+                <span className="field-label">Birth date</span>
                 <input
                   type="date"
                   value={birthDateValue}
@@ -475,8 +479,8 @@ const PersonDetailPanelComponent = ({
             </div>
             <p className="hint">
               {hasBirthDateOverride
-                ? `Override shown in Treemich: ${formatBirthDate(birthDateValue)}`
-                : "No override set. Treemich will use the birth date from Immich when available."}
+                ? `Treemich BIRTH life event (quick edit): ${formatBirthDate(birthDateValue)}`
+                : "No BIRTH life event date yet. The Immich birth date above is for reference only."}
             </p>
             {immichPersonPageUrl ? (
               <a

@@ -57,8 +57,8 @@ export const LifeEventsSection = ({ personLifeEvents, onCreate, onPatch, onDelet
   return (
     <div className="life-events-section stack">
       <p className="hint">
-        Quick profile fields above still save birth, death, and birth place. This section edits the full life-event
-        record (partial dates, qualifiers, notes, place details, citations).
+        Quick profile fields above still save birth, death, and birth place. This section edits the full
+        life-event record (partial dates, qualifiers, notes, place details, citations).
       </p>
       {!creating && !editingId ? (
         <button

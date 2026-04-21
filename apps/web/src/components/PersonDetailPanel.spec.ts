@@ -151,21 +151,21 @@ describe("PersonDetailPanel", () => {
       'button[aria-controls="person-detail-section-content-profile"]'
     ) as HTMLButtonElement | null;
     expect(profileToggle?.getAttribute("aria-expanded")).toBe("true");
-    expect(container.textContent).toContain("Birth date override");
+    expect(container.textContent).toContain("Save profile");
 
     act(() => {
       profileToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(profileToggle?.getAttribute("aria-expanded")).toBe("false");
-    expect((container.textContent ?? "").includes("Birth date override")).toBe(false);
+    expect((container.textContent ?? "").includes("Save profile")).toBe(false);
 
     act(() => {
       profileToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(profileToggle?.getAttribute("aria-expanded")).toBe("true");
-    expect(container.textContent).toContain("Birth date override");
+    expect(container.textContent).toContain("Save profile");
 
     act(() => {
       root.unmount();

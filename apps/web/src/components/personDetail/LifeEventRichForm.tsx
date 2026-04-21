@@ -54,7 +54,9 @@ export const LifeEventRichForm = ({
   const [month, setMonth] = useState(initialEvent?.month != null ? String(initialEvent.month) : "");
   const [day, setDay] = useState(initialEvent?.day != null ? String(initialEvent.day) : "");
   const [endYear, setEndYear] = useState(initialEvent?.endYear != null ? String(initialEvent.endYear) : "");
-  const [endMonth, setEndMonth] = useState(initialEvent?.endMonth != null ? String(initialEvent.endMonth) : "");
+  const [endMonth, setEndMonth] = useState(
+    initialEvent?.endMonth != null ? String(initialEvent.endMonth) : ""
+  );
   const [endDay, setEndDay] = useState(initialEvent?.endDay != null ? String(initialEvent.endDay) : "");
   const [notes, setNotes] = useState(initialEvent?.notes ?? "");
 
@@ -99,15 +101,24 @@ export const LifeEventRichForm = ({
     const name = nullIfEmpty(placeName);
     const locality = nullIfEmpty(placeLocality);
     const countryRaw = nullIfEmpty(placeCountryCode);
-    const countryCode =
-      countryRaw && countryRaw.length === 2 ? countryRaw.toUpperCase() : null;
+    const countryCode = countryRaw && countryRaw.length === 2 ? countryRaw.toUpperCase() : null;
     const addressLine1 = nullIfEmpty(placeAddressLine1);
     const adminArea = nullIfEmpty(placeAdminArea);
     const postalCode = nullIfEmpty(placePostalCode);
     const lat = optionalFloat(placeLat);
     const lng = optionalFloat(placeLng);
     const pNotes = nullIfEmpty(placeNotes);
-    if (!name && !locality && !countryCode && !addressLine1 && !adminArea && !postalCode && lat == null && lng == null && !pNotes) {
+    if (
+      !name &&
+      !locality &&
+      !countryCode &&
+      !addressLine1 &&
+      !adminArea &&
+      !postalCode &&
+      lat == null &&
+      lng == null &&
+      !pNotes
+    ) {
       return null;
     }
     if (!name) {
@@ -136,15 +147,7 @@ export const LifeEventRichForm = ({
         notes: nullIfEmpty(row.notes),
         citedAt: nullIfEmpty(row.citedAt)
       }))
-      .filter(
-        (row) =>
-          row.title ||
-          row.repository ||
-          row.url ||
-          row.page ||
-          row.notes ||
-          row.citedAt
-      );
+      .filter((row) => row.title || row.repository || row.url || row.page || row.notes || row.citedAt);
     return rows.length ? rows : undefined;
   };
 
@@ -158,13 +161,7 @@ export const LifeEventRichForm = ({
       citedAt: nullIfEmpty(row.citedAt)
     }));
     return rows.filter(
-      (row) =>
-        row.title ||
-        row.repository ||
-        row.url ||
-        row.page ||
-        row.notes ||
-        row.citedAt
+      (row) => row.title || row.repository || row.url || row.page || row.notes || row.citedAt
     );
   };
 
@@ -238,7 +235,10 @@ export const LifeEventRichForm = ({
   };
 
   const addCitationRow = () => {
-    setCitationRows((rows) => [...rows, { title: "", repository: "", url: "", page: "", notes: "", citedAt: "" }]);
+    setCitationRows((rows) => [
+      ...rows,
+      { title: "", repository: "", url: "", page: "", notes: "", citedAt: "" }
+    ]);
   };
 
   const updateCitation = (index: number, key: keyof (typeof citationRows)[0], value: string) => {
@@ -251,7 +251,11 @@ export const LifeEventRichForm = ({
 
   return (
     <div className="life-event-rich-form stack">
-      {error ? <p className="hint" style={{ color: "var(--danger, #c62828)" }}>{error}</p> : null}
+      {error ? (
+        <p className="hint" style={{ color: "var(--danger, #c62828)" }}>
+          {error}
+        </p>
+      ) : null}
       <div className="person-detail-form-grid">
         {variant === "create" && !fixedEventType ? (
           <label className="field-group">
@@ -285,15 +289,30 @@ export const LifeEventRichForm = ({
         </label>
         <label className="field-group">
           <span className="field-label">Year</span>
-          <input value={year} onChange={(e) => setYear(e.target.value)} disabled={disabled} inputMode="numeric" />
+          <input
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            disabled={disabled}
+            inputMode="numeric"
+          />
         </label>
         <label className="field-group">
           <span className="field-label">Month</span>
-          <input value={month} onChange={(e) => setMonth(e.target.value)} disabled={disabled} inputMode="numeric" />
+          <input
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            disabled={disabled}
+            inputMode="numeric"
+          />
         </label>
         <label className="field-group">
           <span className="field-label">Day</span>
-          <input value={day} onChange={(e) => setDay(e.target.value)} disabled={disabled} inputMode="numeric" />
+          <input
+            value={day}
+            onChange={(e) => setDay(e.target.value)}
+            disabled={disabled}
+            inputMode="numeric"
+          />
         </label>
         {dateQualifier === "BETWEEN" ? (
           <>
@@ -325,23 +344,44 @@ export const LifeEventRichForm = ({
           </label>
           <label className="field-group">
             <span className="field-label">Locality</span>
-            <input value={placeLocality} onChange={(e) => setPlaceLocality(e.target.value)} disabled={disabled} />
+            <input
+              value={placeLocality}
+              onChange={(e) => setPlaceLocality(e.target.value)}
+              disabled={disabled}
+            />
           </label>
           <label className="field-group">
             <span className="field-label">Country code</span>
-            <input value={placeCountryCode} onChange={(e) => setPlaceCountryCode(e.target.value)} disabled={disabled} maxLength={2} />
+            <input
+              value={placeCountryCode}
+              onChange={(e) => setPlaceCountryCode(e.target.value)}
+              disabled={disabled}
+              maxLength={2}
+            />
           </label>
           <label className="field-group">
             <span className="field-label">Address line 1</span>
-            <input value={placeAddressLine1} onChange={(e) => setPlaceAddressLine1(e.target.value)} disabled={disabled} />
+            <input
+              value={placeAddressLine1}
+              onChange={(e) => setPlaceAddressLine1(e.target.value)}
+              disabled={disabled}
+            />
           </label>
           <label className="field-group">
             <span className="field-label">Admin area</span>
-            <input value={placeAdminArea} onChange={(e) => setPlaceAdminArea(e.target.value)} disabled={disabled} />
+            <input
+              value={placeAdminArea}
+              onChange={(e) => setPlaceAdminArea(e.target.value)}
+              disabled={disabled}
+            />
           </label>
           <label className="field-group">
             <span className="field-label">Postal code</span>
-            <input value={placePostalCode} onChange={(e) => setPlacePostalCode(e.target.value)} disabled={disabled} />
+            <input
+              value={placePostalCode}
+              onChange={(e) => setPlacePostalCode(e.target.value)}
+              disabled={disabled}
+            />
           </label>
           <label className="field-group">
             <span className="field-label">Latitude</span>
@@ -353,39 +393,78 @@ export const LifeEventRichForm = ({
           </label>
           <label className="field-group" style={{ gridColumn: "1 / -1" }}>
             <span className="field-label">Place notes</span>
-            <textarea value={placeNotes} onChange={(e) => setPlaceNotes(e.target.value)} disabled={disabled} rows={2} />
+            <textarea
+              value={placeNotes}
+              onChange={(e) => setPlaceNotes(e.target.value)}
+              disabled={disabled}
+              rows={2}
+            />
           </label>
         </div>
       </fieldset>
       <div className="life-event-citations stack">
         <span className="field-label">Citations</span>
         {citationRows.map((row, index) => (
-          <div key={index} className="person-detail-form-grid" style={{ borderBottom: "1px solid rgba(0,0,0,0.08)", paddingBottom: "0.5rem" }}>
+          <div
+            key={index}
+            className="person-detail-form-grid"
+            style={{ borderBottom: "1px solid rgba(0,0,0,0.08)", paddingBottom: "0.5rem" }}
+          >
             <label className="field-group">
               <span className="field-label">Title</span>
-              <input value={row.title} onChange={(e) => updateCitation(index, "title", e.target.value)} disabled={disabled} />
+              <input
+                value={row.title}
+                onChange={(e) => updateCitation(index, "title", e.target.value)}
+                disabled={disabled}
+              />
             </label>
             <label className="field-group">
               <span className="field-label">Repository</span>
-              <input value={row.repository} onChange={(e) => updateCitation(index, "repository", e.target.value)} disabled={disabled} />
+              <input
+                value={row.repository}
+                onChange={(e) => updateCitation(index, "repository", e.target.value)}
+                disabled={disabled}
+              />
             </label>
             <label className="field-group">
               <span className="field-label">URL</span>
-              <input value={row.url} onChange={(e) => updateCitation(index, "url", e.target.value)} disabled={disabled} />
+              <input
+                value={row.url}
+                onChange={(e) => updateCitation(index, "url", e.target.value)}
+                disabled={disabled}
+              />
             </label>
             <label className="field-group">
               <span className="field-label">Page</span>
-              <input value={row.page} onChange={(e) => updateCitation(index, "page", e.target.value)} disabled={disabled} />
+              <input
+                value={row.page}
+                onChange={(e) => updateCitation(index, "page", e.target.value)}
+                disabled={disabled}
+              />
             </label>
             <label className="field-group">
               <span className="field-label">Cited at</span>
-              <input value={row.citedAt} onChange={(e) => updateCitation(index, "citedAt", e.target.value)} disabled={disabled} />
+              <input
+                value={row.citedAt}
+                onChange={(e) => updateCitation(index, "citedAt", e.target.value)}
+                disabled={disabled}
+              />
             </label>
             <label className="field-group" style={{ gridColumn: "1 / -1" }}>
               <span className="field-label">Citation notes</span>
-              <textarea value={row.notes} onChange={(e) => updateCitation(index, "notes", e.target.value)} disabled={disabled} rows={2} />
+              <textarea
+                value={row.notes}
+                onChange={(e) => updateCitation(index, "notes", e.target.value)}
+                disabled={disabled}
+                rows={2}
+              />
             </label>
-            <button type="button" className="secondary-button" onClick={() => removeCitation(index)} disabled={disabled}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => removeCitation(index)}
+              disabled={disabled}
+            >
               Remove citation
             </button>
           </div>
@@ -402,7 +481,12 @@ export const LifeEventRichForm = ({
           Cancel
         </button>
         {variant === "edit" && onDelete ? (
-          <button type="button" className="secondary-button danger-button" onClick={() => void handleDelete()} disabled={disabled}>
+          <button
+            type="button"
+            className="secondary-button danger-button"
+            onClick={() => void handleDelete()}
+            disabled={disabled}
+          >
             Delete event
           </button>
         ) : null}
