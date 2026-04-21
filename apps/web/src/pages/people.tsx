@@ -10,13 +10,16 @@ import type {
   UserPreferences
 } from "../lib/api";
 import {
+  createPersonLifeEvent,
   computeGraphLayout,
   createRelationship,
+  deletePersonLifeEvent,
   deleteRelationship,
   getImmichPeople,
   getPersonLifeEvents,
   getRelationships,
   getUserPreferences,
+  updatePersonLifeEvent,
   updateSpouseRelationshipDates,
   updatePersonProfile,
   updateUserPreferences
@@ -65,6 +68,45 @@ const toDateInputValueFromEvent = (
     return "";
   }
   return `${String(event.year).padStart(4, "0")}-${String(event.month).padStart(2, "0")}-${String(event.day).padStart(2, "0")}`;
+};
+
+type IsoDateParts = { year: number; month: number; day: number };
+
+export const parseDateInputToParts = (value: string): IsoDateParts | null => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() + 1 !== month || parsed.getUTCDate() !== day) {
+    return null;
+  }
+  return { year, month, day };
+};
+
+export const buildBirthPlaceInput = (city: string | null, country: string | null) => {
+  if (!city && !country) {
+    return null;
+  }
+  const cityPart = city?.trim() ? city.trim() : null;
+  const countryPart = country?.trim() ? country.trim() : null;
+  const countryCode = countryPart && countryPart.length === 2 ? countryPart.toUpperCase() : null;
+  const placeName = [cityPart, countryPart].filter((value): value is string => Boolean(value)).join(", ");
+  return {
+    name: placeName || cityPart || countryPart || "Birth place",
+    locality: cityPart,
+    countryCode
+  };
 };
 
 export const deriveProfileDisplayValues = (
@@ -433,29 +475,120 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     const selectedDeathDate = deathDateByPersonId[selectedPerson.id] || null;
     const selectedBirthCity = normalizeOptionalString(birthCityByPersonId[selectedPerson.id] ?? "");
     const selectedBirthCountry = normalizeOptionalString(birthCountryByPersonId[selectedPerson.id] ?? "");
+    const birthParts = selectedBirthDate ? parseDateInputToParts(selectedBirthDate) : null;
+    const deathParts = selectedDeathDate ? parseDateInputToParts(selectedDeathDate) : null;
+    if (selectedBirthDate && !birthParts) {
+      setStatus("Birth date must be a valid YYYY-MM-DD date.");
+      return;
+    }
+    if (selectedDeathDate && !deathParts) {
+      setStatus("Death date must be a valid YYYY-MM-DD date.");
+      return;
+    }
     setIsSavingProfile(true);
     try {
+      const resolvedEvents =
+        lifeEventsByPersonId[selectedPerson.id] ?? (await getPersonLifeEvents(selectedPerson.id));
+      const nextLifeEvents = [...resolvedEvents];
+      const findEvent = (eventType: "BIRTH" | "DEATH") =>
+        nextLifeEvents.find((event) => event.eventType === eventType) ?? null;
+      const replaceEvent = (event: LifeEventRecord) => {
+        const index = nextLifeEvents.findIndex((current) => current.id === event.id);
+        if (index >= 0) {
+          nextLifeEvents[index] = event;
+          return;
+        }
+        nextLifeEvents.push(event);
+      };
+      const removeEvent = (eventId: string) => {
+        const index = nextLifeEvents.findIndex((event) => event.id === eventId);
+        if (index >= 0) {
+          nextLifeEvents.splice(index, 1);
+        }
+      };
+
+      const birthPlaceInput = buildBirthPlaceInput(selectedBirthCity, selectedBirthCountry);
+      const shouldPersistBirthEvent = Boolean(birthParts || birthPlaceInput);
+      const existingBirthEvent = findEvent("BIRTH");
+      if (!shouldPersistBirthEvent && existingBirthEvent) {
+        await deletePersonLifeEvent(selectedPerson.id, existingBirthEvent.id);
+        removeEvent(existingBirthEvent.id);
+      } else if (shouldPersistBirthEvent) {
+        if (existingBirthEvent) {
+          const updatedBirth = await updatePersonLifeEvent(selectedPerson.id, existingBirthEvent.id, {
+            dateQualifier: "EXACT",
+            year: birthParts?.year ?? null,
+            month: birthParts?.month ?? null,
+            day: birthParts?.day ?? null,
+            place: birthPlaceInput,
+            placeId: birthPlaceInput ? undefined : null
+          });
+          replaceEvent(updatedBirth);
+        } else {
+          const createdBirth = await createPersonLifeEvent(selectedPerson.id, {
+            eventType: "BIRTH",
+            dateQualifier: "EXACT",
+            year: birthParts?.year ?? null,
+            month: birthParts?.month ?? null,
+            day: birthParts?.day ?? null,
+            place: birthPlaceInput
+          });
+          replaceEvent(createdBirth);
+        }
+      }
+
+      const existingDeathEvent = findEvent("DEATH");
+      if (!deathParts && existingDeathEvent) {
+        await deletePersonLifeEvent(selectedPerson.id, existingDeathEvent.id);
+        removeEvent(existingDeathEvent.id);
+      } else if (deathParts) {
+        if (existingDeathEvent) {
+          const updatedDeath = await updatePersonLifeEvent(selectedPerson.id, existingDeathEvent.id, {
+            dateQualifier: "EXACT",
+            year: deathParts.year,
+            month: deathParts.month,
+            day: deathParts.day
+          });
+          replaceEvent(updatedDeath);
+        } else {
+          const createdDeath = await createPersonLifeEvent(selectedPerson.id, {
+            eventType: "DEATH",
+            dateQualifier: "EXACT",
+            year: deathParts.year,
+            month: deathParts.month,
+            day: deathParts.day
+          });
+          replaceEvent(createdDeath);
+        }
+      }
+
       const savedProfile = await updatePersonProfile(selectedPerson.id, {
         gender: selectedGender,
-        birthDate: selectedBirthDate,
         givenName: selectedGivenName,
         surname: selectedSurname,
-        nicknames: selectedNicknames,
-        deathDate: selectedDeathDate,
-        birthCity: selectedBirthCity,
-        birthCountry: selectedBirthCountry
+        nicknames: selectedNicknames
       });
+      const mergedPerson: ImmichPerson = {
+        ...selectedPerson,
+        profile: savedProfile,
+        birthDate: selectedPerson.birthDate
+      };
+      const displayValues = deriveProfileDisplayValues(mergedPerson, nextLifeEvents);
       setPeople((current) =>
         current.map((person) =>
           person.id === selectedPerson.id
             ? {
                 ...person,
                 profile: savedProfile,
-                birthDate: selectedBirthDate ?? person.birthDate
+                birthDate: person.birthDate
               }
             : person
         )
       );
+      setLifeEventsByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: nextLifeEvents
+      }));
       setGenderByPersonId((current) => ({
         ...current,
         [selectedPerson.id]: savedProfile.gender
@@ -472,17 +605,21 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         ...current,
         [selectedPerson.id]: savedProfile.nicknames ?? ""
       }));
+      setBirthDateByPersonId((current) => ({
+        ...current,
+        [selectedPerson.id]: displayValues.birthDate
+      }));
       setDeathDateByPersonId((current) => ({
         ...current,
-        [selectedPerson.id]: toDateInputValue(savedProfile.deathDate)
+        [selectedPerson.id]: displayValues.deathDate
       }));
       setBirthCityByPersonId((current) => ({
         ...current,
-        [selectedPerson.id]: savedProfile.birthCity ?? ""
+        [selectedPerson.id]: displayValues.birthCity
       }));
       setBirthCountryByPersonId((current) => ({
         ...current,
-        [selectedPerson.id]: savedProfile.birthCountry ?? ""
+        [selectedPerson.id]: displayValues.birthCountry
       }));
       setStatus("Profile saved");
     } catch (error: unknown) {
@@ -497,6 +634,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     deathDateByPersonId,
     genderByPersonId,
     givenNameByPersonId,
+    lifeEventsByPersonId,
     nicknamesByPersonId,
     selectedPerson,
     surnameByPersonId
