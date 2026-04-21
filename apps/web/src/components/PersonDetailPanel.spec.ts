@@ -136,7 +136,7 @@ describe("PersonDetailPanel", () => {
     expect(container.textContent).toContain("Martha");
     expect(
       container.querySelector('button[aria-controls="person-detail-section-content-profile"]')
-    ).not.toBeNull();
+    ).toBeTruthy();
 
     act(() => {
       root.unmount();
@@ -157,7 +157,7 @@ describe("PersonDetailPanel", () => {
     });
 
     expect(profileToggle?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).not.toContain("Birth date override");
+    expect((container.textContent ?? "").includes("Birth date override")).toBe(false);
 
     act(() => {
       profileToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -201,7 +201,7 @@ describe("PersonDetailPanel", () => {
 
     expect(container.textContent).toContain("Brother-in-law");
     expect(container.textContent).toContain("Aunt-in-law");
-    expect(container.textContent).not.toContain("No in-laws found yet.");
+    expect((container.textContent ?? "").includes("No in-laws found yet.")).toBe(false);
 
     act(() => {
       root.unmount();

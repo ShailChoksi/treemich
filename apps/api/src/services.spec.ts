@@ -57,7 +57,7 @@ describe("getImmichClientForRequest", () => {
 
     const resolvedClient = await getImmichClientForRequest(request as unknown as RequestForImmichClient);
     expect(resolvedClient).toBe(client);
-    expect(request.server.services.authService.requireLinkedSession).not.toHaveBeenCalled();
+    expect(request.server.services.authService.requireLinkedSession).toHaveBeenCalledTimes(0);
     expect(request.server.services.immichClientFactory.getClient).toHaveBeenCalledWith(linkedAccount);
   });
 
