@@ -3,6 +3,10 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // three.js + R3F often land in one async chunk; still large but expected.
+    chunkSizeWarningLimit: 1400
+  },
   // Nested deps (e.g. @use-gesture/react, react-use-measure) can pull React 18; two copies break hooks / R3F.
   resolve: {
     dedupe: ["react", "react-dom", "scheduler"]
