@@ -113,6 +113,42 @@ docker compose down        # stop containers, keep data
 docker compose down -v     # stop containers and delete database volume
 ```
 
+## Updating
+
+Database schema changes are applied automatically: the API container runs `prisma migrate deploy` before starting, so you normally only need to recreate containers with a newer image. Your PostgreSQL data lives in the Docker volume unless you run `docker compose down -v`.
+
+### From source (this repository)
+
+Pull latest code, rebuild, and restart:
+
+```bash
+git pull
+docker compose up --build -d
+```
+
+### Pre-built images (Docker Hub)
+
+If you use [`docker-compose.hub.yml`](docker-compose.hub.yml), pull new images and restart:
+
+```bash
+docker compose -f docker-compose.hub.yml pull
+docker compose -f docker-compose.hub.yml up -d
+```
+
+By default this uses the `api-latest` and `web-latest` tags. For a **controlled upgrade**, pin to a release tag in `.env` (or your shell) so you upgrade only when ready:
+
+| Variable           | Example      | Description                 |
+| ------------------ | ------------ | --------------------------- |
+| `TREEMICH_API_TAG` | `api-v0.2.0` | API image tag on Docker Hub |
+| `TREEMICH_WEB_TAG` | `web-v0.2.0` | Web image tag on Docker Hub |
+
+Then run `pull` and `up -d` as above. Release tags match Git tags (for example `v0.2.0` publishes `api-v0.2.0` and `web-v0.2.0`). Use your repository’s **GitHub Releases** page for notes on each version before upgrading.
+
+### After updating
+
+- If the UI behaves oddly right after an upgrade, try a **hard refresh** in the browser (cached JavaScript) or clear site data for Treemich’s origin.
+- When Immich is upgraded, confirm Treemich still matches your Immich version expectations; check release notes if something breaks.
+
 ## Development Setup
 
 ### Prerequisites
