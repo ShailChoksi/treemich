@@ -906,7 +906,7 @@ describe("Treemich API routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
-        familyViewStyle: "generationTree",
+        familyViewStyle: "centeredRelationshipMap",
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         graphFilterVisibility: {
@@ -961,19 +961,13 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...savedPrefs,
-        familyViewStyle: "generationTree",
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
-        data: {
-          preferences: expect.objectContaining({
-            familyViewStyle: "generationTree",
-            graphFilterVisibility: savedPrefs.graphFilterVisibility
-          })
-        },
+        data: { preferences: savedPrefs },
         select: { preferences: true }
       });
     });
@@ -1005,19 +999,13 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...merged,
-        familyViewStyle: "generationTree",
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
-        data: {
-          preferences: expect.objectContaining({
-            familyViewStyle: "generationTree",
-            graphFilterVisibility: existing.graphFilterVisibility
-          })
-        },
+        data: { preferences: merged },
         select: { preferences: true }
       });
     });
@@ -1046,7 +1034,7 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       const json = response.json();
       expect(json.graphFilterVisibility).toEqual(existingFilters);
-      expect(json.familyViewStyle).toBe("generationTree");
+      expect(json.familyViewStyle).toBe("hybridTreeList");
       expect(json.showSingleFamilyTree).toBe(defaultShowSingleFamilyTree);
     });
 

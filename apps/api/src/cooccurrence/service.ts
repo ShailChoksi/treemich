@@ -15,6 +15,8 @@ import {
 } from "../relationships/cooccurrence.js";
 import { getCooccurrencePreferences, parseUserPreferences } from "../preferences.js";
 
+/** Photo cooccurrence aggregation and scheduling; pair scoring lives in `relationships/cooccurrence`. */
+
 const insertBatchSize = 1000;
 const defaultPageSize = 100;
 const maxPageSize = 2000;
