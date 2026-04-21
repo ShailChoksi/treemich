@@ -126,7 +126,20 @@ describe("cooccurrence routes", () => {
         upsertProfile: vi.fn(),
         findTargetsByRelationship: vi.fn(),
         traverseRelationshipChain: vi.fn()
-      } as unknown as AppServices["relationshipService"]
+      } as unknown as AppServices["relationshipService"],
+      lifeEventService: {
+        getBirthDeathByPersonProfileIds: vi.fn().mockResolvedValue(new Map()),
+        syncLegacyPersonProfileFields: vi.fn(),
+        syncLegacySpouseDates: vi.fn(),
+        listPersonLifeEvents: vi.fn(),
+        createPersonLifeEvent: vi.fn(),
+        updatePersonLifeEvent: vi.fn(),
+        deletePersonLifeEvent: vi.fn(),
+        listRelationshipLifeEvents: vi.fn(),
+        createRelationshipLifeEvent: vi.fn(),
+        updateRelationshipLifeEvent: vi.fn(),
+        deleteRelationshipLifeEvent: vi.fn()
+      } as unknown as AppServices["lifeEventService"]
     };
 
     const { buildApp } = await import("../app.js");

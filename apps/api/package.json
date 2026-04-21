@@ -26,6 +26,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@rolldown/binding-win32-x64-msvc": "^1.0.0-rc.16",
     "@types/node": "^22.14.0",
     "nodemon": "^3.1.10",
     "prisma": "^6.19.3",

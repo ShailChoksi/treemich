@@ -30,6 +30,28 @@ enum CooccurrenceJobStatus {
   FAILED
 }
 
+enum DateQualifier {
+  EXACT
+  ABOUT
+  BEFORE
+  AFTER
+  BETWEEN
+  CALCULATED
+  ESTIMATED
+}
+
+enum LifeEventType {
+  BIRTH
+  DEATH
+  MARRIAGE
+  DIVORCE
+  BURIAL
+  CHRISTENING
+  RESIDENCE
+  IMMIGRATION
+  CUSTOM
+}
+
 model TreemichUser {
   id                  String                @id @default(cuid())
   immichBaseUrl       String
@@ -43,6 +65,8 @@ model TreemichUser {
   sessions            TreemichSession[]
   profiles            PersonProfile[]
   relationships       Relationship[]
+  places              Place[]
+  lifeEvents          LifeEvent[]
   cooccurrenceJobs    CooccurrenceJob[]
   cooccurrenceEdges   CooccurrenceEdge[]
   cooccurrenceSchedule CooccurrenceSchedule?
@@ -88,6 +112,7 @@ model PersonProfile {
   userId              String
   immichPersonId      String
   gender              Gender         @default(UNKNOWN)
+  /// Dual-written with BIRTH/DEATH `LifeEvent` rows until a follow-up migration removes legacy columns.
   birthDateOverride   String?
   displayNameOverride String?
   givenName           String?
@@ -101,6 +126,7 @@ model PersonProfile {
   user                TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
   fromRelationships   Relationship[] @relation("FromPerson")
   toRelationships     Relationship[] @relation("ToPerson")
+  lifeEvents          LifeEvent[]
 
   @@unique([userId, immichPersonId])
   @@index([userId])
@@ -112,6 +138,7 @@ model Relationship {
   fromPersonId String
   toPersonId String
   type       RelationshipType
+  /// Dual-written with MARRIAGE/DIVORCE `LifeEvent` rows until legacy columns are dropped.
   marriageAnniversaryDate String?
   divorceDate String?
   createdAt  DateTime         @default(now())
@@ -119,11 +146,77 @@ model Relationship {
   user       TreemichUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
   fromPerson PersonProfile    @relation("FromPerson", fields: [userId, fromPersonId], references: [userId, immichPersonId], onDelete: Cascade)
   toPerson   PersonProfile    @relation("ToPerson", fields: [userId, toPersonId], references: [userId, immichPersonId], onDelete: Cascade)
+  lifeEvents LifeEvent[]
 
   @@unique([userId, fromPersonId, toPersonId, type])
   @@index([userId, fromPersonId])
   @@index([userId, toPersonId])
   @@index([userId, id])
+}
+
+model Place {
+  id           String    @id @default(cuid())
+  userId       String
+  name         String
+  addressLine1 String?
+  locality     String?
+  adminArea    String?
+  postalCode   String?
+  countryCode  String?
+  latitude     Decimal?  @db.Decimal(10, 7)
+  longitude    Decimal?  @db.Decimal(10, 7)
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lifeEvents   LifeEvent[]
+
+  @@index([userId])
+  @@index([userId, name])
+}
+
+model LifeEvent {
+  id               String         @id @default(cuid())
+  userId           String
+  eventType        LifeEventType
+  dateQualifier    DateQualifier  @default(EXACT)
+  year             Int?
+  month            Int?
+  day              Int?
+  endYear          Int?
+  endMonth         Int?
+  endDay           Int?
+  personProfileId  String?
+  relationshipId   String?
+  placeId          String?
+  notes            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  user             TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personProfile    PersonProfile? @relation(fields: [personProfileId], references: [id], onDelete: Cascade)
+  relationship     Relationship?  @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  place            Place?         @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  citations        LifeEventCitation[]
+
+  @@index([userId, personProfileId])
+  @@index([userId, relationshipId])
+  @@index([placeId])
+}
+
+model LifeEventCitation {
+  id          String    @id @default(cuid())
+  lifeEventId String
+  title       String?
+  repository  String?
+  url         String?
+  page        String?
+  notes       String?
+  citedAt     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lifeEvent   LifeEvent @relation(fields: [lifeEventId], references: [id], onDelete: Cascade)
+
+  @@index([lifeEventId])
 }
 
 model CooccurrenceSchedule {

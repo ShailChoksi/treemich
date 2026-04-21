@@ -304,6 +304,7 @@ export class RelationshipService {
 
     return {
       relationships: pageItems.map((item) => ({
+        id: item.id,
         fromPersonId: item.fromPersonId,
         toPersonId: item.toPersonId,
         type: item.type,

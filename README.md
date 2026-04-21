@@ -120,6 +120,8 @@ docker compose -f docker-compose.hub.yml up -d
 
 The API runs migrations on startup (`prisma migrate deploy`), then serves the app.
 
+**Login fails or returns HTTP 500:** The API container must reach Immich over the network. **`IMMICH_BASE_URL=http://localhost:2283/api` is wrong for Compose** when Immich runs on your machine — `localhost` inside the container is not your host. Use `http://host.docker.internal:2283/api` instead (Compose already maps `host.docker.internal`; Linux may need Docker 20.10+ with `host-gateway`). If Immich runs in another Docker network, use that service’s URL. Check `docker logs treemich-api` for connection errors.
+
 ---
 
 ### B. Build from source (this repository)
