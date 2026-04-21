@@ -153,7 +153,7 @@ Then run `pull` and `up -d` as above. Release tags match Git tags (for example `
 
 ### Prerequisites
 
-- Node.js >= 20
+- Node.js **20.19+** or **22.12+** (required by Vite 8 / Rolldown; see root `package.json` `engines`)
 - PostgreSQL (or use `docker compose up -d postgres` for a containerized instance)
 - An Immich instance
 
