@@ -116,3 +116,32 @@ export const patchLifeEventBodySchema = z
 export type PlaceInput = z.infer<typeof placeInputSchema>;
 export type CreateLifeEventBody = z.infer<typeof createLifeEventBodySchema>;
 export type PatchLifeEventBody = z.infer<typeof patchLifeEventBodySchema>;
+
+export type LifeEventPlaceRecord = PlaceInput & {
+  id: string;
+};
+
+export type LifeEventCitationRecord = z.infer<typeof lifeEventCitationInputSchema> & {
+  id: string;
+};
+
+export type LifeEventRecord = {
+  id: string;
+  eventType: LifeEventTypeValue;
+  dateQualifier: DateQualifierValue;
+  year: number | null;
+  month: number | null;
+  day: number | null;
+  endYear: number | null;
+  endMonth: number | null;
+  endDay: number | null;
+  notes: string | null;
+  place: LifeEventPlaceRecord | null;
+  citations: LifeEventCitationRecord[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LifeEventListResponse = {
+  lifeEvents: LifeEventRecord[];
+};

@@ -4,6 +4,7 @@ import type {
   Gender,
   GraphLayoutResponse,
   ImmichPerson,
+  LifeEventRecord,
   RelationshipRecord,
   RelationshipType,
   UserPreferences
@@ -13,6 +14,7 @@ import {
   createRelationship,
   deleteRelationship,
   getImmichPeople,
+  getPersonLifeEvents,
   getRelationships,
   getUserPreferences,
   updateSpouseRelationshipDates,
@@ -55,6 +57,38 @@ const sortRelationshipsStable = (relationships: RelationshipRecord[]) =>
   );
 
 const normalizeName = (value: string | null | undefined) => value?.trim().toLocaleLowerCase() ?? "";
+
+const toDateInputValueFromEvent = (
+  event: Pick<LifeEventRecord, "year" | "month" | "day"> | null | undefined
+) => {
+  if (event?.year == null || event.month == null || event.day == null) {
+    return "";
+  }
+  return `${String(event.year).padStart(4, "0")}-${String(event.month).padStart(2, "0")}-${String(event.day).padStart(2, "0")}`;
+};
+
+export const deriveProfileDisplayValues = (
+  person: ImmichPerson,
+  lifeEvents: LifeEventRecord[] | undefined
+): { birthDate: string; deathDate: string; birthCity: string; birthCountry: string } => {
+  const fallback = {
+    birthDate: toDateInputValue(person.birthDate),
+    deathDate: toDateInputValue(person.profile?.deathDate),
+    birthCity: person.profile?.birthCity ?? "",
+    birthCountry: person.profile?.birthCountry ?? ""
+  };
+  if (!lifeEvents) {
+    return fallback;
+  }
+  const birthEvent = lifeEvents.find((event) => event.eventType === "BIRTH") ?? null;
+  const deathEvent = lifeEvents.find((event) => event.eventType === "DEATH") ?? null;
+  return {
+    birthDate: birthEvent ? toDateInputValueFromEvent(birthEvent) : fallback.birthDate,
+    deathDate: deathEvent ? toDateInputValueFromEvent(deathEvent) : fallback.deathDate,
+    birthCity: birthEvent ? (birthEvent.place?.locality ?? "") : fallback.birthCity,
+    birthCountry: birthEvent ? (birthEvent.place?.countryCode ?? "") : fallback.birthCountry
+  };
+};
 
 const noRelationshipsGraphFilterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]> = {
   parentChild: false,
@@ -154,6 +188,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [deathDateByPersonId, setDeathDateByPersonId] = useState<Record<string, string>>({});
   const [birthCityByPersonId, setBirthCityByPersonId] = useState<Record<string, string>>({});
   const [birthCountryByPersonId, setBirthCountryByPersonId] = useState<Record<string, string>>({});
+  const [lifeEventsByPersonId, setLifeEventsByPersonId] = useState<Record<string, LifeEventRecord[]>>({});
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -183,6 +218,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setRelationships(sortedRelationships);
       setSavedPreferences((current) => current ?? preferencesResponse);
       setLoadError(null);
+      setLifeEventsByPersonId({});
       setGenderByPersonId(
         sortedPeople.reduce<Record<string, Gender>>((acc, person) => {
           acc[person.id] = person.profile?.gender ?? "UNKNOWN";
@@ -278,6 +314,48 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     });
   }, [refreshGraphData]);
 
+  const selectedPerson = useMemo(
+    () => people.find((person) => person.id === selectedPersonId) ?? null,
+    [people, selectedPersonId]
+  );
+
+  useEffect(() => {
+    if (!selectedPerson) {
+      return;
+    }
+    if (lifeEventsByPersonId[selectedPerson.id] !== undefined) {
+      return;
+    }
+    let cancelled = false;
+    getPersonLifeEvents(selectedPerson.id)
+      .then((events) => {
+        if (cancelled) {
+          return;
+        }
+        setLifeEventsByPersonId((current) => ({
+          ...current,
+          [selectedPerson.id]: events
+        }));
+        const values = deriveProfileDisplayValues(selectedPerson, events);
+        setBirthDateByPersonId((current) => ({ ...current, [selectedPerson.id]: values.birthDate }));
+        setDeathDateByPersonId((current) => ({ ...current, [selectedPerson.id]: values.deathDate }));
+        setBirthCityByPersonId((current) => ({ ...current, [selectedPerson.id]: values.birthCity }));
+        setBirthCountryByPersonId((current) => ({ ...current, [selectedPerson.id]: values.birthCountry }));
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        setLifeEventsByPersonId((current) => ({
+          ...current,
+          [selectedPerson.id]: []
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lifeEventsByPersonId, selectedPerson]);
+
   useEffect(() => {
     if (!status) {
       return;
@@ -287,11 +365,6 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     }, 5000);
     return () => window.clearTimeout(timeout);
   }, [status]);
-
-  const selectedPerson = useMemo(
-    () => people.find((person) => person.id === selectedPersonId) ?? null,
-    [people, selectedPersonId]
-  );
 
   const onPreferencesChange = useCallback((prefs: Partial<UserPreferences>) => {
     setSavedPreferences((current) => ({
