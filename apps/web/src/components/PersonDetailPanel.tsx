@@ -1,7 +1,10 @@
+import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
 import { memo, useEffect, useMemo, useState } from "react";
 import type { Gender, ImmichPerson, LifeEventRecord, RelationshipRecord, RelationshipType } from "../lib/api";
 import { immichPersonUrl, personThumbnailUrl } from "../lib/api";
 import { deriveSpouseDatesFromRelationshipEvents } from "../lib/lifeEventUi";
+import { LifeEventsSection } from "./personDetail/LifeEventsSection";
+import { SpouseLifeEventsRichPane } from "./personDetail/SpouseLifeEventsRichPane";
 import { computeExtendedFamily, computeInLawFamily } from "./graph/extendedFamily";
 import { inverseRelationshipType } from "./graph/layout";
 import {
@@ -74,6 +77,13 @@ type Props = {
   onPrimaryFamilyUnitChange: (personId: string, unitKey: string | null) => void;
   /** Cached relationship-scoped life events (marriage/divorce), keyed by relationship id */
   relationshipLifeEventsById?: Record<string, LifeEventRecord[]>;
+  personLifeEvents?: LifeEventRecord[];
+  onPersonLifeEventCreate?: (body: CreateLifeEventBody) => Promise<void>;
+  onPersonLifeEventPatch?: (eventId: string, body: PatchLifeEventBody) => Promise<void>;
+  onPersonLifeEventDelete?: (eventId: string) => Promise<void>;
+  onRelationshipLifeEventCreate?: (relationshipId: string, body: CreateLifeEventBody) => Promise<void>;
+  onRelationshipLifeEventPatch?: (relationshipId: string, eventId: string, body: PatchLifeEventBody) => Promise<void>;
+  onRelationshipLifeEventDelete?: (relationshipId: string, eventId: string) => Promise<void>;
 };
 
 const maxVisibleSuggestions = 5;
@@ -85,7 +95,8 @@ const DEFAULT_COLLAPSED_SECTIONS = {
   friends: false,
   pets: false,
   editRelationship: false,
-  removeRelationship: false
+  removeRelationship: false,
+  lifeEvents: true
 } as const;
 
 type SectionCollapseKey = keyof typeof DEFAULT_COLLAPSED_SECTIONS;
@@ -124,7 +135,14 @@ const PersonDetailPanelComponent = ({
   immichBaseUrl,
   primaryFamilyUnitByPersonId,
   onPrimaryFamilyUnitChange,
-  relationshipLifeEventsById = {}
+  relationshipLifeEventsById = {},
+  personLifeEvents,
+  onPersonLifeEventCreate,
+  onPersonLifeEventPatch,
+  onPersonLifeEventDelete,
+  onRelationshipLifeEventCreate,
+  onRelationshipLifeEventPatch,
+  onRelationshipLifeEventDelete
 }: Props) => {
   const [editingRelationshipKey, setEditingRelationshipKey] = useState<string | null>(null);
   const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>("SIBLING_OF");
@@ -496,6 +514,23 @@ const PersonDetailPanelComponent = ({
               {isSavingProfile ? "Saving..." : "Save profile"}
             </button>
           </CollapsibleSection>
+          {person && onPersonLifeEventCreate && onPersonLifeEventPatch && onPersonLifeEventDelete ? (
+            <CollapsibleSection
+              sectionKey="life-events"
+              title="Life events (advanced)"
+              subtitle="Partial dates, qualifiers, notes, place details, citations"
+              isCollapsed={collapsedSections.lifeEvents}
+              onToggleCollapsed={() => toggleSectionCollapsed("lifeEvents")}
+            >
+              <LifeEventsSection
+                personLifeEvents={personLifeEvents}
+                onCreate={onPersonLifeEventCreate}
+                onPatch={onPersonLifeEventPatch}
+                onDelete={onPersonLifeEventDelete}
+                disabled={isSavingProfile || isSavingRelationship}
+              />
+            </CollapsibleSection>
+          ) : null}
           <RelativesSection
             sectionKey="relatives"
             title="Relatives"
@@ -690,6 +725,23 @@ const PersonDetailPanelComponent = ({
                     />
                   </label>
                 </div>
+              ) : null}
+              {editingRelationshipType === "SPOUSE_OF" &&
+              activeRelationship.record.id &&
+              onRelationshipLifeEventCreate &&
+              onRelationshipLifeEventPatch &&
+              onRelationshipLifeEventDelete ? (
+                <SpouseLifeEventsRichPane
+                  events={relationshipLifeEventsById[activeRelationship.record.id] ?? []}
+                  onCreate={(body) => onRelationshipLifeEventCreate(activeRelationship.record.id!, body)}
+                  onPatch={(eventId, body) =>
+                    onRelationshipLifeEventPatch(activeRelationship.record.id!, eventId, body)
+                  }
+                  onDelete={(eventId) =>
+                    onRelationshipLifeEventDelete(activeRelationship.record.id!, eventId)
+                  }
+                  disabled={isSavingRelationship}
+                />
               ) : null}
               <div className="add-relative-actions">
                 <button

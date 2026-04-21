@@ -1,3 +1,4 @@
+import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
 import { filterGraphLayoutTopologyRelationships } from "@treemich/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -296,7 +297,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       return;
     }
     let cancelled = false;
-    getPersonLifeEvents(selectedPerson.id)
+    getPersonLifeEvents(selectedPerson.id, { includeCitations: true })
       .then((events) => {
         if (cancelled) {
           return;
@@ -341,7 +342,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       return;
     }
     let cancelled = false;
-    Promise.all(toFetch.map((id) => getRelationshipLifeEvents(id).then((events) => [id, events] as const)))
+    Promise.all(
+      toFetch.map((id) =>
+        getRelationshipLifeEvents(id, { includeCitations: true }).then((events) => [id, events] as const)
+      )
+    )
       .then((rows) => {
         if (cancelled) {
           return;
@@ -450,7 +455,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     setIsSavingProfile(true);
     try {
       const resolvedEvents =
-        lifeEventsByPersonId[selectedPerson.id] ?? (await getPersonLifeEvents(selectedPerson.id));
+        lifeEventsByPersonId[selectedPerson.id] ??
+          (await getPersonLifeEvents(selectedPerson.id, { includeCitations: true }));
       const nextLifeEvents = [...resolvedEvents];
       const findEvent = (eventType: "BIRTH" | "DEATH") =>
         nextLifeEvents.find((event) => event.eventType === eventType) ?? null;
@@ -674,7 +680,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
             return;
           }
 
-          let resolved = relationshipLifeEventsById[rid] ?? (await getRelationshipLifeEvents(rid));
+          let resolved =
+            relationshipLifeEventsById[rid] ?? (await getRelationshipLifeEvents(rid, { includeCitations: true }));
           const next = [...resolved];
           const findEvent = (eventType: "MARRIAGE" | "DIVORCE") =>
             next.find((event) => event.eventType === eventType) ?? null;
@@ -769,6 +776,124 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       }
     },
     [refreshGraphData, selectedPerson, relationshipLifeEventsById]
+  );
+
+  const afterPersonLifeEventsUpdated = useCallback(
+    async (personId: string) => {
+      const ev = await getPersonLifeEvents(personId, { includeCitations: true });
+      setLifeEventsByPersonId((current) => ({
+        ...current,
+        [personId]: ev
+      }));
+      const p = people.find((person) => person.id === personId);
+      if (p) {
+        const dv = deriveProfileDisplayValues(p, ev);
+        setBirthDateByPersonId((prev) => ({ ...prev, [personId]: dv.birthDate }));
+        setDeathDateByPersonId((prev) => ({ ...prev, [personId]: dv.deathDate }));
+        setBirthCityByPersonId((prev) => ({ ...prev, [personId]: dv.birthCity }));
+        setBirthCountryByPersonId((prev) => ({ ...prev, [personId]: dv.birthCountry }));
+      }
+    },
+    [people]
+  );
+
+  const handlePersonLifeEventCreate = useCallback(
+    async (body: CreateLifeEventBody) => {
+      if (!selectedPerson) {
+        return;
+      }
+      try {
+        await createPersonLifeEvent(selectedPerson.id, body);
+        setStatus("Life event saved");
+        await afterPersonLifeEventsUpdated(selectedPerson.id);
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      }
+    },
+    [afterPersonLifeEventsUpdated, selectedPerson]
+  );
+
+  const handlePersonLifeEventPatch = useCallback(
+    async (eventId: string, body: PatchLifeEventBody) => {
+      if (!selectedPerson) {
+        return;
+      }
+      try {
+        await updatePersonLifeEvent(selectedPerson.id, eventId, body);
+        setStatus("Life event saved");
+        await afterPersonLifeEventsUpdated(selectedPerson.id);
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      }
+    },
+    [afterPersonLifeEventsUpdated, selectedPerson]
+  );
+
+  const handlePersonLifeEventDelete = useCallback(
+    async (eventId: string) => {
+      if (!selectedPerson) {
+        return;
+      }
+      try {
+        await deletePersonLifeEvent(selectedPerson.id, eventId);
+        setStatus("Life event deleted");
+        await afterPersonLifeEventsUpdated(selectedPerson.id);
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      }
+    },
+    [afterPersonLifeEventsUpdated, selectedPerson]
+  );
+
+  const handleRelationshipLifeEventCreate = useCallback(
+    async (relationshipId: string, body: CreateLifeEventBody) => {
+      try {
+        await createRelationshipLifeEvent(relationshipId, body);
+        setStatus("Life event saved");
+        const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
+        setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
+        await refreshGraphData();
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      }
+    },
+    [refreshGraphData]
+  );
+
+  const handleRelationshipLifeEventPatch = useCallback(
+    async (relationshipId: string, eventId: string, body: PatchLifeEventBody) => {
+      try {
+        await updateRelationshipLifeEvent(relationshipId, eventId, body);
+        setStatus("Life event saved");
+        const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
+        setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
+        await refreshGraphData();
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      }
+    },
+    [refreshGraphData]
+  );
+
+  const handleRelationshipLifeEventDelete = useCallback(
+    async (relationshipId: string, eventId: string) => {
+      try {
+        await deleteRelationshipLifeEvent(relationshipId, eventId);
+        setStatus("Life event deleted");
+        const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
+        setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
+        await refreshGraphData();
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      }
+    },
+    [refreshGraphData]
   );
 
   const handleGenderChange = useCallback(
@@ -967,6 +1092,13 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           primaryFamilyUnitByPersonId={savedPreferences?.primaryFamilyUnitByPersonId ?? {}}
           onPrimaryFamilyUnitChange={onPrimaryFamilyUnitChange}
           relationshipLifeEventsById={relationshipLifeEventsById}
+          personLifeEvents={selectedPerson ? lifeEventsByPersonId[selectedPerson.id] : undefined}
+          onPersonLifeEventCreate={handlePersonLifeEventCreate}
+          onPersonLifeEventPatch={handlePersonLifeEventPatch}
+          onPersonLifeEventDelete={handlePersonLifeEventDelete}
+          onRelationshipLifeEventCreate={handleRelationshipLifeEventCreate}
+          onRelationshipLifeEventPatch={handleRelationshipLifeEventPatch}
+          onRelationshipLifeEventDelete={handleRelationshipLifeEventDelete}
         />
       </aside>
     </main>
