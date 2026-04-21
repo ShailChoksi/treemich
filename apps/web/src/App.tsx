@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { AuthScreen } from "./components/AuthScreen";
 import { getCurrentUser, getLinkStatus, login, logout, type AuthState } from "./lib/api";
-import { PeoplePage } from "./pages/people";
+
+const PeoplePage = lazy(async () => {
+  const mod = await import("./pages/people");
+  return { default: mod.PeoplePage };
+});
 
 export const App = () => {
   const [authState, setAuthState] = useState<AuthState | null>(null);
@@ -119,10 +123,18 @@ export const App = () => {
           {isSubmittingAuth ? "Signing out..." : "Sign out"}
         </button>
       </header>
-      <PeoplePage
-        immichBaseUrl={linkStatus?.immichBaseUrl ?? null}
-        currentUserName={linkStatus?.immichName ?? currentUser.name}
-      />
+      <Suspense
+        fallback={
+          <section className="card stack" style={{ margin: "1rem" }}>
+            <p className="hint">Loading graph…</p>
+          </section>
+        }
+      >
+        <PeoplePage
+          immichBaseUrl={linkStatus?.immichBaseUrl ?? null}
+          currentUserName={linkStatus?.immichName ?? currentUser.name}
+        />
+      </Suspense>
     </main>
   );
 };
