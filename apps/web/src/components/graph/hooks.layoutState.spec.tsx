@@ -129,7 +129,7 @@ describe("useGraphLayoutState", () => {
     });
 
     expect(visibleIds).toEqual(["a", "b"]);
-    expect(workerSpy).not.toHaveBeenCalled();
+    expect(workerSpy).toHaveBeenCalledTimes(0);
     act(() => root.unmount());
     container.remove();
   });
@@ -427,7 +427,7 @@ describe("useGraphLayoutState", () => {
       await Promise.resolve();
     });
 
-    expect(workerSpy).not.toHaveBeenCalled();
+    expect(workerSpy).toHaveBeenCalledTimes(0);
     expect(anchorX).toBe(0);
 
     act(() => root.unmount());

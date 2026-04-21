@@ -243,7 +243,7 @@ describe("cooccurrence routes", () => {
       minSharedPhotos: 2,
       minScore: 0
     });
-    expect(getPhotoCooccurrenceMock).not.toHaveBeenCalled();
+    expect(getPhotoCooccurrenceMock).toHaveBeenCalledTimes(0);
   });
 
   it("falls back to the live cooccurrence computation when nothing is persisted yet", async () => {

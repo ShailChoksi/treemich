@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createWebGlRenderer } from "./createWebGlRenderer";
 
 vi.mock("three", () => ({
-  WebGLRenderer: vi.fn().mockImplementation((params: unknown) => ({ params }))
+  // Vitest 4+ requires `function`/`class` for mocks used with `new` (see vi.spyOn constructor note).
+  WebGLRenderer: vi.fn().mockImplementation(function (this: unknown, params: unknown) {
+    return { params };
+  })
 }));
 
 describe("createWebGlRenderer", () => {

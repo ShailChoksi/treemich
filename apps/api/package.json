@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "prisma:generate": "prisma generate",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate:dev": "prisma migrate dev --schema prisma/schema.prisma"
   },
   "dependencies": {
@@ -19,7 +19,9 @@
     "@fastify/rate-limit": "^10.3.0",
     "@prisma/client": "^6.19.3",
     "@treemich/shared": "0.1.0",
+    "convert-source-map": "^2.0.0",
     "dotenv": "^16.5.0",
+    "estree-walker": "^3.0.3",
     "fastify": "^5.2.0",
     "zod": "^3.24.2"
   },
@@ -29,6 +31,7 @@
     "prisma": "^6.19.3",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
-    "vitest": "^3.1.2"
+    "vite": "8.0.9",
+    "vitest": "^4.1.4"
   }
 }

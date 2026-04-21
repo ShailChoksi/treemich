@@ -169,7 +169,7 @@ describe("computeExtendedFamily", () => {
     const result = computeExtendedFamily("me", allPeople, baseRelationships, directIds);
     const directIdsList = [...directIds];
     for (const member of result) {
-      expect(directIdsList).not.toContain(member.personId);
+      expect(directIdsList.includes(member.personId)).toBe(false);
     }
   });
 

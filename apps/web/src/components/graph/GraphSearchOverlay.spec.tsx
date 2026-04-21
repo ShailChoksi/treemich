@@ -43,7 +43,7 @@ describe("GraphSearchOverlay", () => {
     const { container, root } = renderOverlay();
 
     const centerButton = container.querySelector('button[aria-label="Center graph view"]');
-    expect(centerButton).not.toBeNull();
+    expect(centerButton).toBeTruthy();
     expect(centerButton?.textContent).toContain("Center view");
 
     act(() => {
@@ -56,7 +56,7 @@ describe("GraphSearchOverlay", () => {
     const onCenterView = vi.fn();
     const { container, root } = renderOverlay(onCenterView);
     const centerButton = container.querySelector('button[aria-label="Center graph view"]');
-    expect(centerButton).not.toBeNull();
+    expect(centerButton).toBeTruthy();
 
     act(() => {
       centerButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
