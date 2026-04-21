@@ -43,6 +43,7 @@
     "@mediapipe/tasks-vision": "^0.10.34",
     "@prisma/client": "^6.19.3",
     "bidi-js": "^1.0.3",
+    "estree-walker": "^3.0.3",
     "react-use-measure": "^2.1.7",
     "troika-worker-utils": "^0.52.0",
     "webgl-sdf-generator": "^1.1.1"
