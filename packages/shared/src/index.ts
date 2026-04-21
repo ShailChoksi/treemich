@@ -11,13 +11,23 @@ export const relationshipTypes = [
 ] as const;
 export type RelationshipType = (typeof relationshipTypes)[number];
 
-/** Relationship types that participate in family-tree layout topology (matches web `layout` + API graph layout). */
+/** Maps PARENT_OF ↔ CHILD_OF; all other types are unchanged (self-inverse for layout). */
+export const inverseRelationshipType = (type: RelationshipType): RelationshipType => {
+  if (type === "PARENT_OF") {
+    return "CHILD_OF";
+  }
+  if (type === "CHILD_OF") {
+    return "PARENT_OF";
+  }
+  return type;
+};
+
 export const graphLayoutTopologyRelationshipTypes = ["PARENT_OF", "CHILD_OF", "SPOUSE_OF"] as const;
 
 const graphLayoutTopologyTypeSet = new Set<RelationshipType>(graphLayoutTopologyRelationshipTypes);
 
 export const filterGraphLayoutTopologyRelationships = <R extends { type: RelationshipType }>(
-  relationships: R[]
+  relationships: readonly R[]
 ): R[] => relationships.filter((relationship) => graphLayoutTopologyTypeSet.has(relationship.type));
 
 export const genderValues = ["MALE", "FEMALE", "OTHER", "UNKNOWN"] as const;
@@ -162,16 +172,17 @@ export const graphFilterVisibilitySchema = z.object({
   pets: z.boolean()
 });
 
-/** Legacy values accepted from stored preferences/API; normalized to generation tree only. */
-export const legacyFamilyViewStyleValues = [
+export const familyViewStyleValues = [
   "generationTree",
   "centeredRelationshipMap",
   "hybridTreeList",
   "cleaned3D"
 ] as const;
-const legacyFamilyViewStyleSchema = z.enum(legacyFamilyViewStyleValues);
-export const familyViewStyleSchema = legacyFamilyViewStyleSchema.transform(() => "generationTree" as const);
-export type FamilyViewStyle = "generationTree";
+export const familyViewStyleSchema = z.enum(familyViewStyleValues);
+export const graphLineRoutingStyleValues = ["orthogonal", "direct"] as const;
+export const graphLineRoutingStyleSchema = z.enum(graphLineRoutingStyleValues);
+export type GraphLineRoutingStyle = z.infer<typeof graphLineRoutingStyleSchema>;
+export const defaultGraphLineRoutingStyle: GraphLineRoutingStyle = "orthogonal";
 export const defaultShowSingleFamilyTree = false;
 
 export const cooccurrencePreferencesSchema = z.object({
@@ -187,9 +198,8 @@ export const defaultCooccurrencePreferences: CooccurrencePreferences = {
 
 export const userPreferencesSchema = z.object({
   graphFilterVisibility: graphFilterVisibilitySchema.optional(),
-  familyViewStyle: legacyFamilyViewStyleSchema
-    .optional()
-    .transform((value) => (value === undefined ? undefined : ("generationTree" as const))),
+  familyViewStyle: familyViewStyleSchema.optional(),
+  graphLineRoutingStyle: graphLineRoutingStyleSchema.optional(),
   showSingleFamilyTree: z.boolean().optional(),
   lastSelectedPersonId: z.string().nullable().optional(),
   primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional(),
@@ -198,6 +208,7 @@ export const userPreferencesSchema = z.object({
 });
 
 export type GraphFilterVisibility = z.infer<typeof graphFilterVisibilitySchema>;
+export type FamilyViewStyle = z.infer<typeof familyViewStyleSchema>;
 export type UserPreferences = z.infer<typeof userPreferencesSchema>;
 export type GraphLayoutMode = z.infer<typeof graphLayoutModeSchema>;
 
@@ -216,9 +227,7 @@ export const graphLayoutRequestSchema = z.object({
     })
   ),
   viewMode: graphLayoutModeSchema.default("family"),
-  familyViewStyle: legacyFamilyViewStyleSchema
-    .optional()
-    .transform((value) => (value === undefined ? undefined : ("generationTree" as const))),
+  familyViewStyle: familyViewStyleSchema.optional(),
   selectedPersonId: z.string().nullable().optional(),
   primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional()
 });
@@ -242,7 +251,6 @@ const hashString = (input: string) => {
   return (hash >>> 0).toString(16).padStart(8, "0");
 };
 
-/** Revision for layout cache / server positions. Only parent/child/spouse edges affect the relationship hash (same as web layout topology). */
 export const buildGraphLayoutRevision = (request: GraphLayoutRequest) => {
   const peopleSignature = [...request.people]
     .sort((left, right) => left.id.localeCompare(right.id))
@@ -265,7 +273,7 @@ export const buildGraphLayoutRevision = (request: GraphLayoutRequest) => {
     : "";
   return [
     `mode=${request.viewMode}`,
-    `style=${request.familyViewStyle ?? "generationTree"}`,
+    `style=${request.familyViewStyle ?? ""}`,
     `selected=${request.selectedPersonId ?? ""}`,
     `people=${hashString(peopleSignature)}`,
     `relationships=${hashString(relationshipSignature)}`,

@@ -1,5 +1,5 @@
 import { Gender, RelationshipType, type PersonProfile, type Relationship } from "@prisma/client";
-import type { RelationshipType as SharedRelationshipType } from "@treemich/shared";
+import { inverseRelationshipType, type RelationshipType as SharedRelationshipType } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import type { ImmichClient } from "../integrations/immich/client.js";
 import {
@@ -9,15 +9,6 @@ import {
   type PhotoCooccurrenceResult,
   type PhotoCooccurrenceStats
 } from "./cooccurrence.js";
-
-const inverseMapping: Record<RelationshipType, RelationshipType> = {
-  CHILD_OF: "PARENT_OF",
-  PARENT_OF: "CHILD_OF",
-  SIBLING_OF: "SIBLING_OF",
-  SPOUSE_OF: "SPOUSE_OF",
-  FRIEND_OF: "FRIEND_OF",
-  PET_OF: "PET_OF"
-};
 
 export class RelationshipService {
   private readonly photoCooccurrenceCacheTtlMs = 90_000;
@@ -107,7 +98,9 @@ export class RelationshipService {
       divorceDate?: string | null;
     }
   ): Promise<{ direct: Relationship; inverse: Relationship }> {
-    const inverseType = inverseMapping[relationshipType];
+    const inverseType = inverseRelationshipType(
+      relationshipType as SharedRelationshipType
+    ) as RelationshipType;
     const spouseRelationshipUpdate =
       relationshipType === "SPOUSE_OF"
         ? {
@@ -345,7 +338,9 @@ export class RelationshipService {
       });
     }
 
-    const inverseType = inverseMapping[relationshipType];
+    const inverseType = inverseRelationshipType(
+      relationshipType as SharedRelationshipType
+    ) as RelationshipType;
     return prisma.relationship.deleteMany({
       where: {
         userId,

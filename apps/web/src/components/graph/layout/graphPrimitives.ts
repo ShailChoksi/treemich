@@ -1,17 +1,11 @@
+import { inverseRelationshipType as inverseRelationshipTypeShared } from "@treemich/shared";
 import type { RelationshipRecord, RelationshipType } from "../../../lib/api";
 import type { DirectionalNeighborBuckets, NodePosition } from "./types";
 
 type ParentChildEdge = { parentId: string; childId: string };
 
-export const inverseRelationshipType = (type: RelationshipType): RelationshipType => {
-  if (type === "PARENT_OF") {
-    return "CHILD_OF";
-  }
-  if (type === "CHILD_OF") {
-    return "PARENT_OF";
-  }
-  return type;
-};
+export const inverseRelationshipType = (type: RelationshipType): RelationshipType =>
+  inverseRelationshipTypeShared(type);
 
 export const hashToNumber = (value: string) => {
   let hash = 0;

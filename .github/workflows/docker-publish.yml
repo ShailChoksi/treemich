@@ -1,0 +1,95 @@
+name: Docker publish
+
+# Pushes multi-arch (amd64 + arm64) API and web images to Docker Hub when a
+# version tag is created (e.g. v0.2.0). The tagged commit must be an ancestor
+# of origin/main so releases are only published from mainline history.
+#
+# Required repo secrets:
+#   DOCKERHUB_USERNAME
+#   DOCKERHUB_TOKEN     (Docker Hub access token, not your account password)
+#
+# GitHub Releases are created with the default GITHUB_TOKEN (no extra secret).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # Create GitHub Release + read repo for checkout
+  actions: write # Buildx cache (type=gha)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag commit is on main history
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
+            echo "Tagged commit is not an ancestor of origin/main; refusing to publish."
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            schoksi/treemich:api-${{ github.ref_name }}
+            schoksi/treemich:api-latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            schoksi/treemich:web-${{ github.ref_name }}
+            schoksi/treemich:web-latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          append_body: true
+          body: |
+
+            ### Docker Hub
+
+            | Image | Tag for this release |
+            | ----- | -------------------- |
+            | API | `schoksi/treemich:api-${{ github.ref_name }}` |
+            | Web | `schoksi/treemich:web-${{ github.ref_name }}` |
+
+            `api-latest` and `web-latest` on Docker Hub also point at this build.
+
+            Pin versions in `.env` when using [`docker-compose.hub.yml`](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/docker-compose.hub.yml): `TREEMICH_API_TAG=api-${{ github.ref_name }}`, `TREEMICH_WEB_TAG=web-${{ github.ref_name }}`.

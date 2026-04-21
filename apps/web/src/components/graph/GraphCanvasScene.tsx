@@ -12,7 +12,6 @@ import { AnimatedNodes } from "./scene/AnimatedNodes";
 import { createWebGlRenderer } from "./scene/createWebGlRenderer";
 import { useOrbitPositionSync } from "./scene/useOrbitPositionSync";
 import { useThumbnailLoader } from "./useThumbnailLoader";
-import { useGraphLifecycle } from "./useGraphLifecycle";
 
 type VisibleLine = {
   key: string;
@@ -115,7 +114,6 @@ export const GraphCanvasScene = ({
     displayVisiblePeople,
     cameraSampleRef: lastCameraSampleRef
   });
-  useGraphLifecycle({ thumbnailNodeIds });
 
   return (
     <Canvas

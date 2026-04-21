@@ -1,0 +1,73 @@
+# Run Treemich using pre-built images from Docker Hub (no local clone/build).
+#
+# 1. Copy .env.example to .env and set IMMICH_BASE_URL, TREEMICH_ENCRYPTION_KEY, WEB_ORIGIN.
+# 2. docker compose -f docker-compose.hub.yml up -d
+#
+# Image tags default to api-latest / web-latest on schoksi/treemich.
+# Override: TREEMICH_API_TAG=api-0.1.0 TREEMICH_WEB_TAG=web-0.1.0 docker compose -f docker-compose.hub.yml up -d
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: treemich-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: treemich
+    ports:
+      - "54321:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d treemich"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - treemich-postgres:/var/lib/postgresql/data
+
+  api:
+    image: schoksi/treemich:${TREEMICH_API_TAG:-api-latest}
+    container_name: treemich-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/treemich
+      IMMICH_BASE_URL: ${IMMICH_BASE_URL}
+      IMMICH_PEOPLE_PAGE_SIZE: ${IMMICH_PEOPLE_PAGE_SIZE:-1000}
+      TREEMICH_ENCRYPTION_KEY: ${TREEMICH_ENCRYPTION_KEY}
+      TREEMICH_SESSION_COOKIE_NAME: ${TREEMICH_SESSION_COOKIE_NAME:-treemich_session}
+      TREEMICH_SESSION_TTL_MS: ${TREEMICH_SESSION_TTL_MS:-2592000000}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      RATE_LIMIT_TIME_WINDOW_MS: ${RATE_LIMIT_TIME_WINDOW_MS:-60000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      sh -c "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma &&
+      npm run start -w @treemich/api"
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  web:
+    image: schoksi/treemich:${TREEMICH_WEB_TAG:-web-latest}
+    container_name: treemich-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+volumes:
+  treemich-postgres:
