@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ImmichPerson, RelationshipRecord } from "../lib/api";
 import type { LifeEventRecord } from "../lib/api";
-import {
-  buildBirthPlaceInput,
-  deriveProfileDisplayValues,
-  findBestPersonMatchByName,
-  parseDateInputToParts,
-  resolvePeopleSelection
-} from "./people";
+import { buildBirthPlaceInput, deriveProfileDisplayValues, parseDateInputToParts } from "../lib/lifeEventUi";
+import { findBestPersonMatchByName, resolvePeopleSelection } from "./people";
 
 const people: ImmichPerson[] = [
   { id: "p-1", name: "Alex", hasRelationship: false },

@@ -85,7 +85,8 @@ const renderPanel = (overrides?: {
         isSavingRelationship: false,
         immichBaseUrl: null,
         primaryFamilyUnitByPersonId: {},
-        onPrimaryFamilyUnitChange: () => undefined
+        onPrimaryFamilyUnitChange: () => undefined,
+        relationshipLifeEventsById: {}
       })
     );
   });

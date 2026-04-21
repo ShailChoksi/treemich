@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType } from "../lib/api";
+import type { Gender, ImmichPerson, LifeEventRecord, RelationshipRecord, RelationshipType } from "../lib/api";
 import { immichPersonUrl, personThumbnailUrl } from "../lib/api";
+import { deriveSpouseDatesFromRelationshipEvents } from "../lib/lifeEventUi";
 import { computeExtendedFamily, computeInLawFamily } from "./graph/extendedFamily";
 import { inverseRelationshipType } from "./graph/layout";
 import {
@@ -71,6 +72,8 @@ type Props = {
   immichBaseUrl?: string | null;
   primaryFamilyUnitByPersonId: Record<string, string>;
   onPrimaryFamilyUnitChange: (personId: string, unitKey: string | null) => void;
+  /** Cached relationship-scoped life events (marriage/divorce), keyed by relationship id */
+  relationshipLifeEventsById?: Record<string, LifeEventRecord[]>;
 };
 
 const maxVisibleSuggestions = 5;
@@ -120,7 +123,8 @@ const PersonDetailPanelComponent = ({
   isSavingRelationship,
   immichBaseUrl,
   primaryFamilyUnitByPersonId,
-  onPrimaryFamilyUnitChange
+  onPrimaryFamilyUnitChange,
+  relationshipLifeEventsById = {}
 }: Props) => {
   const [editingRelationshipKey, setEditingRelationshipKey] = useState<string | null>(null);
   const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>("SIBLING_OF");
@@ -254,9 +258,17 @@ const PersonDetailPanelComponent = ({
   const sourceBirthDate = formatBirthDate(person?.birthDate);
   const hasBirthDateOverride = Boolean(birthDateValue);
   const immichPersonPageUrl = person ? immichPersonUrl(person.id, immichBaseUrl) : null;
+  const spouseDisplay = useMemo(() => {
+    if (!activeRelationship || activeRelationship.record.type !== "SPOUSE_OF") {
+      return { marriage: "", divorce: "" };
+    }
+    const rid = activeRelationship.record.id;
+    const events = rid ? (relationshipLifeEventsById[rid] ?? []) : [];
+    return deriveSpouseDatesFromRelationshipEvents(events, activeRelationship.record);
+  }, [activeRelationship, relationshipLifeEventsById]);
+
   const spouseDatesChanged =
-    editingMarriageAnniversaryDate !== (activeRelationship?.record.marriageAnniversaryDate ?? "") ||
-    editingDivorceDate !== (activeRelationship?.record.divorceDate ?? "");
+    editingMarriageAnniversaryDate !== spouseDisplay.marriage || editingDivorceDate !== spouseDisplay.divorce;
 
   useEffect(() => {
     setEditingRelationshipKey(null);
@@ -281,9 +293,9 @@ const PersonDetailPanelComponent = ({
       return;
     }
 
-    setEditingMarriageAnniversaryDate(activeRelationship.record.marriageAnniversaryDate ?? "");
-    setEditingDivorceDate(activeRelationship.record.divorceDate ?? "");
-  }, [activeRelationship]);
+    setEditingMarriageAnniversaryDate(spouseDisplay.marriage);
+    setEditingDivorceDate(spouseDisplay.divorce);
+  }, [activeRelationship, spouseDisplay.marriage, spouseDisplay.divorce]);
 
   const startEditingRelationship = (relationship: RelativeItem) => {
     setEditingRelationshipKey(relationship.key);
