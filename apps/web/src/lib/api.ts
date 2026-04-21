@@ -1,11 +1,15 @@
 import type {
   AuthState,
   AuthUser,
+  CreateLifeEventBody,
   GraphLayoutRequest,
   GraphLayoutResponse,
   GenderValue as Gender,
   ImmichPerson as SharedImmichPerson,
+  LifeEventListResponse,
+  LifeEventRecord,
   LinkStatus,
+  PatchLifeEventBody,
   PhotoCluster,
   PhotoCooccurrenceEdge,
   RelationshipRecord,
@@ -17,10 +21,13 @@ import type {
 export type {
   AuthState,
   AuthUser,
+  CreateLifeEventBody,
   GraphLayoutRequest,
   GraphLayoutResponse,
   Gender,
   LinkStatus,
+  LifeEventRecord,
+  PatchLifeEventBody,
   PhotoCluster,
   PhotoCooccurrenceEdge,
   RelationshipRecord,
@@ -33,6 +40,16 @@ export type {
 const treemichApi = import.meta.env.VITE_TREEMICH_API_URL ?? "/api";
 const startupRetryDelayMs = 800;
 const startupRetryAttempts = 5;
+
+export class ApiHttpError extends Error {
+  readonly statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.name = "ApiHttpError";
+    this.statusCode = statusCode;
+  }
+}
 
 export type ImmichPerson = SharedImmichPerson & {
   id: string;
@@ -90,10 +107,16 @@ const fetchWithRetry = async (
 
 const getErrorMessage = async (response: Response, fallbackMessage: string) => {
   try {
-    const json = (await response.json()) as { error?: string; message?: string };
-    return json.error ?? json.message ?? fallbackMessage;
+    const json = (await response.json()) as { statusCode?: number; error?: string; message?: string };
+    return {
+      message: json.error ?? json.message ?? fallbackMessage,
+      statusCode: typeof json.statusCode === "number" ? json.statusCode : response.status
+    };
   } catch {
-    return fallbackMessage;
+    return {
+      message: fallbackMessage,
+      statusCode: response.status
+    };
   }
 };
 
@@ -102,7 +125,8 @@ const ensureOk = async (response: Response, fallbackMessage: string) => {
     return response;
   }
 
-  throw new Error(await getErrorMessage(response, fallbackMessage));
+  const { message, statusCode } = await getErrorMessage(response, fallbackMessage);
+  throw new ApiHttpError(statusCode, message);
 };
 
 export const login = async (email: string, password: string): Promise<AuthState> => {
@@ -342,4 +366,126 @@ export const computeGraphLayout = async (payload: GraphLayoutRequest): Promise<G
   });
   await ensureOk(response, `Failed to compute graph layout (${response.status})`);
   return (await response.json()) as GraphLayoutResponse;
+};
+
+const lifeEventsIncludeQuery = (includeCitations?: boolean) => (includeCitations ? "?include=citations" : "");
+
+export const getPersonLifeEvents = async (
+  personId: string,
+  options?: { includeCitations?: boolean }
+): Promise<LifeEventRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/life-events${lifeEventsIncludeQuery(options?.includeCitations)}`,
+    { cache: "no-store" }
+  );
+  await ensureOk(response, "Failed to load person life events");
+  const json = (await response.json()) as LifeEventListResponse;
+  return json.lifeEvents ?? [];
+};
+
+export const createPersonLifeEvent = async (
+  personId: string,
+  body: CreateLifeEventBody
+): Promise<LifeEventRecord> => {
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/life-events`,
+    withSession({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create person life event");
+  return (await response.json()) as LifeEventRecord;
+};
+
+export const updatePersonLifeEvent = async (
+  personId: string,
+  eventId: string,
+  body: PatchLifeEventBody
+): Promise<LifeEventRecord> => {
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/life-events/${encodeURIComponent(eventId)}`,
+    withSession({
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to update person life event");
+  return (await response.json()) as LifeEventRecord;
+};
+
+export const deletePersonLifeEvent = async (personId: string, eventId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/life-events/${encodeURIComponent(eventId)}`,
+    withSession({
+      method: "DELETE"
+    })
+  );
+  await ensureOk(response, "Failed to delete person life event");
+};
+
+export const getRelationshipLifeEvents = async (
+  relationshipId: string,
+  options?: { includeCitations?: boolean }
+): Promise<LifeEventRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/relationships/${encodeURIComponent(relationshipId)}/life-events${lifeEventsIncludeQuery(options?.includeCitations)}`,
+    { cache: "no-store" }
+  );
+  await ensureOk(response, "Failed to load relationship life events");
+  const json = (await response.json()) as LifeEventListResponse;
+  return json.lifeEvents ?? [];
+};
+
+export const createRelationshipLifeEvent = async (
+  relationshipId: string,
+  body: CreateLifeEventBody
+): Promise<LifeEventRecord> => {
+  const response = await fetch(
+    `${treemichApi}/relationships/${encodeURIComponent(relationshipId)}/life-events`,
+    withSession({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create relationship life event");
+  return (await response.json()) as LifeEventRecord;
+};
+
+export const updateRelationshipLifeEvent = async (
+  relationshipId: string,
+  eventId: string,
+  body: PatchLifeEventBody
+): Promise<LifeEventRecord> => {
+  const response = await fetch(
+    `${treemichApi}/relationships/${encodeURIComponent(relationshipId)}/life-events/${encodeURIComponent(eventId)}`,
+    withSession({
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to update relationship life event");
+  return (await response.json()) as LifeEventRecord;
+};
+
+export const deleteRelationshipLifeEvent = async (relationshipId: string, eventId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/relationships/${encodeURIComponent(relationshipId)}/life-events/${encodeURIComponent(eventId)}`,
+    withSession({
+      method: "DELETE"
+    })
+  );
+  await ensureOk(response, "Failed to delete relationship life event");
 };

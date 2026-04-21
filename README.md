@@ -7,11 +7,15 @@ Immich remains the system of record for photos, faces, and people. Treemich adds
 ## Features
 
 - **Relationship management** -- create parent/child, sibling, spouse, friend, and pet links between Immich people.
-- **Per-person profiles** -- set gender and birth date overrides on any Immich person.
+- **Per-person profiles** -- set gender, names, and Treemich **life events** (BIRTH/DEATH with optional places) on any Immich person; quick-edit fields in the sidebar map to those events, not legacy profile columns.
 - **3D graph visualization** -- interactive Three.js graph with multiple layout modes (generation tree, centered map, hybrid, cleaned 3D) plus layer toggles for Family/Friends/Pets.
 - **Natural-language search** -- query relationships in plain English with multi-hop graph traversal.
 - **Photo co-occurrence** -- discover which people appear together in photos.
 - **Per-user privacy** -- all relationship data is scoped to the authenticated Treemich user.
+
+### Life events vs legacy profile fields
+
+The API may still keep legacy date/place columns for compatibility while migrations run. The **web UI** treats **BIRTH**, **DEATH**, **MARRIAGE**, and **DIVORCE** [life events](apps/api/src/lifeEvents/service.ts) as the source of truth for editable dates and places. Immich’s own person `birthDate` is shown only as reference text in the sidebar. Removing legacy Treemich columns is a **backend** follow-up (`syncLegacyPersonProfileFields` and related bridge code) after operators confirm data is fully mirrored into life events.
 
 ### Natural-Language Search
 
