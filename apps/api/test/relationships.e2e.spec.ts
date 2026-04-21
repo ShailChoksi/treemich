@@ -1321,4 +1321,56 @@ describe("Treemich API routes", () => {
 
     expect(response.statusCode).toBe(400);
   });
+
+  it("lists relationship life events with citations when include=citations (UI parity)", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/relationships/rel-1/life-events?include=citations"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(lifeEventServiceMock.listRelationshipLifeEvents).toHaveBeenCalledWith("user-1", "rel-1", {
+      includeCitations: true
+    });
+    expect(response.json()).toEqual({ lifeEvents: [] });
+  });
+
+  it("merges GET /people birthDate from BIRTH life event over legacy override (post-migration parity)", async () => {
+    listPeopleMock.mockResolvedValueOnce([{ id: "p1", name: "Mike", birthDate: "1990-01-01" }]);
+    getProfilesForPersonIdsMock.mockResolvedValueOnce(
+      new Map([
+        [
+          "p1",
+          {
+            id: "pp1",
+            immichPersonId: "p1",
+            gender: "MALE",
+            birthDateOverride: "1999-12-31"
+          }
+        ]
+      ])
+    );
+    getConnectedPersonIdsMock.mockResolvedValueOnce(new Set(["p1"]));
+
+    lifeEventServiceMock.getBirthDeathByPersonProfileIds.mockResolvedValueOnce(
+      new Map([
+        [
+          "pp1",
+          {
+            birth: { year: 2001, month: 3, day: 14 } as never,
+            death: null
+          }
+        ]
+      ])
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/people"
+    });
+
+    expect(response.statusCode).toBe(200);
+    const json = response.json() as { people: Array<{ birthDate: string | null }> };
+    expect(json.people[0]?.birthDate).toBe("2001-03-14");
+  });
 });

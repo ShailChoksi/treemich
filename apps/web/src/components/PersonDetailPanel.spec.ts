@@ -1,7 +1,7 @@
-import { act, createElement } from "react";
+import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ImmichPerson, RelationshipRecord } from "../lib/api";
+import type { ImmichPerson, LifeEventRecord, RelationshipRecord } from "../lib/api";
 import {
   PersonDetailPanel,
   getRelativeRelationshipLabel,
@@ -25,17 +25,56 @@ const person = (id: string, name: string): ImmichPerson => ({
 const relationship = (
   fromPersonId: string,
   toPersonId: string,
-  type: RelationshipRecord["type"]
+  type: RelationshipRecord["type"],
+  extra?: Partial<RelationshipRecord>
 ): RelationshipRecord => ({
   fromPersonId,
   toPersonId,
-  type
+  type,
+  ...extra
+});
+
+type PanelProps = ComponentProps<typeof PersonDetailPanel>;
+
+const marriageEv = (y: number, m: number, d: number): LifeEventRecord => ({
+  id: "ev-m",
+  eventType: "MARRIAGE",
+  dateQualifier: "EXACT",
+  year: y,
+  month: m,
+  day: d,
+  endYear: null,
+  endMonth: null,
+  endDay: null,
+  notes: null,
+  place: null,
+  citations: [],
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z"
+});
+
+const divorceEv = (y: number, m: number, d: number): LifeEventRecord => ({
+  id: "ev-d",
+  eventType: "DIVORCE",
+  dateQualifier: "EXACT",
+  year: y,
+  month: m,
+  day: d,
+  endYear: null,
+  endMonth: null,
+  endDay: null,
+  notes: null,
+  place: null,
+  citations: [],
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z"
 });
 
 const renderPanel = (overrides?: {
   person?: ImmichPerson | null;
   people?: ImmichPerson[];
   relationships?: RelationshipRecord[];
+  panelProps?: Partial<PanelProps>;
 }): RenderResult => {
   const selectedPerson = overrides?.person ?? person("me", "Me");
   const people = overrides?.people ?? [
@@ -51,44 +90,45 @@ const renderPanel = (overrides?: {
   document.body.appendChild(container);
   const root = createRoot(container);
 
+  const baseProps: PanelProps = {
+    person: selectedPerson,
+    people,
+    relationships,
+    dismissedSuggestionKeys: [],
+    genders: ["UNKNOWN", "MALE", "FEMALE", "OTHER"],
+    genderValue: "UNKNOWN",
+    birthDateValue: "",
+    givenNameValue: "",
+    surnameValue: "",
+    nicknamesValue: "",
+    deathDateValue: "",
+    birthCityValue: "",
+    birthCountryValue: "",
+    onGenderChange: () => undefined,
+    onBirthDateChange: () => undefined,
+    onGivenNameChange: () => undefined,
+    onSurnameChange: () => undefined,
+    onNicknamesChange: () => undefined,
+    onDeathDateChange: () => undefined,
+    onBirthCityChange: () => undefined,
+    onBirthCountryChange: () => undefined,
+    onProfileSave: () => undefined,
+    isSavingProfile: false,
+    onFocusPerson: () => undefined,
+    onCreateRelationship: async () => undefined,
+    onUpdateRelationship: async () => undefined,
+    onDeleteRelationship: async () => undefined,
+    onDismissSuggestion: () => undefined,
+    isSavingRelationship: false,
+    immichBaseUrl: null,
+    primaryFamilyUnitByPersonId: {},
+    onPrimaryFamilyUnitChange: () => undefined,
+    relationshipLifeEventsById: {},
+    ...overrides?.panelProps
+  };
+
   act(() => {
-    root.render(
-      createElement(PersonDetailPanel, {
-        person: selectedPerson,
-        people,
-        relationships,
-        dismissedSuggestionKeys: [],
-        genders: ["UNKNOWN", "MALE", "FEMALE", "OTHER"],
-        genderValue: "UNKNOWN",
-        birthDateValue: "",
-        givenNameValue: "",
-        surnameValue: "",
-        nicknamesValue: "",
-        deathDateValue: "",
-        birthCityValue: "",
-        birthCountryValue: "",
-        onGenderChange: () => undefined,
-        onBirthDateChange: () => undefined,
-        onGivenNameChange: () => undefined,
-        onSurnameChange: () => undefined,
-        onNicknamesChange: () => undefined,
-        onDeathDateChange: () => undefined,
-        onBirthCityChange: () => undefined,
-        onBirthCountryChange: () => undefined,
-        onProfileSave: () => undefined,
-        isSavingProfile: false,
-        onFocusPerson: () => undefined,
-        onCreateRelationship: async () => undefined,
-        onUpdateRelationship: async () => undefined,
-        onDeleteRelationship: async () => undefined,
-        onDismissSuggestion: () => undefined,
-        isSavingRelationship: false,
-        immichBaseUrl: null,
-        primaryFamilyUnitByPersonId: {},
-        onPrimaryFamilyUnitChange: () => undefined,
-        relationshipLifeEventsById: {}
-      })
-    );
+    root.render(createElement(PersonDetailPanel, baseProps));
   });
 
   return { container, root };
@@ -203,6 +243,86 @@ describe("PersonDetailPanel", () => {
     expect(container.textContent).toContain("Brother-in-law");
     expect(container.textContent).toContain("Aunt-in-law");
     expect((container.textContent ?? "").includes("No in-laws found yet.")).toBe(false);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("renders event-derived profile date and place values from props", () => {
+    const { container, root } = renderPanel({
+      panelProps: {
+        birthDateValue: "1991-05-06",
+        deathDateValue: "2021-07-08",
+        birthCityValue: "Boston",
+        birthCountryValue: "US"
+      }
+    });
+    const profileContent = container.querySelector("#person-detail-section-content-profile");
+    const dateInputs = profileContent?.querySelectorAll('input[type="date"]');
+    expect((dateInputs?.[0] as HTMLInputElement | undefined)?.value).toBe("1991-05-06");
+    expect((dateInputs?.[1] as HTMLInputElement | undefined)?.value).toBe("2021-07-08");
+    expect(
+      [...(profileContent?.querySelectorAll("input") ?? [])].some(
+        (el) => (el as HTMLInputElement).value === "Boston"
+      )
+    ).toBe(true);
+    expect(
+      [...(profileContent?.querySelectorAll("input") ?? [])].some(
+        (el) => (el as HTMLInputElement).value === "US"
+      )
+    ).toBe(true);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("shows marriage and divorce quick-edit dates from relationship life events", () => {
+    const { container, root } = renderPanel({
+      relationships: [
+        relationship("spouse", "me", "SPOUSE_OF", { id: "rel-spouse-1" }),
+        relationship("spouse-mom", "spouse", "PARENT_OF")
+      ],
+      panelProps: {
+        relationshipLifeEventsById: {
+          "rel-spouse-1": [marriageEv(2011, 7, 8), divorceEv(2021, 9, 10)]
+        }
+      }
+    });
+
+    const editSpouse = container.querySelector(
+      '[aria-label="Edit relationship with Spouse"]'
+    ) as HTMLButtonElement | null;
+    expect(editSpouse).toBeTruthy();
+    act(() => {
+      editSpouse?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const editor = container.querySelector(".relationship-editor");
+    const editorDates = editor?.querySelectorAll('input[type="date"]');
+    expect((editorDates?.[0] as HTMLInputElement | undefined)?.value).toBe("2011-07-08");
+    expect((editorDates?.[1] as HTMLInputElement | undefined)?.value).toBe("2021-09-10");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("renders life events advanced section when life-event handlers are provided", () => {
+    const { container, root } = renderPanel({
+      panelProps: {
+        personLifeEvents: [],
+        onPersonLifeEventCreate: async () => undefined,
+        onPersonLifeEventPatch: async () => undefined,
+        onPersonLifeEventDelete: async () => undefined
+      }
+    });
+    expect(container.textContent).toContain("Life events (advanced)");
+    expect(container.textContent).toContain("Partial dates");
 
     act(() => {
       root.unmount();
