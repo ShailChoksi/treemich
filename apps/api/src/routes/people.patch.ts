@@ -81,8 +81,24 @@ export const registerPeoplePatchRoute = (app: FastifyInstance) => {
     if (birthCountry !== undefined) {
       profileUpdates.birthCountry = birthCountry;
     }
-    return app.services.relationshipService.upsertProfile(auth.user.id, id, {
+    const profile = await app.services.relationshipService.upsertProfile(auth.user.id, id, {
       ...profileUpdates
     });
+
+    if (
+      birthDateOverride !== undefined ||
+      deathDate !== undefined ||
+      birthCity !== undefined ||
+      birthCountry !== undefined
+    ) {
+      await app.services.lifeEventService.syncLegacyPersonProfileFields(auth.user.id, profile.id, {
+        ...(birthDateOverride !== undefined ? { birthDate: birthDateOverride } : {}),
+        ...(deathDate !== undefined ? { deathDate: deathDate } : {}),
+        ...(birthCity !== undefined ? { birthCity: birthCity } : {}),
+        ...(birthCountry !== undefined ? { birthCountry: birthCountry } : {})
+      });
+    }
+
+    return profile;
   });
 };

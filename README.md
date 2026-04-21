@@ -72,82 +72,118 @@ treemich/
 
 ## Quick Start with Docker Compose
 
-The fastest way to run Treemich. Requires Docker and an existing Immich instance.
+You need **Docker** (Compose v2) and an **Immich** instance. Treemich stores its own data in PostgreSQL; Immich stays the source for photos and people.
 
-### 1. Configure environment
+Choose one of the following:
+
+### A. Pre-built images (Docker Hub)
+
+Images: **[schoksi/treemich](https://hub.docker.com/r/schoksi/treemich)** — tags such as `api-latest` / `web-latest`, or versioned tags (for example `api-0.1.1` / `web-0.1.1`) if you publish them. No local `git clone` is required to _build_ images, but you still need the Compose file and env (clone this repo, or copy [`docker-compose.hub.yml`](docker-compose.hub.yml) and [`.env.example`](.env.example) to a folder on your machine).
+
+**1. Configure environment**
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and set:
+Edit `.env` and set at least:
 
-| Variable                  | Required | Description                                                                                          |
-| ------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| `IMMICH_BASE_URL`         | Yes      | Your Immich API URL. If Immich runs on the host machine, use `http://host.docker.internal:2283/api`. |
-| `TREEMICH_ENCRYPTION_KEY` | Yes      | A random 64-character hex string. Generate one with `openssl rand -hex 32`.                          |
-| `WEB_ORIGIN`              | No       | Defaults to `http://localhost:8080`. Change if you expose Treemich on a different host/port.         |
+| Variable                  | Required | Description                                                                                                                         |
+| ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `IMMICH_BASE_URL`         | Yes      | Your Immich API URL. If Immich runs on the host machine, use `http://host.docker.internal:2283/api`.                                |
+| `TREEMICH_ENCRYPTION_KEY` | Yes      | A random 64-character hex string (`openssl rand -hex 32`). **Do not change** after you have data, or stored tokens become unusable. |
+| `WEB_ORIGIN`              | No       | Defaults to `http://localhost:8080` in Compose. Use the URL users use in the browser (CORS + cookies).                              |
 
-### 2. Start the stack
+Optional: pin image tags (defaults are `api-latest` and `web-latest`):
 
-```bash
-docker compose up --build -d
+| Variable           | Example     | Description                         |
+| ------------------ | ----------- | ----------------------------------- |
+| `TREEMICH_API_TAG` | `api-0.1.1` | Tag for `schoksi/treemich` (API)    |
+| `TREEMICH_WEB_TAG` | `web-0.1.1` | Tag for `schoksi/treemich` (web UI) |
+
+On Windows PowerShell you can set them for one run:
+
+```powershell
+$env:TREEMICH_API_TAG="api-0.1.1"; $env:TREEMICH_WEB_TAG="web-0.1.1"; docker compose -f docker-compose.hub.yml up -d
 ```
 
-This starts three containers:
-
-| Service    | Container         | Port  | Description                                             |
-| ---------- | ----------------- | ----- | ------------------------------------------------------- |
-| `postgres` | treemich-postgres | 54321 | PostgreSQL 16 database                                  |
-| `api`      | treemich-api      | 4000  | Fastify API server (runs migrations on startup)         |
-| `web`      | treemich-web      | 8080  | Nginx serving the React app, proxying `/api` to the API |
-
-### 3. Open the app
-
-Navigate to [http://localhost:8080](http://localhost:8080) and sign in with your Immich email and password.
-
-### Stopping
-
-```bash
-docker compose down        # stop containers, keep data
-docker compose down -v     # stop containers and delete database volume
-```
-
-## Updating
-
-Database schema changes are applied automatically: the API container runs `prisma migrate deploy` before starting, so you normally only need to recreate containers with a newer image. Your PostgreSQL data lives in the Docker volume unless you run `docker compose down -v`.
-
-### From source (this repository)
-
-Pull latest code, rebuild, and restart:
-
-```bash
-git pull
-docker compose up --build -d
-```
-
-### Pre-built images (Docker Hub)
-
-If you use [`docker-compose.hub.yml`](docker-compose.hub.yml), pull new images and restart:
+**2. Start the stack**
 
 ```bash
 docker compose -f docker-compose.hub.yml pull
 docker compose -f docker-compose.hub.yml up -d
 ```
 
-By default this uses the `api-latest` and `web-latest` tags. For a **controlled upgrade**, pin to a release tag in `.env` (or your shell) so you upgrade only when ready:
+**3. Open the app**
 
-| Variable           | Example      | Description                 |
-| ------------------ | ------------ | --------------------------- |
-| `TREEMICH_API_TAG` | `api-v0.2.0` | API image tag on Docker Hub |
-| `TREEMICH_WEB_TAG` | `web-v0.2.0` | Web image tag on Docker Hub |
+[http://localhost:8080](http://localhost:8080) — sign in with your Immich email and password.
 
-Then run `pull` and `up -d` as above. Release tags match Git tags (for example `v0.2.0` publishes `api-v0.2.0` and `web-v0.2.0`). Pushing a `v*` tag also creates a **GitHub Release** with auto-generated notes and Docker image names (see `.github/workflows/docker-publish.yml`).
+The API runs migrations on startup (`prisma migrate deploy`), then serves the app.
+
+**Login fails or returns HTTP 500:** The API container must reach Immich over the network. **`IMMICH_BASE_URL=http://localhost:2283/api` is wrong for Compose** when Immich runs on your machine — `localhost` inside the container is not your host. Use `http://host.docker.internal:2283/api` instead (Compose already maps `host.docker.internal`; Linux may need Docker 20.10+ with `host-gateway`). If Immich runs in another Docker network, use that service’s URL. Check `docker logs treemich-api` for connection errors.
+
+---
+
+### B. Build from source (this repository)
+
+Use the default [`docker-compose.yml`](docker-compose.yml) to build API and web images locally:
+
+```bash
+cp .env.example .env
+# edit .env — same variables as above (WEB_ORIGIN default is still http://localhost:8080 for Compose)
+
+docker compose up --build -d
+```
+
+Same ports and behavior as the Hub stack.
+
+---
+
+### Containers and ports
+
+| Service    | Container name      | Host port | Description                                  |
+| ---------- | ------------------- | --------- | -------------------------------------------- |
+| `postgres` | `treemich-postgres` | 54321     | PostgreSQL 16                                |
+| `api`      | `treemich-api`      | 4000      | Fastify API (migrations on startup)          |
+| `web`      | `treemich-web`      | 8080      | Nginx + static UI; proxies `/api` to the API |
+
+### Stopping
+
+```bash
+docker compose down                    # build-from-source file
+docker compose -f docker-compose.hub.yml down   # Hub images
+```
+
+Omit **`-v`** to keep the database volume. **`docker compose ... down -v`** deletes the named volume and **wipes Treemich’s database**.
+
+## Updating
+
+Schema changes apply automatically when the API container starts (`prisma migrate deploy`). To upgrade:
+
+**Docker Hub**
+
+```bash
+docker compose -f docker-compose.hub.yml pull
+docker compose -f docker-compose.hub.yml up -d
+```
+
+Adjust `TREEMICH_API_TAG` / `TREEMICH_WEB_TAG` in `.env` (or your environment) when you want a specific release instead of `*-latest`.
+
+**Build from source**
+
+```bash
+git pull
+docker compose up --build -d
+```
+
+Your PostgreSQL data lives in the Docker volume `treemich-postgres` until you run `down -v`.
 
 ### After updating
 
-- If the UI behaves oddly right after an upgrade, try a **hard refresh** in the browser (cached JavaScript) or clear site data for Treemich’s origin.
-- When Immich is upgraded, confirm Treemich still matches your Immich version expectations; check release notes if something breaks.
+- If the UI behaves oddly right after an upgrade, try a **hard refresh** (cached JavaScript) or clear site data for Treemich’s origin.
+- When Immich is upgraded, confirm Treemich still matches your expectations; check release notes if something breaks.
+
+Image publishing from this repo (tags and GitHub Releases) is defined in [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml).
 
 ## Development Setup
 
