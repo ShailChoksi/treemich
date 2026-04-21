@@ -142,7 +142,7 @@ By default this uses the `api-latest` and `web-latest` tags. For a **controlled 
 | `TREEMICH_API_TAG` | `api-v0.2.0` | API image tag on Docker Hub |
 | `TREEMICH_WEB_TAG` | `web-v0.2.0` | Web image tag on Docker Hub |
 
-Then run `pull` and `up -d` as above. Release tags match Git tags (for example `v0.2.0` publishes `api-v0.2.0` and `web-v0.2.0`). Use your repository’s **GitHub Releases** page for notes on each version before upgrading.
+Then run `pull` and `up -d` as above. Release tags match Git tags (for example `v0.2.0` publishes `api-v0.2.0` and `web-v0.2.0`). Pushing a `v*` tag also creates a **GitHub Release** with auto-generated notes and Docker image names (see `.github/workflows/docker-publish.yml`).
 
 ### After updating
 

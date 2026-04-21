@@ -7,6 +7,8 @@ name: Docker publish
 # Required repo secrets:
 #   DOCKERHUB_USERNAME
 #   DOCKERHUB_TOKEN     (Docker Hub access token, not your account password)
+#
+# GitHub Releases are created with the default GITHUB_TOKEN (no extra secret).
 
 on:
   push:
@@ -18,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write # Create GitHub Release + read repo for checkout
   actions: write # Buildx cache (type=gha)
 
 jobs:
@@ -71,3 +73,23 @@ jobs:
             schoksi/treemich:web-latest
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          append_body: true
+          body: |
+
+            ### Docker Hub
+
+            | Image | Tag for this release |
+            | ----- | -------------------- |
+            | API | `schoksi/treemich:api-${{ github.ref_name }}` |
+            | Web | `schoksi/treemich:web-${{ github.ref_name }}` |
+
+            `api-latest` and `web-latest` on Docker Hub also point at this build.
+
+            Pin versions in `.env` when using [`docker-compose.hub.yml`](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/docker-compose.hub.yml): `TREEMICH_API_TAG=api-${{ github.ref_name }}`, `TREEMICH_WEB_TAG=web-${{ github.ref_name }}`.
