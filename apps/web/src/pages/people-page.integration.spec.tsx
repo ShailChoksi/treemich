@@ -9,8 +9,16 @@ reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("../components/PeopleGraph3D", () => ({
   PeopleGraph3D: () => null
 }));
+
+type MapPanelProps = {
+  places: Array<{ id: string; name: string; latitude: number; longitude: number }> | null;
+};
+let latestMapPanelProps: MapPanelProps | null = null;
 vi.mock("../components/MapPlacesPanel", () => ({
-  MapPlacesPanel: () => null
+  MapPlacesPanel: (props: MapPanelProps) => {
+    latestMapPanelProps = props;
+    return null;
+  }
 }));
 
 const jsonResponse = (data: unknown, status = 200) =>
@@ -51,8 +59,11 @@ const birthEventPayload = {
 
 describe("PeoplePage + life events (integration)", () => {
   const originalFetch = globalThis.fetch;
+  let placesMapCallCount = 0;
 
   beforeEach(() => {
+    latestMapPanelProps = null;
+    placesMapCallCount = 0;
     globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       const method = init?.method ?? "GET";
@@ -95,6 +106,28 @@ describe("PeoplePage + life events (integration)", () => {
       if (method === "GET" && url.includes("/people/p1/life-events")) {
         return jsonResponse({
           lifeEvents: [birthEventPayload]
+        });
+      }
+
+      if (method === "GET" && url.includes("/places/map")) {
+        placesMapCallCount += 1;
+        if (placesMapCallCount === 1) {
+          return jsonResponse({ mapUiEnabled: true, places: [] });
+        }
+        return jsonResponse({
+          mapUiEnabled: true,
+          places: [
+            {
+              id: "pl-1",
+              name: "Boston",
+              latitude: 42.3601,
+              longitude: -71.0589,
+              eventCount: 1,
+              personCount: 1,
+              lastEventYear: 1991,
+              samplePersonIds: ["p1"]
+            }
+          ]
         });
       }
 
@@ -203,6 +236,60 @@ describe("PeoplePage + life events (integration)", () => {
       (call) => String(call[0]).match(/\/people\/p1$/) && call[1]?.method === "PATCH"
     );
     expect(profilePatch).toBeTruthy();
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("refreshes map places after profile save so new point can appear", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const fetchMock = vi.mocked(globalThis.fetch);
+      if (fetchMock.mock.calls.some((call) => String(call[0]).includes("/places/map"))) {
+        break;
+      }
+    }
+
+    const saveButton = container.querySelector(".person-detail-primary-action") as HTMLButtonElement | null;
+    expect(saveButton?.textContent).toContain("Save profile");
+
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if ((latestMapPanelProps?.places?.length ?? 0) > 0) {
+        break;
+      }
+    }
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const mapCalls = fetchMock.mock.calls.filter((call) => String(call[0]).includes("/places/map"));
+    expect(mapCalls.length).toBeGreaterThanOrEqual(2);
+    expect(latestMapPanelProps?.places).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "pl-1",
+          latitude: 42.3601,
+          longitude: -71.0589
+        })
+      ])
+    );
 
     act(() => {
       root.unmount();

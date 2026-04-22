@@ -671,6 +671,15 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         ...current,
         [selectedPerson.id]: displayValues
       }));
+      void getPlacesMap({ includeLiving: mapIncludeLiving })
+        .then((response) => {
+          setMapUiEnabled(response.mapUiEnabled);
+          setMapPlaces(response.places);
+          setMapLoadError(null);
+        })
+        .catch((error: unknown) => {
+          setMapLoadError(getErrorMessage(error));
+        });
       setStatus("Profile saved");
     } catch (error: unknown) {
       setStatus(getErrorMessage(error));
@@ -681,6 +690,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     genderByPersonId,
     givenNameByPersonId,
     lifeEventsByPersonId,
+    mapIncludeLiving,
     nicknamesByPersonId,
     profileEventFieldsByPersonId,
     selectedPerson,

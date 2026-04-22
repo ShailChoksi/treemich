@@ -121,4 +121,69 @@ describe("LifeEventService.syncPersonProfileFieldsToLifeEvents geocoding", () =>
     });
     vi.unstubAllGlobals();
   });
+
+  it("skips external geocoding when profile-place geocoding flag is disabled", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    isProfilePlaceGeocodingEnabledMock.mockReturnValue(false);
+
+    const { LifeEventService } = await import("./service.js");
+    const service = new LifeEventService();
+    await service.syncPersonProfileFieldsToLifeEvents("user-1", "pp-1", {
+      birthCity: "Boston",
+      birthCountry: "USA"
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+    expect(prismaPlaceUpdateMock.mock.calls.length).toBe(0);
+    vi.unstubAllGlobals();
+  });
+
+  it("does not overwrite existing coordinates on the birth place", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    prismaLifeEventFindFirstMock.mockResolvedValueOnce({
+      id: "birth-1",
+      place: {
+        id: "place-1",
+        name: "Boston, USA",
+        locality: "Boston",
+        countryCode: null,
+        latitude: 42.3601,
+        longitude: -71.0589
+      }
+    });
+
+    const { LifeEventService } = await import("./service.js");
+    const service = new LifeEventService();
+    await service.syncPersonProfileFieldsToLifeEvents("user-1", "pp-1", {
+      birthCity: "Boston",
+      birthCountry: "USA"
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+    expect(prismaPlaceUpdateMock.mock.calls.length).toBe(0);
+    vi.unstubAllGlobals();
+  });
+
+  it("fails open when external geocoding returns no results", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => []
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { LifeEventService } = await import("./service.js");
+    const service = new LifeEventService();
+    await expect(
+      service.syncPersonProfileFieldsToLifeEvents("user-1", "pp-1", {
+        birthCity: "Unknownville",
+        birthCountry: "ZZ"
+      })
+    ).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(prismaPlaceUpdateMock.mock.calls.length).toBe(0);
+    vi.unstubAllGlobals();
+  });
 });
