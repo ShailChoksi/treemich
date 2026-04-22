@@ -128,9 +128,9 @@ export const deriveProfileDisplayValuesFromLifeEvents = (
     deathDate: deathEvent ? toDateInputValueFromEvent(deathEvent) : "",
     birthCity: birthEvent ? (birthEvent.place?.locality ?? "") : "",
     birthCountry: birthEvent?.place
-      ? (birthEvent.place.countryCode?.trim() ||
-          birthEvent.place.adminArea?.trim() ||
-          birthCountryFromPlaceName(birthEvent.place))
+      ? birthEvent.place.countryCode?.trim() ||
+        birthEvent.place.adminArea?.trim() ||
+        birthCountryFromPlaceName(birthEvent.place)
       : ""
   };
 };

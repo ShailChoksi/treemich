@@ -785,8 +785,7 @@ export class LifeEventService {
 
     let placeId: string | null = existing?.placeId ?? null;
     if (city !== undefined || country !== undefined) {
-      const existingPlaceRow =
-        placeId != null ? await tx.place.findUnique({ where: { id: placeId } }) : null;
+      const existingPlaceRow = placeId != null ? await tx.place.findUnique({ where: { id: placeId } }) : null;
 
       const nextLocality =
         city !== undefined ? (city?.trim() ? city.trim() : null) : (existingPlaceRow?.locality ?? null);
@@ -796,16 +795,11 @@ export class LifeEventService {
           ? country?.trim()
             ? country.trim()
             : null
-          : (existingPlaceRow?.countryCode?.trim() ||
-              existingPlaceRow?.adminArea?.trim() ||
-              null);
+          : existingPlaceRow?.countryCode?.trim() || existingPlaceRow?.adminArea?.trim() || null;
 
-      const name =
-        [nextLocality, nextCountryRaw].filter(Boolean).join(", ") || "Birth place";
-      const countryCode =
-        nextCountryRaw && nextCountryRaw.length === 2 ? nextCountryRaw.toUpperCase() : null;
-      const adminArea =
-        nextCountryRaw && nextCountryRaw.length !== 2 ? nextCountryRaw : null;
+      const name = [nextLocality, nextCountryRaw].filter(Boolean).join(", ") || "Birth place";
+      const countryCode = nextCountryRaw && nextCountryRaw.length === 2 ? nextCountryRaw.toUpperCase() : null;
+      const adminArea = nextCountryRaw && nextCountryRaw.length !== 2 ? nextCountryRaw : null;
 
       if (placeId) {
         await tx.place.update({
