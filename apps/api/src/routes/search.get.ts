@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { Gender } from "@prisma/client";
+import type { Gender, LifeEvent } from "@prisma/client";
 import type { AgeFilter } from "@treemich/shared/search/interpreter";
 import { getRequiredAuth } from "../auth/request.js";
+import { partialDateToComparableDate } from "../lifeEvents/dateValue.js";
 import { RuleBasedInterpreter } from "../search/interpreter/ruleBasedInterpreter.js";
 import { getImmichClientForRequest } from "../services.js";
 
@@ -12,8 +13,19 @@ const querySchema = z.object({
 
 function resolveBirthDate(
   profile?: { birthDateOverride?: string | null } | null,
+  birthEvent?: Pick<LifeEvent, "year" | "month" | "day"> | null,
   immichPerson?: { birthDate?: string | null }
 ): Date | null {
+  if (birthEvent && birthEvent.year != null) {
+    const fromEvent = partialDateToComparableDate({
+      year: birthEvent.year,
+      month: birthEvent.month,
+      day: birthEvent.day
+    });
+    if (fromEvent) {
+      return fromEvent;
+    }
+  }
   const raw = profile?.birthDateOverride ?? immichPerson?.birthDate;
   if (!raw) {
     return null;
@@ -86,7 +98,20 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
     const profilesById = (await app.services.relationshipService.getProfilesForPersonIds(
       auth.user.id,
       targetIds
-    )) as Map<string, { gender: Gender; birthDateOverride?: string | null }>;
+    )) as Map<string, { id: string; gender: Gender; birthDateOverride?: string | null }>;
+    const profileInternalIds = [
+      ...new Set(
+        [...profilesById.values()]
+          .map((p) =>
+            "id" in p && typeof (p as { id?: string }).id === "string" ? (p as { id: string }).id : null
+          )
+          .filter((id): id is string => id != null)
+      )
+    ];
+    const birthDeathByProfileId = await app.services.lifeEventService.getBirthDeathByPersonProfileIds(
+      auth.user.id,
+      profileInternalIds
+    );
     const peopleById = new Map(allPeople.map((person) => [person.id, person]));
     const now = new Date();
 
@@ -110,7 +135,8 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
         if (!interpreted.parsed.ageFilter) {
           return true;
         }
-        const birthDate = resolveBirthDate(item.profile, item.person);
+        const birthRow = item.profile ? birthDeathByProfileId.get(item.profile.id) : undefined;
+        const birthDate = resolveBirthDate(item.profile, birthRow?.birth ?? null, item.person);
         if (!birthDate) {
           return false;
         }

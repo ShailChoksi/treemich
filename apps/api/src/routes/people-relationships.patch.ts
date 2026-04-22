@@ -24,13 +24,16 @@ export const registerPeopleRelationshipsPatchRoute = (app: FastifyInstance) => {
     const normalizeOptionalString = (value: string | null | undefined) =>
       value === undefined ? undefined : value?.trim() ? value.trim() : null;
 
+    const marriageAnniversaryDate = normalizeOptionalString(body.marriageAnniversaryDate);
+    const divorceDate = normalizeOptionalString(body.divorceDate);
+
     const updated = await app.services.relationshipService.updateSpouseRelationshipDates(
       auth.user.id,
       id,
       body.toPersonId,
       {
-        marriageAnniversaryDate: normalizeOptionalString(body.marriageAnniversaryDate),
-        divorceDate: normalizeOptionalString(body.divorceDate)
+        marriageAnniversaryDate,
+        divorceDate
       }
     );
 
@@ -40,6 +43,11 @@ export const registerPeopleRelationshipsPatchRoute = (app: FastifyInstance) => {
         error: "Spouse relationship not found"
       });
     }
+
+    await app.services.lifeEventService.syncLegacySpouseDates(auth.user.id, id, body.toPersonId, {
+      ...(body.marriageAnniversaryDate !== undefined ? { marriageAnniversaryDate } : {}),
+      ...(body.divorceDate !== undefined ? { divorceDate } : {})
+    });
 
     return {
       updatedCount: updated.count

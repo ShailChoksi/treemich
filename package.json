@@ -47,5 +47,8 @@
     "react-use-measure": "^2.1.7",
     "troika-worker-utils": "^0.52.0",
     "webgl-sdf-generator": "^1.1.1"
+  },
+  "optionalDependencies": {
+    "@rolldown/binding-win32-x64-msvc": "^1.0.0-rc.16"
   }
 }

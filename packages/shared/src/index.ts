@@ -58,12 +58,16 @@ export type TreemichPersonProfile = {
 };
 
 export type RelationshipRecord = {
+  /** Present when returned from GET /relationships (Treemich relationship row id). */
+  id?: string;
   fromPersonId: string;
   toPersonId: string;
   type: RelationshipType;
   marriageAnniversaryDate?: string | null;
   divorceDate?: string | null;
 };
+
+export * from "./lifeEvents.js";
 
 export type PhotoCooccurrenceEdge = {
   personAId: string;
