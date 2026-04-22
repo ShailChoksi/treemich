@@ -12,7 +12,6 @@ const querySchema = z.object({
 });
 
 function resolveBirthDate(
-  profile?: { birthDateOverride?: string | null } | null,
   birthEvent?: Pick<LifeEvent, "year" | "month" | "day"> | null,
   immichPerson?: { birthDate?: string | null }
 ): Date | null {
@@ -26,7 +25,7 @@ function resolveBirthDate(
       return fromEvent;
     }
   }
-  const raw = profile?.birthDateOverride ?? immichPerson?.birthDate;
+  const raw = immichPerson?.birthDate;
   if (!raw) {
     return null;
   }
@@ -98,7 +97,7 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
     const profilesById = (await app.services.relationshipService.getProfilesForPersonIds(
       auth.user.id,
       targetIds
-    )) as Map<string, { id: string; gender: Gender; birthDateOverride?: string | null }>;
+    )) as Map<string, { id: string; gender: Gender }>;
     const profileInternalIds = [
       ...new Set(
         [...profilesById.values()]
@@ -136,7 +135,7 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
           return true;
         }
         const birthRow = item.profile ? birthDeathByProfileId.get(item.profile.id) : undefined;
-        const birthDate = resolveBirthDate(item.profile, birthRow?.birth ?? null, item.person);
+        const birthDate = resolveBirthDate(birthRow?.birth ?? null, item.person);
         if (!birthDate) {
           return false;
         }

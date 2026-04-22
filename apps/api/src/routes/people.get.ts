@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
-import { effectiveBirthIsoFromBridge } from "../lifeEvents/service.js";
+import { effectiveBirthIsoFromLifeEvent } from "../lifeEvents/service.js";
 import { getImmichClientForRequest } from "../services.js";
 
 export const registerPeopleGetRoute = (app: FastifyInstance) => {
@@ -28,11 +28,7 @@ export const registerPeopleGetRoute = (app: FastifyInstance) => {
       people: people.map((person) => {
         const profile = profilesById.get(person.id) ?? null;
         const bd = profile ? birthDeathByProfileId.get(profile.id) : undefined;
-        const mergedBirth = effectiveBirthIsoFromBridge(
-          bd?.birth ?? null,
-          profile?.birthDateOverride,
-          person.birthDate
-        );
+        const mergedBirth = effectiveBirthIsoFromLifeEvent(bd?.birth ?? null, person.birthDate);
         return {
           ...person,
           birthDate: mergedBirth,

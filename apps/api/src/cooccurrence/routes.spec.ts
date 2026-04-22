@@ -124,13 +124,15 @@ describe("cooccurrence routes", () => {
         upsertRelationship: vi.fn(),
         deleteRelationship: vi.fn(),
         upsertProfile: vi.fn(),
+        hasSpouseRelationship: vi.fn(),
         findTargetsByRelationship: vi.fn(),
         traverseRelationshipChain: vi.fn()
       } as unknown as AppServices["relationshipService"],
       lifeEventService: {
+        getSpouseMarriageDivorceIsoForPairs: vi.fn().mockResolvedValue(new Map()),
         getBirthDeathByPersonProfileIds: vi.fn().mockResolvedValue(new Map()),
-        syncLegacyPersonProfileFields: vi.fn(),
-        syncLegacySpouseDates: vi.fn(),
+        syncPersonProfileFieldsToLifeEvents: vi.fn(),
+        syncSpouseDatesToLifeEvents: vi.fn(),
         listPersonLifeEvents: vi.fn(),
         createPersonLifeEvent: vi.fn(),
         updatePersonLifeEvent: vi.fn(),

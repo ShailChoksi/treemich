@@ -7,15 +7,56 @@ Immich remains the system of record for photos, faces, and people. Treemich adds
 ## Features
 
 - **Relationship management** -- create parent/child, sibling, spouse, friend, and pet links between Immich people.
-- **Per-person profiles** -- set gender, names, and Treemich **life events** (BIRTH/DEATH with optional places) on any Immich person; quick-edit fields in the sidebar map to those events, not legacy profile columns.
+- **Per-person profiles** -- set gender, names, and Treemich **life events** (BIRTH/DEATH with optional places) on any Immich person; quick-edit fields in the sidebar map to those events.
 - **3D graph visualization** -- interactive Three.js graph with multiple layout modes (generation tree, centered map, hybrid, cleaned 3D) plus layer toggles for Family/Friends/Pets.
 - **Natural-language search** -- query relationships in plain English with multi-hop graph traversal.
 - **Photo co-occurrence** -- discover which people appear together in photos.
 - **Per-user privacy** -- all relationship data is scoped to the authenticated Treemich user.
 
-### Life events vs legacy profile fields
+### Life events and birth display
 
-The API may still keep legacy date/place columns for compatibility while migrations run. The **web UI** treats **BIRTH**, **DEATH**, **MARRIAGE**, and **DIVORCE** [life events](apps/api/src/lifeEvents/service.ts) as the source of truth for editable dates and places. Immich’s own person `birthDate` is shown only as reference text in the sidebar. Removing legacy Treemich columns is a **backend** follow-up (`syncLegacyPersonProfileFields` and related bridge code) after operators confirm data is fully mirrored into life events.
+Treemich stores editable **BIRTH**, **DEATH**, **MARRIAGE**, and **DIVORCE** as [life events](apps/api/src/lifeEvents/service.ts). The merged `birthDate` on each person prefers the BIRTH life event, then Immich’s person `birthDate` (reference in the sidebar).
+
+### Account data export (Phase 0)
+
+Authenticated users can download a snapshot of Treemich-owned data (profiles, relationships, places, life events, co-occurrence metadata, etc.) **without** Immich access tokens or photo binaries:
+
+- **`GET /api/export/account`** (default) — same as **`GET /api/export/account?format=json`**. Response is `application/json` with `Content-Disposition: attachment`. The JSON object includes `exportVersion`, `exportedAt`, and all relational tables the server stores for that user (sensitive fields such as session `tokenHash` and linked-account encrypted token material are omitted).
+
+- **`GET /api/export/account?format=zip`** — `application/zip` attachment containing:
+  - **`account.json`** — the same payload as the JSON export above.
+  - **`manifest.json`** — describes the archive (`treemichExportManifestVersion`, `payloadExportVersion`, `exportedAt`, and the list of files).
+
+Use the same session cookie as the rest of the API.
+
+### Treemich user deletion (PostgreSQL cascade)
+
+Deleting a **`TreemichUser`** row (for example via Prisma or direct SQL) **cascades** to all Treemich-owned graph data linked by `userId`: linked Immich account row, sessions, person profiles, relationships, places, life events (and citations), and co-occurrence tables. **Immich itself is unchanged** — people, faces, and photos remain in your Immich instance. To remove those, use Immich’s own account or library tools.
+
+There is currently **no** dedicated “delete my Treemich account” HTTP button in the shipped UI; operators or scripts can delete the user row if you need a full Treemich purge for one Immich identity.
+
+### Upgrading from releases before legacy column removal
+
+Phase 0 uses **two** migrations:
+
+1. [`0011_phase0_add_person_profile_external_ids`](apps/api/prisma/migrations/0011_phase0_add_person_profile_external_ids/migration.sql) — adds `PersonProfile.externalIds` only (legacy date columns stay for one more step).
+2. [`0012_phase0_drop_legacy_date_columns`](apps/api/prisma/migrations/0012_phase0_drop_legacy_date_columns/migration.sql) — drops legacy Treemich date/place columns on profiles and spouse rows.
+
+**Recommended upgrade path** for an existing database that still has legacy columns and may predate full life-event mirroring:
+
+1. Run the backfill **before** applying these migrations (while the old schema is still deployed, or at minimum before migration **0012** removes the legacy columns):
+
+```bash
+npm run phase0:backfill --workspace @treemich/api
+```
+
+2. Deploy the new API / run `prisma migrate deploy` so **0011** then **0012** apply in order.
+
+Advanced: if you ship **0011** alone first, you can run the backfill after **0011** and before **0012** (legacy columns still exist between the two). A single `migrate deploy` applies both in one go, so the usual approach is backfill **first**, then migrate.
+
+Fresh installs with no legacy data can skip the backfill.
+
+**Dev note:** If your machine ever applied the removed combined migration folder `0011_phase0_external_ids_drop_legacy_dates`, delete that row from `_prisma_migrations` and align the schema, or reset the dev database, then use the split migrations above.
 
 ### Natural-Language Search
 

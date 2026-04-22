@@ -48,13 +48,11 @@ export type ImmichPerson = {
 export type TreemichPersonProfile = {
   immichPersonId: string;
   gender: GenderValue;
-  birthDateOverride?: string | null;
   givenName?: string | null;
   surname?: string | null;
   nicknames?: string | null;
-  deathDate?: string | null;
-  birthCity?: string | null;
-  birthCountry?: string | null;
+  /** Optional interchange keys (e.g. GEDCOM xref). */
+  externalIds?: Record<string, string> | null;
 };
 
 export type RelationshipRecord = {

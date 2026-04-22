@@ -11,6 +11,7 @@ import { registerAuthLinkStatusRoute } from "./routes/auth.link-status.js";
 import { registerAuthLoginRoute } from "./routes/auth.login.js";
 import { registerAuthLogoutRoute } from "./routes/auth.logout.js";
 import { registerAuthMeRoute } from "./routes/auth.me.js";
+import { registerExportAccountGetRoute } from "./routes/export-account.get.js";
 import { registerCooccurrenceComputePostRoute } from "./routes/cooccurrence-compute.post.js";
 import { registerCooccurrenceEdgesGetRoute } from "./routes/cooccurrence-edges.get.js";
 import { registerCooccurrencePairGetRoute } from "./routes/cooccurrence-pair.get.js";
@@ -188,6 +189,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerSearchGetRoute);
   app.register(registerUserPreferencesGetRoute);
   app.register(registerUserPreferencesPatchRoute);
+  app.register(registerExportAccountGetRoute);
 
   return app;
 };

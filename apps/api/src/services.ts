@@ -20,13 +20,16 @@ export type AppServices = {
   lifeEventService: LifeEventService;
 };
 
-export const buildServices = (): AppServices => ({
-  authService: new AuthService(),
-  cooccurrenceService: new CooccurrenceService(),
-  immichClientFactory: new ImmichClientFactory(),
-  relationshipService: new RelationshipService(),
-  lifeEventService: new LifeEventService()
-});
+export const buildServices = (): AppServices => {
+  const lifeEventService = new LifeEventService();
+  return {
+    authService: new AuthService(),
+    cooccurrenceService: new CooccurrenceService(),
+    immichClientFactory: new ImmichClientFactory(),
+    relationshipService: new RelationshipService(lifeEventService),
+    lifeEventService
+  };
+};
 
 declare module "fastify" {
   interface FastifyInstance {
