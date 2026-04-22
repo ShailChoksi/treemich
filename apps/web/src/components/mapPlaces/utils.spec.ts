@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlacesMapPoint } from "../../lib/api";
-import { clusterPlaces, filterPlaces } from "./utils";
+import { clusterPlaces, filterPlaces, filterPlacesByBounds, getAdaptiveClusterCellDegrees } from "./utils";
 
 const point = (overrides: Partial<PlacesMapPoint>): PlacesMapPoint => ({
   id: overrides.id ?? "p",
@@ -66,5 +66,44 @@ describe("clusterPlaces", () => {
       5
     );
     expect(clusters[0]?.samplePersonIds).toEqual(["p1", "p2", "p3", "p4", "p5"]);
+  });
+});
+
+describe("getAdaptiveClusterCellDegrees", () => {
+  it("increases cluster cell size at low zoom", () => {
+    const lowZoom = getAdaptiveClusterCellDegrees(1, 2);
+    const higherZoom = getAdaptiveClusterCellDegrees(1, 8);
+    expect(lowZoom).toBeGreaterThan(higherZoom);
+  });
+
+  it("enforces lower and upper bounds", () => {
+    expect(getAdaptiveClusterCellDegrees(0, 20)).toBeGreaterThanOrEqual(0.05);
+    expect(getAdaptiveClusterCellDegrees(100, 1)).toBeLessThanOrEqual(12);
+  });
+});
+
+describe("filterPlacesByBounds", () => {
+  it("returns all places when bounds are not set", () => {
+    const places = [point({ id: "a" }), point({ id: "b" })];
+    expect(filterPlacesByBounds(places, null)).toHaveLength(2);
+  });
+
+  it("keeps only points inside rectangular bounds", () => {
+    const places = [
+      point({ id: "a", latitude: 5, longitude: 5 }),
+      point({ id: "b", latitude: 50, longitude: 50 })
+    ];
+    const inBounds = filterPlacesByBounds(places, { south: 0, west: 0, north: 10, east: 10 });
+    expect(inBounds.map((p) => p.id)).toEqual(["a"]);
+  });
+
+  it("supports dateline-crossing bounds", () => {
+    const places = [
+      point({ id: "a", latitude: 0, longitude: 179 }),
+      point({ id: "b", latitude: 0, longitude: -179 }),
+      point({ id: "c", latitude: 0, longitude: 0 })
+    ];
+    const inBounds = filterPlacesByBounds(places, { south: -10, west: 170, north: 10, east: -170 });
+    expect(inBounds.map((p) => p.id)).toEqual(["a", "b"]);
   });
 });

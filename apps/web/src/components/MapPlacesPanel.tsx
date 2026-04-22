@@ -1,8 +1,14 @@
 import type { PlacesMapPoint } from "../lib/api";
 import { useEffect, useMemo, useState } from "react";
-import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { latLngBounds } from "leaflet";
-import { clusterPlaces, filterPlaces, type PlaceCluster } from "./mapPlaces/utils";
+import {
+  clusterPlaces,
+  filterPlaces,
+  filterPlacesByBounds,
+  getAdaptiveClusterCellDegrees,
+  type GeoBounds
+} from "./mapPlaces/utils";
 
 type Props = {
   mapUiEnabled: boolean;
@@ -15,21 +21,59 @@ type Props = {
   error?: string | null;
 };
 
-const AutoFitBounds = ({ clusters }: { clusters: PlaceCluster[] }) => {
+const AutoFitBounds = ({
+  points,
+  fitKey,
+  debounceMs = 180
+}: {
+  points: PlacesMapPoint[];
+  fitKey: string;
+  debounceMs?: number;
+}) => {
   const map = useMap();
-  const signature = useMemo(
-    () => clusters.map((cluster) => `${cluster.id}:${cluster.latitude}:${cluster.longitude}`).join("|"),
-    [clusters]
-  );
   useEffect(() => {
-    if (signature.length === 0) {
+    if (points.length === 0) {
       return;
     }
-    const bounds = latLngBounds(
-      clusters.map((cluster) => [cluster.latitude, cluster.longitude] as [number, number])
-    );
-    map.fitBounds(bounds, { padding: [28, 28], maxZoom: clusters.length > 1 ? 7 : 10 });
-  }, [clusters, map, signature]);
+    const timeout = window.setTimeout(() => {
+      const bounds = latLngBounds(
+        points.map((point) => [point.latitude, point.longitude] as [number, number])
+      );
+      map.fitBounds(bounds, { padding: [28, 28], maxZoom: points.length > 1 ? 7 : 10 });
+    }, debounceMs);
+    return () => window.clearTimeout(timeout);
+  }, [debounceMs, fitKey, map, points]);
+  return null;
+};
+
+const MapViewportController = ({
+  onZoomChange,
+  onBoundsChange
+}: {
+  onZoomChange: (zoom: number) => void;
+  onBoundsChange: (bounds: GeoBounds) => void;
+}) => {
+  const updateViewport = () => {
+    const bounds = map.getBounds();
+    onZoomChange(map.getZoom());
+    onBoundsChange({
+      south: bounds.getSouth(),
+      west: bounds.getWest(),
+      north: bounds.getNorth(),
+      east: bounds.getEast()
+    });
+  };
+  const map = useMapEvents({
+    zoomend() {
+      updateViewport();
+    },
+    moveend() {
+      updateViewport();
+    }
+  });
+  useEffect(() => {
+    updateViewport();
+  }, [map, onBoundsChange, onZoomChange]);
   return null;
 };
 
@@ -45,7 +89,9 @@ export const MapPlacesPanel = ({
 }: Props) => {
   const [search, setSearch] = useState("");
   const [minEvents, setMinEvents] = useState(1);
-  const [clusterCellDegrees, setClusterCellDegrees] = useState(1.2);
+  const [baseClusterCellDegrees, setBaseClusterCellDegrees] = useState(1.2);
+  const [mapZoom, setMapZoom] = useState(2);
+  const [viewportBounds, setViewportBounds] = useState<GeoBounds | null>(null);
 
   if (!mapUiEnabled) {
     return (
@@ -73,22 +119,30 @@ export const MapPlacesPanel = ({
   }
 
   const filtered = filterPlaces(places, { search, minEvents });
-  const top = filtered.slice(0, 400);
-  const clusters = clusterPlaces(top, clusterCellDegrees);
+  const fitPoints = filtered.slice(0, 400);
+  const visiblePoints = filterPlacesByBounds(fitPoints, viewportBounds);
+  const adaptiveClusterCellDegrees = useMemo(
+    () => getAdaptiveClusterCellDegrees(baseClusterCellDegrees, mapZoom),
+    [baseClusterCellDegrees, mapZoom]
+  );
+  const clusters = clusterPlaces(visiblePoints, adaptiveClusterCellDegrees);
+  const fitKey = `${search.trim().toLowerCase()}|${minEvents}|${baseClusterCellDegrees}|${includeLiving}|${
+    places.length
+  }`;
   const center: [number, number] =
-    clusters.length === 0
+    fitPoints.length === 0
       ? [20, 0]
       : [
-          clusters.reduce((sum, cluster) => sum + cluster.latitude, 0) / clusters.length,
-          clusters.reduce((sum, cluster) => sum + cluster.longitude, 0) / clusters.length
+          fitPoints.reduce((sum, point) => sum + point.latitude, 0) / fitPoints.length,
+          fitPoints.reduce((sum, point) => sum + point.longitude, 0) / fitPoints.length
         ];
 
   return (
     <section className="card map-places-panel">
       <h3>Map</h3>
       <p className="hint">
-        Geocoded life-event places ({places.length} total, {filtered.length} visible, {clusters.length}{" "}
-        clusters).
+        Geocoded life-event places ({places.length} total, {filtered.length} filtered, {visiblePoints.length}{" "}
+        in view, {clusters.length} clusters).
       </p>
       <div className="map-places-controls">
         <input
@@ -107,14 +161,14 @@ export const MapPlacesPanel = ({
           />
         </label>
         <label className="graph-search-alt-names">
-          <span>Cluster radius: {clusterCellDegrees.toFixed(1)}°</span>
+          <span>Cluster base radius: {baseClusterCellDegrees.toFixed(1)}°</span>
           <input
             type="range"
             min={0.2}
             max={5}
             step={0.2}
-            value={clusterCellDegrees}
-            onChange={(event) => setClusterCellDegrees(Number(event.target.value))}
+            value={baseClusterCellDegrees}
+            onChange={(event) => setBaseClusterCellDegrees(Number(event.target.value))}
           />
         </label>
         <label className="graph-search-alt-names">
@@ -127,7 +181,8 @@ export const MapPlacesPanel = ({
         </label>
       </div>
       <MapContainer center={center} zoom={2} scrollWheelZoom className="map-places-canvas">
-        <AutoFitBounds clusters={clusters} />
+        <MapViewportController onZoomChange={setMapZoom} onBoundsChange={setViewportBounds} />
+        <AutoFitBounds points={fitPoints} fitKey={fitKey} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -161,6 +216,9 @@ export const MapPlacesPanel = ({
           </CircleMarker>
         ))}
       </MapContainer>
+      <p className="hint map-cluster-hint">
+        Adaptive cluster radius: {adaptiveClusterCellDegrees.toFixed(2)}° at zoom {mapZoom.toFixed(1)}.
+      </p>
       <ul className="map-places-list">
         {clusters.slice(0, 10).map((cluster) => (
           <li key={cluster.id}>

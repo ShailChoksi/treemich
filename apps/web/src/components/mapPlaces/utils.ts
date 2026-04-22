@@ -12,6 +12,13 @@ export type PlaceCluster = {
   points: PlacesMapPoint[];
 };
 
+export type GeoBounds = {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+};
+
 export const filterPlaces = (
   places: PlacesMapPoint[],
   options: { search: string; minEvents: number }
@@ -64,4 +71,29 @@ export const clusterPlaces = (places: PlacesMapPoint[], cellDegrees: number): Pl
       personCount: cluster.points.reduce((sum, point) => sum + point.personCount, 0)
     }))
     .sort((left, right) => right.eventCount - left.eventCount || left.id.localeCompare(right.id));
+};
+
+export const getAdaptiveClusterCellDegrees = (baseCellDegrees: number, zoom: number): number => {
+  const normalizedBase = Math.max(0.2, baseCellDegrees);
+  const zoomScale = Math.pow(2, (5 - zoom) / 2);
+  return Math.min(12, Math.max(0.05, normalizedBase * zoomScale));
+};
+
+export const filterPlacesByBounds = (
+  places: PlacesMapPoint[],
+  bounds: GeoBounds | null
+): PlacesMapPoint[] => {
+  if (!bounds) {
+    return places;
+  }
+  const crossesDateline = bounds.west > bounds.east;
+  return places.filter((point) => {
+    if (point.latitude < bounds.south || point.latitude > bounds.north) {
+      return false;
+    }
+    if (!crossesDateline) {
+      return point.longitude >= bounds.west && point.longitude <= bounds.east;
+    }
+    return point.longitude >= bounds.west || point.longitude <= bounds.east;
+  });
 };

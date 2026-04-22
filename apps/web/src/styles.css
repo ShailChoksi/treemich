@@ -363,6 +363,10 @@ body {
   margin-top: 8px;
 }
 
+.map-cluster-hint {
+  margin-top: 8px;
+}
+
 .person-names-row {
   display: flex;
   flex-wrap: wrap;
