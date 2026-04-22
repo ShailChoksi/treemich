@@ -291,13 +291,50 @@ const ageSuffixPatterns: Array<{ pattern: RegExp; toFilter: (...args: string[]) 
 
 const genderPrefixPattern = /^(male|female)\s+/i;
 
-const possessivePattern = /^(.+?)'s?\s+(.+)$/i;
-
+/**
+ * Rewrites "NAME's relationship" → "relationship of NAME" (also "NAME' relationship" e.g. James' cousins).
+ * Implemented without backtracking-prone regex (avoids ReDoS on untrusted query strings).
+ */
 function rewritePossessive(query: string): string {
-  const match = query.match(possessivePattern);
-  if (match?.[1] && match[2]) {
-    return `${match[2].trim()} of ${match[1].trim()}`;
+  const t = query.trim();
+  if (!t) {
+    return query;
   }
+
+  const trySplitAt = (apos: number): { owner: string; relation: string } | null => {
+    if (apos <= 0 || apos >= t.length - 1 || t[apos] !== "'") {
+      return null;
+    }
+    let after = apos + 1;
+    const c = t[after];
+    if (c === "s" || c === "S") {
+      after += 1;
+    }
+    while (after < t.length && /\s/.test(t.charAt(after))) {
+      after += 1;
+    }
+    if (after >= t.length) {
+      return null;
+    }
+    const owner = t.slice(0, apos).trim();
+    const relation = t.slice(after).trim();
+    if (!owner || !relation) {
+      return null;
+    }
+    return { owner, relation };
+  };
+
+  // Prefer the last "'s " / "' " that yields a valid split (matches former /^(.+?)'s?\s+(.+)$/ behavior on multi-apostrophe names).
+  for (let i = t.length - 2; i >= 1; i -= 1) {
+    if (t[i] !== "'") {
+      continue;
+    }
+    const split = trySplitAt(i);
+    if (split) {
+      return `${split.relation} of ${split.owner}`;
+    }
+  }
+
   return query;
 }
 
