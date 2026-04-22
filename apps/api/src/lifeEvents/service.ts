@@ -93,14 +93,59 @@ export class LifeEventService {
     }
   }
 
+  private extractCityFromCommaName(name: string): string | null {
+    const trimmed = name?.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const idx = trimmed.indexOf(",");
+    if (idx >= 0) {
+      const left = trimmed.slice(0, idx).trim();
+      return left || null;
+    }
+    return trimmed;
+  }
+
+  private extractCountryFromCommaName(name: string, locality: string | null): string | null {
+    const trimmed = name?.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const loc = locality?.trim();
+    if (loc) {
+      const prefix = `${loc},`;
+      if (trimmed.toLowerCase().startsWith(prefix.toLowerCase())) {
+        const rest = trimmed.slice(prefix.length).trim();
+        return rest || null;
+      }
+    }
+    const idx = trimmed.indexOf(",");
+    if (idx >= 0) {
+      return trimmed.slice(idx + 1).trim() || null;
+    }
+    return null;
+  }
+
+  private placeHintsFromStoredBirthPlace(place: {
+    name: string;
+    locality: string | null;
+    countryCode: string | null;
+    adminArea: string | null;
+  }): { birthCity: string | null; birthCountry: string | null } {
+    const locality = this.normalizeText(place.locality);
+    const birthCity = locality ?? this.normalizeText(this.extractCityFromCommaName(place.name));
+    const birthCountry =
+      this.normalizeText(place.countryCode) ??
+      this.normalizeText(place.adminArea) ??
+      this.normalizeText(this.extractCountryFromCommaName(place.name, place.locality));
+    return { birthCity, birthCountry };
+  }
+
   private async maybeBackfillBirthPlaceCoordinates(
     userId: string,
     profileId: string,
     fields: { birthCity?: string | null; birthCountry?: string | null }
   ): Promise<void> {
-    if (fields.birthCity === undefined && fields.birthCountry === undefined) {
-      return;
-    }
     const birth = await prisma.lifeEvent.findFirst({
       where: { userId, personProfileId: profileId, eventType: "BIRTH" },
       include: { place: true }
@@ -113,8 +158,13 @@ export class LifeEventService {
       return;
     }
 
-    const city = this.normalizeText(fields.birthCity ?? place.locality ?? place.name);
-    const country = this.normalizeText(fields.birthCountry ?? place.countryCode);
+    const hints = this.placeHintsFromStoredBirthPlace(place);
+    const city = this.normalizeText(
+      (fields.birthCity !== undefined ? fields.birthCity : undefined) ?? hints.birthCity ?? undefined
+    );
+    const country = this.normalizeText(
+      (fields.birthCountry !== undefined ? fields.birthCountry : undefined) ?? hints.birthCountry ?? undefined
+    );
     if (!city && !country) {
       return;
     }
@@ -365,7 +415,9 @@ export class LifeEventService {
       },
       include: includeDefault
     });
-    return created as LifeEventWithRelations;
+    const createdRow = created as LifeEventWithRelations;
+    await this.maybeBackfillBirthPlaceCoordinates(userId, profile.id, {});
+    return createdRow;
   }
 
   async updatePersonLifeEvent(
@@ -443,7 +495,9 @@ export class LifeEventService {
       },
       include: includeDefault
     });
-    return updated as LifeEventWithRelations;
+    const updatedRow = updated as LifeEventWithRelations;
+    await this.maybeBackfillBirthPlaceCoordinates(userId, profile.id, {});
+    return updatedRow;
   }
 
   async deletePersonLifeEvent(userId: string, immichPersonId: string, eventId: string): Promise<void> {
@@ -731,23 +785,46 @@ export class LifeEventService {
 
     let placeId: string | null = existing?.placeId ?? null;
     if (city !== undefined || country !== undefined) {
-      const name = [city ?? null, country ?? null].filter(Boolean).join(", ") || "Birth place";
+      const existingPlaceRow =
+        placeId != null ? await tx.place.findUnique({ where: { id: placeId } }) : null;
+
+      const nextLocality =
+        city !== undefined ? (city?.trim() ? city.trim() : null) : (existingPlaceRow?.locality ?? null);
+
+      const nextCountryRaw =
+        country !== undefined
+          ? country?.trim()
+            ? country.trim()
+            : null
+          : (existingPlaceRow?.countryCode?.trim() ||
+              existingPlaceRow?.adminArea?.trim() ||
+              null);
+
+      const name =
+        [nextLocality, nextCountryRaw].filter(Boolean).join(", ") || "Birth place";
+      const countryCode =
+        nextCountryRaw && nextCountryRaw.length === 2 ? nextCountryRaw.toUpperCase() : null;
+      const adminArea =
+        nextCountryRaw && nextCountryRaw.length !== 2 ? nextCountryRaw : null;
+
       if (placeId) {
         await tx.place.update({
           where: { id: placeId },
           data: {
             name,
-            locality: city ?? null,
-            countryCode: country && country.length === 2 ? country : null
+            locality: nextLocality,
+            countryCode,
+            adminArea
           }
         });
-      } else if (city || country) {
+      } else if (nextLocality || nextCountryRaw) {
         const place = await tx.place.create({
           data: {
             userId,
             name,
-            locality: city ?? null,
-            countryCode: country && country.length === 2 ? country : null
+            locality: nextLocality,
+            countryCode,
+            adminArea
           }
         });
         placeId = place.id;

@@ -165,4 +165,72 @@ describe("deriveProfileDisplayValuesFromLifeEvents", () => {
       birthCountry: ""
     });
   });
+
+  it("shows birth country from adminArea when countryCode is absent", () => {
+    const lifeEvents: LifeEventRecord[] = [
+      {
+        id: "ev-birth",
+        eventType: "BIRTH",
+        dateQualifier: "EXACT",
+        year: 1991,
+        month: 5,
+        day: 6,
+        endYear: null,
+        endMonth: null,
+        endDay: null,
+        notes: null,
+        place: {
+          id: "pl-1",
+          name: "Munich, Germany",
+          locality: "Munich",
+          countryCode: null,
+          addressLine1: null,
+          adminArea: "Germany",
+          postalCode: null,
+          latitude: null,
+          longitude: null,
+          notes: null
+        },
+        citations: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      }
+    ];
+
+    expect(deriveProfileDisplayValuesFromLifeEvents(lifeEvents).birthCountry).toBe("Germany");
+  });
+
+  it("falls back to country segment of place.name when code and adminArea are missing", () => {
+    const lifeEvents: LifeEventRecord[] = [
+      {
+        id: "ev-birth",
+        eventType: "BIRTH",
+        dateQualifier: "EXACT",
+        year: null,
+        month: null,
+        day: null,
+        endYear: null,
+        endMonth: null,
+        endDay: null,
+        notes: null,
+        place: {
+          id: "pl-1",
+          name: "Hamburg, Germany",
+          locality: "Hamburg",
+          countryCode: null,
+          addressLine1: null,
+          adminArea: null,
+          postalCode: null,
+          latitude: null,
+          longitude: null,
+          notes: null
+        },
+        citations: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      }
+    ];
+
+    expect(deriveProfileDisplayValuesFromLifeEvents(lifeEvents).birthCountry).toBe("Germany");
+  });
 });

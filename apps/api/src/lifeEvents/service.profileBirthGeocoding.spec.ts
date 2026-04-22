@@ -5,6 +5,7 @@ const {
   txLifeEventFindFirstMock,
   txLifeEventUpdateMock,
   txLifeEventCreateMock,
+  txPlaceFindUniqueMock,
   txPlaceUpdateMock,
   txPlaceCreateMock,
   prismaLifeEventFindFirstMock,
@@ -16,6 +17,7 @@ const {
   txLifeEventFindFirstMock: vi.fn(),
   txLifeEventUpdateMock: vi.fn(),
   txLifeEventCreateMock: vi.fn(),
+  txPlaceFindUniqueMock: vi.fn(),
   txPlaceUpdateMock: vi.fn(),
   txPlaceCreateMock: vi.fn(),
   prismaLifeEventFindFirstMock: vi.fn(),
@@ -48,6 +50,7 @@ describe("LifeEventService.syncPersonProfileFieldsToLifeEvents geocoding", () =>
           create: txLifeEventCreateMock
         },
         place: {
+          findUnique: txPlaceFindUniqueMock,
           update: txPlaceUpdateMock,
           create: txPlaceCreateMock
         }
@@ -59,6 +62,13 @@ describe("LifeEventService.syncPersonProfileFieldsToLifeEvents geocoding", () =>
     });
     txLifeEventUpdateMock.mockResolvedValue({});
     txLifeEventCreateMock.mockResolvedValue({});
+    txPlaceFindUniqueMock.mockResolvedValue({
+      id: "place-1",
+      locality: "Boston",
+      countryCode: null,
+      adminArea: null,
+      name: "Boston, USA"
+    });
     txPlaceUpdateMock.mockResolvedValue({});
     txPlaceCreateMock.mockResolvedValue({ id: "place-1" });
     prismaLifeEventFindFirstMock.mockResolvedValue({

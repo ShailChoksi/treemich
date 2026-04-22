@@ -535,16 +535,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     const eventFormFields =
       profileEventFieldsByPersonId[pid] ??
       deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
-    const selectedBirthDate = eventFormFields.birthDate || null;
+    const rawBirthDate = (eventFormFields.birthDate ?? "").trim();
     const selectedGivenName = normalizeOptionalString(givenNameByPersonId[selectedPerson.id] ?? "");
     const selectedSurname = normalizeOptionalString(surnameByPersonId[selectedPerson.id] ?? "");
     const selectedNicknames = normalizeOptionalString(nicknamesByPersonId[selectedPerson.id] ?? "");
     const selectedDeathDate = eventFormFields.deathDate || null;
     const selectedBirthCity = normalizeOptionalString(eventFormFields.birthCity ?? "");
     const selectedBirthCountry = normalizeOptionalString(eventFormFields.birthCountry ?? "");
-    const birthParts = selectedBirthDate ? parseDateInputToParts(selectedBirthDate) : null;
+    const birthParts = rawBirthDate ? parseDateInputToParts(rawBirthDate) : null;
     const deathParts = selectedDeathDate ? parseDateInputToParts(selectedDeathDate) : null;
-    if (selectedBirthDate && !birthParts) {
+    if (rawBirthDate && !birthParts) {
       setStatus("Birth date must be a valid YYYY-MM-DD date.");
       return;
     }
@@ -582,12 +582,21 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         await deletePersonLifeEvent(selectedPerson.id, existingBirthEvent.id);
         removeEvent(existingBirthEvent.id);
       } else if (shouldPersistBirthEvent) {
+        const resolvedBirthParts =
+          birthParts ??
+          (existingBirthEvent
+            ? {
+                year: existingBirthEvent.year,
+                month: existingBirthEvent.month,
+                day: existingBirthEvent.day
+              }
+            : null);
         if (existingBirthEvent) {
           const updatedBirth = await updatePersonLifeEvent(selectedPerson.id, existingBirthEvent.id, {
             dateQualifier: "EXACT",
-            year: birthParts?.year ?? null,
-            month: birthParts?.month ?? null,
-            day: birthParts?.day ?? null,
+            year: resolvedBirthParts?.year ?? null,
+            month: resolvedBirthParts?.month ?? null,
+            day: resolvedBirthParts?.day ?? null,
             place: birthPlaceInput,
             placeId: birthPlaceInput ? undefined : null
           });
@@ -596,9 +605,9 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           const createdBirth = await createPersonLifeEvent(selectedPerson.id, {
             eventType: "BIRTH",
             dateQualifier: "EXACT",
-            year: birthParts?.year ?? null,
-            month: birthParts?.month ?? null,
-            day: birthParts?.day ?? null,
+            year: resolvedBirthParts?.year ?? null,
+            month: resolvedBirthParts?.month ?? null,
+            day: resolvedBirthParts?.day ?? null,
             place: birthPlaceInput
           });
           replaceEvent(createdBirth);
