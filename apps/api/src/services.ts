@@ -10,6 +10,7 @@ import { TreemichAuthError } from "./auth/service.js";
 import { CooccurrenceService } from "./cooccurrence/service.js";
 import { ImmichClientFactory } from "./integrations/immich/factory.js";
 import { LifeEventService } from "./lifeEvents/service.js";
+import { PersonNameService } from "./personNames/service.js";
 import { RelationshipService } from "./relationships/service.js";
 
 export type AppServices = {
@@ -18,15 +19,20 @@ export type AppServices = {
   immichClientFactory: ImmichClientFactory;
   relationshipService: RelationshipService;
   lifeEventService: LifeEventService;
+  personNameService: PersonNameService;
 };
 
-export const buildServices = (): AppServices => ({
-  authService: new AuthService(),
-  cooccurrenceService: new CooccurrenceService(),
-  immichClientFactory: new ImmichClientFactory(),
-  relationshipService: new RelationshipService(),
-  lifeEventService: new LifeEventService()
-});
+export const buildServices = (): AppServices => {
+  const lifeEventService = new LifeEventService();
+  return {
+    authService: new AuthService(),
+    cooccurrenceService: new CooccurrenceService(),
+    immichClientFactory: new ImmichClientFactory(),
+    relationshipService: new RelationshipService(lifeEventService),
+    lifeEventService,
+    personNameService: new PersonNameService()
+  };
+};
 
 declare module "fastify" {
   interface FastifyInstance {

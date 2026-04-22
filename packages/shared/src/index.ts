@@ -41,6 +41,8 @@ export const graphLayoutModeSchema = z.enum(graphLayoutModeValues);
 export type ImmichPerson = {
   id: string;
   name: string;
+  /** Treemich primary or formatted display; prefer over `name` for UI when set. */
+  displayName?: string | null;
   birthDate?: string | null;
   thumbnailPath?: string | null;
 };
@@ -48,13 +50,11 @@ export type ImmichPerson = {
 export type TreemichPersonProfile = {
   immichPersonId: string;
   gender: GenderValue;
-  birthDateOverride?: string | null;
   givenName?: string | null;
   surname?: string | null;
   nicknames?: string | null;
-  deathDate?: string | null;
-  birthCity?: string | null;
-  birthCountry?: string | null;
+  /** Optional interchange keys (e.g. GEDCOM xref). */
+  externalIds?: Record<string, string> | null;
 };
 
 export type RelationshipRecord = {
@@ -68,6 +68,7 @@ export type RelationshipRecord = {
 };
 
 export * from "./lifeEvents.js";
+export * from "./personNames.js";
 
 export type PhotoCooccurrenceEdge = {
   personAId: string;
@@ -208,7 +209,9 @@ export const userPreferencesSchema = z.object({
   lastSelectedPersonId: z.string().nullable().optional(),
   primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional(),
   dismissedSuggestions: z.array(z.string()).optional(),
-  cooccurrence: cooccurrencePreferencesSchema.optional()
+  cooccurrence: cooccurrencePreferencesSchema.optional(),
+  /** When true, natural-language people search also matches stored alternate names. */
+  searchIncludeAlternateNames: z.boolean().optional()
 });
 
 export type GraphFilterVisibility = z.infer<typeof graphFilterVisibilitySchema>;

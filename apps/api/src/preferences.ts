@@ -46,5 +46,6 @@ export const mergeUserPreferences = (
       : current.lastSelectedPersonId,
   primaryFamilyUnitByPersonId: incoming.primaryFamilyUnitByPersonId ?? current.primaryFamilyUnitByPersonId,
   dismissedSuggestions: incoming.dismissedSuggestions ?? current.dismissedSuggestions,
-  cooccurrence: incoming.cooccurrence ?? current.cooccurrence
+  cooccurrence: incoming.cooccurrence ?? current.cooccurrence,
+  searchIncludeAlternateNames: incoming.searchIncludeAlternateNames ?? current.searchIncludeAlternateNames
 });

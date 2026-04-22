@@ -3,7 +3,9 @@ import { memo, useEffect, useMemo, useState } from "react";
 import type { Gender, ImmichPerson, LifeEventRecord, RelationshipRecord, RelationshipType } from "../lib/api";
 import { immichPersonUrl, personThumbnailUrl } from "../lib/api";
 import { deriveSpouseDatesFromRelationshipEvents } from "../lib/lifeEventUi";
+import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { LifeEventsSection } from "./personDetail/LifeEventsSection";
+import { PersonNamesSection } from "./personDetail/PersonNamesSection";
 import { SpouseLifeEventsRichPane } from "./personDetail/SpouseLifeEventsRichPane";
 import { computeExtendedFamily, computeInLawFamily } from "./graph/extendedFamily";
 import { inverseRelationshipType } from "./graph/layout";
@@ -88,11 +90,13 @@ type Props = {
     body: PatchLifeEventBody
   ) => Promise<void>;
   onRelationshipLifeEventDelete?: (relationshipId: string, eventId: string) => Promise<void>;
+  onPersonNamesChanged?: () => void;
 };
 
 const maxVisibleSuggestions = 5;
 const DEFAULT_COLLAPSED_SECTIONS = {
   profile: false,
+  names: true,
   relatives: false,
   inLaws: false,
   suggestions: false,
@@ -146,7 +150,8 @@ const PersonDetailPanelComponent = ({
   onPersonLifeEventDelete,
   onRelationshipLifeEventCreate,
   onRelationshipLifeEventPatch,
-  onRelationshipLifeEventDelete
+  onRelationshipLifeEventDelete,
+  onPersonNamesChanged
 }: Props) => {
   const [editingRelationshipKey, setEditingRelationshipKey] = useState<string | null>(null);
   const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>("SIBLING_OF");
@@ -399,10 +404,10 @@ const PersonDetailPanelComponent = ({
                     rel="noreferrer"
                     className="person-detail-name-link"
                   >
-                    {person.name}
+                    {getPersonDisplayLabel(person)}
                   </a>
                 ) : (
-                  person.name
+                  getPersonDisplayLabel(person)
                 )}
               </h3>
               <div className="person-detail-meta">
@@ -518,6 +523,21 @@ const PersonDetailPanelComponent = ({
               {isSavingProfile ? "Saving..." : "Save profile"}
             </button>
           </CollapsibleSection>
+          {person ? (
+            <CollapsibleSection
+              sectionKey="names"
+              title="Names (Treemich)"
+              subtitle="Primary and alternate name forms; used for graph label and search (optional)"
+              isCollapsed={collapsedSections.names}
+              onToggleCollapsed={() => toggleSectionCollapsed("names")}
+            >
+              <PersonNamesSection
+                personId={person.id}
+                onNamesChanged={onPersonNamesChanged}
+                disabled={isSavingProfile || isSavingRelationship}
+              />
+            </CollapsibleSection>
+          ) : null}
           {person && onPersonLifeEventCreate && onPersonLifeEventPatch && onPersonLifeEventDelete ? (
             <CollapsibleSection
               sectionKey="life-events"
@@ -527,6 +547,7 @@ const PersonDetailPanelComponent = ({
               onToggleCollapsed={() => toggleSectionCollapsed("lifeEvents")}
             >
               <LifeEventsSection
+                personId={person.id}
                 personLifeEvents={personLifeEvents}
                 onCreate={onPersonLifeEventCreate}
                 onPatch={onPersonLifeEventPatch}

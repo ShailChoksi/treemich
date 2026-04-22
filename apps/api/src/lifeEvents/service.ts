@@ -15,6 +15,7 @@ import {
   validatePartialDateTriplet,
   type PartialDateParts
 } from "./dateValue.js";
+import { computePersonLifeEventFindings } from "./personLifeEventValidation.js";
 
 const isoFromLifeEventRow = (event: Pick<LifeEvent, "year" | "month" | "day">) =>
   partialDateToIsoString({
@@ -106,6 +107,45 @@ export class LifeEventService {
     if (existing) {
       throw new HttpConflictError(`A ${eventType} event already exists for this person`);
     }
+  }
+
+  private async assertNoDuplicateRelationshipEvent(
+    userId: string,
+    relationshipId: string,
+    eventType: LifeEventType,
+    excludeEventId?: string
+  ) {
+    if (eventType !== "MARRIAGE" && eventType !== "DIVORCE") {
+      return;
+    }
+    const existing = await prisma.lifeEvent.findFirst({
+      where: {
+        userId,
+        relationshipId,
+        eventType,
+        ...(excludeEventId ? { NOT: { id: excludeEventId } } : {})
+      }
+    });
+    if (existing) {
+      throw new HttpConflictError(`A ${eventType} event already exists for this relationship`);
+    }
+  }
+
+  async validatePersonLifeEvents(
+    userId: string,
+    immichPersonId: string
+  ): Promise<{ findings: ReturnType<typeof computePersonLifeEventFindings> }> {
+    const events = await this.listPersonLifeEvents(userId, immichPersonId, { includeCitations: false });
+    const findings = computePersonLifeEventFindings(
+      events.map((e) => ({
+        eventType: e.eventType,
+        year: e.year,
+        month: e.month,
+        day: e.day
+      })),
+      { immichPersonId }
+    );
+    return { findings };
   }
 
   private buildDateData(body: CreateLifeEventBody | PatchLifeEventBody): {
@@ -334,6 +374,7 @@ export class LifeEventService {
     if (!rel) {
       throw new HttpNotFoundError("Relationship not found");
     }
+    await this.assertNoDuplicateRelationshipEvent(userId, relationshipId, body.eventType);
     const placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
     const dateData = this.buildDateData(body);
     const created = await prisma.lifeEvent.create({
@@ -384,6 +425,9 @@ export class LifeEventService {
     const nextType = body.eventType ?? existing.eventType;
     if (body.eventType) {
       this.assertRelationshipEventAllowed(body.eventType);
+      if (body.eventType !== existing.eventType) {
+        await this.assertNoDuplicateRelationshipEvent(userId, relationshipId, body.eventType, eventId);
+      }
     }
     let placeId: string | null | undefined;
     if (body.placeId !== undefined || body.place !== undefined) {
@@ -497,9 +541,10 @@ export class LifeEventService {
   }
 
   /**
-   * Dual-write legacy PATCH /people fields into BIRTH/DEATH + Place.
+   * Apply PATCH /people date and birth-place fields to BIRTH / DEATH life events (and linked Place).
+   * Legacy DB columns on PersonProfile were removed; this is the only persistence path for these inputs.
    */
-  async syncLegacyPersonProfileFields(
+  async syncPersonProfileFieldsToLifeEvents(
     userId: string,
     profileId: string,
     fields: {
@@ -677,8 +722,8 @@ export class LifeEventService {
     });
   }
 
-  /** Spouse dates → MARRIAGE / DIVORCE life events on one canonical SPOUSE_OF row per pair. */
-  async syncLegacySpouseDates(
+  /** Map spouse date fields from relationship APIs to MARRIAGE / DIVORCE life events (canonical SPOUSE_OF row). */
+  async syncSpouseDatesToLifeEvents(
     userId: string,
     fromPersonId: string,
     toPersonId: string,
@@ -781,6 +826,92 @@ export class LifeEventService {
       }
     });
   }
+
+  /**
+   * Marriage/divorce ISO dates from life events for SPOUSE_OF edges, keyed as `${lo}:${hi}`
+   * with `lo < hi` lexicographically (matches `RelationshipService.listRelationships` lookups).
+   * Queries both directions of each pair; merges when two directed spouse rows exist.
+   */
+  async getSpouseMarriageDivorceIsoForPairs(
+    userId: string,
+    pairs: ReadonlyArray<{ lo: string; hi: string }>
+  ): Promise<Map<string, { marriageAnniversaryDate: string | null; divorceDate: string | null }>> {
+    const pairKey = (lo: string, hi: string) => `${lo}:${hi}`;
+    const normalizedPairKey = (a: string, b: string) => pairKey(a < b ? a : b, a < b ? b : a);
+    const out = new Map<string, { marriageAnniversaryDate: string | null; divorceDate: string | null }>();
+    const uniquePairs = [...new Map(pairs.map((p) => [pairKey(p.lo, p.hi), p])).values()];
+    if (uniquePairs.length === 0) {
+      return out;
+    }
+
+    const rels = await prisma.relationship.findMany({
+      where: {
+        userId,
+        type: "SPOUSE_OF",
+        OR: uniquePairs.flatMap(({ lo, hi }) => [
+          { fromPersonId: lo, toPersonId: hi },
+          { fromPersonId: hi, toPersonId: lo }
+        ])
+      },
+      select: { id: true, fromPersonId: true, toPersonId: true }
+    });
+
+    const relIds = rels.map((r) => r.id);
+    if (relIds.length === 0) {
+      for (const { lo, hi } of uniquePairs) {
+        out.set(pairKey(lo, hi), { marriageAnniversaryDate: null, divorceDate: null });
+      }
+      return out;
+    }
+
+    const events = await prisma.lifeEvent.findMany({
+      where: {
+        userId,
+        relationshipId: { in: relIds },
+        eventType: { in: ["MARRIAGE", "DIVORCE"] }
+      },
+      select: { relationshipId: true, eventType: true, year: true, month: true, day: true }
+    });
+
+    const byRel = new Map<string, { marriage: string | null; divorce: string | null }>();
+    for (const rid of relIds) {
+      byRel.set(rid, { marriage: null, divorce: null });
+    }
+    for (const e of events) {
+      if (!e.relationshipId) {
+        continue;
+      }
+      const bucket = byRel.get(e.relationshipId);
+      if (!bucket) {
+        continue;
+      }
+      const iso = isoFromLifeEventRow(e);
+      if (e.eventType === "MARRIAGE") {
+        bucket.marriage = iso;
+      } else {
+        bucket.divorce = iso;
+      }
+    }
+
+    for (const rel of rels) {
+      const pk = normalizedPairKey(rel.fromPersonId, rel.toPersonId);
+      const bucket = byRel.get(rel.id);
+      const existing = out.get(pk);
+      out.set(pk, {
+        marriageAnniversaryDate: existing?.marriageAnniversaryDate ?? bucket?.marriage ?? null,
+        divorceDate: existing?.divorceDate ?? bucket?.divorce ?? null
+      });
+    }
+
+    for (const { lo, hi } of uniquePairs) {
+      const pk = pairKey(lo, hi);
+      if (!out.has(pk)) {
+        out.set(pk, { marriageAnniversaryDate: null, divorceDate: null });
+      }
+    }
+
+    return out;
+  }
 }
 
 export function lifeEventToJson(event: LifeEventWithRelations) {
@@ -823,18 +954,14 @@ export function lifeEventToJson(event: LifeEventWithRelations) {
   };
 }
 
-/** Effective birth ISO for merged GET /people birthDate field. */
-export function effectiveBirthIsoFromBridge(
+/** Effective birth ISO for GET /people: life event first, then Immich person birthDate. */
+export function effectiveBirthIsoFromLifeEvent(
   birthEvent: (LifeEvent & { place?: Place | null }) | null | undefined,
-  birthDateOverride: string | null | undefined,
   immichBirth: string | null | undefined
 ): string | null {
   const fromEvent = birthEvent ? isoFromLifeEventRow(birthEvent) : null;
   if (fromEvent) {
     return fromEvent;
-  }
-  if (birthDateOverride?.trim()) {
-    return birthDateOverride.trim();
   }
   return immichBirth?.trim() ? immichBirth.trim() : null;
 }

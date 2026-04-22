@@ -40,59 +40,27 @@ export const registerPeoplePatchRoute = (app: FastifyInstance) => {
     const body = bodySchema.parse(request.body);
     const normalizeOptionalString = (value: string | null | undefined) =>
       value === undefined ? undefined : value?.trim() ? value.trim() : null;
-    const profileUpdates: {
-      gender?: Gender;
-      birthDateOverride?: string | null;
-      givenName?: string | null;
-      surname?: string | null;
-      nicknames?: string | null;
-      deathDate?: string | null;
-      birthCity?: string | null;
-      birthCountry?: string | null;
-    } = {};
-    if (body.gender !== undefined) {
-      profileUpdates.gender = body.gender;
-    }
-    const birthDateOverride = normalizeOptionalString(body.birthDate);
-    if (birthDateOverride !== undefined) {
-      profileUpdates.birthDateOverride = birthDateOverride;
-    }
-    const givenName = normalizeOptionalString(body.givenName);
-    if (givenName !== undefined) {
-      profileUpdates.givenName = givenName;
-    }
-    const surname = normalizeOptionalString(body.surname);
-    if (surname !== undefined) {
-      profileUpdates.surname = surname;
-    }
-    const nicknames = normalizeOptionalString(body.nicknames);
-    if (nicknames !== undefined) {
-      profileUpdates.nicknames = nicknames;
-    }
+
+    const birthDate = normalizeOptionalString(body.birthDate);
     const deathDate = normalizeOptionalString(body.deathDate);
-    if (deathDate !== undefined) {
-      profileUpdates.deathDate = deathDate;
-    }
     const birthCity = normalizeOptionalString(body.birthCity);
-    if (birthCity !== undefined) {
-      profileUpdates.birthCity = birthCity;
-    }
     const birthCountry = normalizeOptionalString(body.birthCountry);
-    if (birthCountry !== undefined) {
-      profileUpdates.birthCountry = birthCountry;
-    }
+
     const profile = await app.services.relationshipService.upsertProfile(auth.user.id, id, {
-      ...profileUpdates
+      ...(body.gender !== undefined ? { gender: body.gender } : {}),
+      ...(body.givenName !== undefined ? { givenName: normalizeOptionalString(body.givenName) } : {}),
+      ...(body.surname !== undefined ? { surname: normalizeOptionalString(body.surname) } : {}),
+      ...(body.nicknames !== undefined ? { nicknames: normalizeOptionalString(body.nicknames) } : {})
     });
 
     if (
-      birthDateOverride !== undefined ||
+      birthDate !== undefined ||
       deathDate !== undefined ||
       birthCity !== undefined ||
       birthCountry !== undefined
     ) {
-      await app.services.lifeEventService.syncLegacyPersonProfileFields(auth.user.id, profile.id, {
-        ...(birthDateOverride !== undefined ? { birthDate: birthDateOverride } : {}),
+      await app.services.lifeEventService.syncPersonProfileFieldsToLifeEvents(auth.user.id, profile.id, {
+        ...(birthDate !== undefined ? { birthDate: birthDate } : {}),
         ...(deathDate !== undefined ? { deathDate: deathDate } : {}),
         ...(birthCity !== undefined ? { birthCity: birthCity } : {}),
         ...(birthCountry !== undefined ? { birthCountry: birthCountry } : {})

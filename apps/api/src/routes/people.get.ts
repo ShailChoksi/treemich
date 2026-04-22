@@ -1,7 +1,16 @@
 import type { FastifyInstance } from "fastify";
+import type { PersonName } from "@prisma/client";
 import { getRequiredAuth } from "../auth/request.js";
-import { effectiveBirthIsoFromBridge } from "../lifeEvents/service.js";
+import { effectiveBirthIsoFromLifeEvent } from "../lifeEvents/service.js";
+import { resolveDisplayNameForPerson } from "../personNames/service.js";
 import { getImmichClientForRequest } from "../services.js";
+
+type ProfileRow = {
+  id: string;
+  displayNameOverride: string | null;
+  givenName: string | null;
+  surname: string | null;
+};
 
 export const registerPeopleGetRoute = (app: FastifyInstance) => {
   app.get("/people", async (request) => {
@@ -19,22 +28,28 @@ export const registerPeopleGetRoute = (app: FastifyInstance) => {
         "id" in p && typeof (p as { id?: string }).id === "string" ? (p as { id: string }).id : null
       )
       .filter((id): id is string => id != null);
-    const birthDeathByProfileId = await app.services.lifeEventService.getBirthDeathByPersonProfileIds(
-      auth.user.id,
-      profileInternalIds
-    );
+    const [birthDeathByProfileId, primaryNameByProfileId] = await Promise.all([
+      app.services.lifeEventService.getBirthDeathByPersonProfileIds(auth.user.id, profileInternalIds),
+      app.services.personNameService.getPrimaryMapForProfileIds(auth.user.id, profileInternalIds)
+    ]);
 
     return {
       people: people.map((person) => {
         const profile = profilesById.get(person.id) ?? null;
-        const bd = profile ? birthDeathByProfileId.get(profile.id) : undefined;
-        const mergedBirth = effectiveBirthIsoFromBridge(
-          bd?.birth ?? null,
-          profile?.birthDateOverride,
-          person.birthDate
-        );
+        const pr = profile as ProfileRow | null;
+        const bd = profile ? birthDeathByProfileId.get((profile as ProfileRow).id) : undefined;
+        const mergedBirth = effectiveBirthIsoFromLifeEvent(bd?.birth ?? null, person.birthDate);
+        const primaryName: PersonName | null = pr ? (primaryNameByProfileId.get(pr.id) ?? null) : null;
+        const displayName = resolveDisplayNameForPerson({
+          immichName: person.name,
+          displayNameOverride: pr?.displayNameOverride ?? null,
+          givenName: pr?.givenName ?? null,
+          surname: pr?.surname ?? null,
+          primaryName: primaryName as PersonName | null
+        });
         return {
           ...person,
+          displayName: displayName === person.name ? null : displayName,
           birthDate: mergedBirth,
           profile: profile ?? null,
           hasRelationship: connectedIds.has(person.id)

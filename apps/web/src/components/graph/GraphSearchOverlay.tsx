@@ -8,6 +8,10 @@ type Props = {
   onCenterView: () => void;
   people: Array<{ id: string; name: string }>;
   searchFeedback: string | null;
+  treeValidationIssueCount: number | null;
+  treeValidationEngineDisabled: boolean;
+  searchIncludeAlternateNames: boolean;
+  onSearchIncludeAlternateNamesChange: (next: boolean) => void;
 };
 
 const SEARCH_TERM_DEBOUNCE_MS = 120;
@@ -20,7 +24,11 @@ const GraphSearchOverlayComponent = ({
   onClearSearch,
   onCenterView,
   people,
-  searchFeedback
+  searchFeedback,
+  treeValidationIssueCount,
+  treeValidationEngineDisabled,
+  searchIncludeAlternateNames,
+  onSearchIncludeAlternateNamesChange
 }: Props) => {
   const [draftSearchTerm, setDraftSearchTerm] = useState(searchTerm);
   const listId = useId();
@@ -105,6 +113,25 @@ const GraphSearchOverlayComponent = ({
       <p className="graph-search-helper">
         Search by name or try: "mother of Jessica", "sisters of Mike", "mother-in-law of Sue"
       </p>
+      <label className="graph-search-alt-names">
+        <input
+          type="checkbox"
+          checked={searchIncludeAlternateNames}
+          onChange={(e) => onSearchIncludeAlternateNamesChange(e.target.checked)}
+        />
+        Match alternate Treemich names in people search
+      </label>
+      {treeValidationEngineDisabled ? (
+        <p className="graph-tree-issues-hint">Full-tree validation is disabled (server setting).</p>
+      ) : treeValidationIssueCount != null && treeValidationIssueCount > 0 ? (
+        <p className="graph-tree-issues" role="status">
+          <span className="graph-tree-issues-badge" aria-label="Tree data issues count">
+            {treeValidationIssueCount}
+          </span>{" "}
+          data {treeValidationIssueCount === 1 ? "issue" : "issues"} in this tree (see each person’s life
+          events and relationships).
+        </p>
+      ) : null}
       <button
         type="button"
         className="graph-center-view-button secondary-button"

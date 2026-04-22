@@ -3,7 +3,9 @@ import { z } from "zod";
 import type { Gender, LifeEvent } from "@prisma/client";
 import type { AgeFilter } from "@treemich/shared/search/interpreter";
 import { getRequiredAuth } from "../auth/request.js";
+import { prisma } from "../db/client.js";
 import { partialDateToComparableDate } from "../lifeEvents/dateValue.js";
+import { parseUserPreferences } from "../preferences.js";
 import { RuleBasedInterpreter } from "../search/interpreter/ruleBasedInterpreter.js";
 import { getImmichClientForRequest } from "../services.js";
 
@@ -12,7 +14,6 @@ const querySchema = z.object({
 });
 
 function resolveBirthDate(
-  profile?: { birthDateOverride?: string | null } | null,
   birthEvent?: Pick<LifeEvent, "year" | "month" | "day"> | null,
   immichPerson?: { birthDate?: string | null }
 ): Date | null {
@@ -26,7 +27,7 @@ function resolveBirthDate(
       return fromEvent;
     }
   }
-  const raw = profile?.birthDateOverride ?? immichPerson?.birthDate;
+  const raw = immichPerson?.birthDate;
   if (!raw) {
     return null;
   }
@@ -75,10 +76,27 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
     }
 
     const allPeople = await (await getImmichClientForRequest(request)).listPeople();
+    const userRow = await prisma.treemichUser.findUniqueOrThrow({
+      where: { id: auth.user.id },
+      select: { preferences: true }
+    });
+    const includeAlternateNames =
+      parseUserPreferences(userRow.preferences).searchIncludeAlternateNames === true;
+    const alternateNameTextsByPerson = includeAlternateNames
+      ? await app.services.personNameService.getAllFormattedForUser(auth.user.id)
+      : new Map<string, string[]>();
     const normalizedSourceName = interpreted.parsed.sourceName.trim().toLowerCase();
-    const sourceCandidates = allPeople.filter((person) =>
-      person.name.toLowerCase().includes(normalizedSourceName)
-    );
+    const sourceNameMatches = (nameLower: string) => nameLower.includes(normalizedSourceName);
+    const sourceCandidates = allPeople.filter((person) => {
+      if (sourceNameMatches(person.name.toLowerCase())) {
+        return true;
+      }
+      if (!includeAlternateNames) {
+        return false;
+      }
+      const alts = alternateNameTextsByPerson.get(person.id);
+      return alts != null && alts.some((t) => sourceNameMatches(t));
+    });
     if (sourceCandidates.length === 0) {
       return {
         parsed: interpreted.parsed,
@@ -98,7 +116,7 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
     const profilesById = (await app.services.relationshipService.getProfilesForPersonIds(
       auth.user.id,
       targetIds
-    )) as Map<string, { id: string; gender: Gender; birthDateOverride?: string | null }>;
+    )) as Map<string, { id: string; gender: Gender }>;
     const profileInternalIds = [
       ...new Set(
         [...profilesById.values()]
@@ -136,7 +154,7 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
           return true;
         }
         const birthRow = item.profile ? birthDeathByProfileId.get(item.profile.id) : undefined;
-        const birthDate = resolveBirthDate(item.profile, birthRow?.birth ?? null, item.person);
+        const birthDate = resolveBirthDate(birthRow?.birth ?? null, item.person);
         if (!birthDate) {
           return false;
         }

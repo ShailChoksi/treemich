@@ -50,6 +50,18 @@ enum LifeEventType {
   RESIDENCE
   IMMIGRATION
   CUSTOM
+  BAPTISM
+  CENSUS
+  MILITARY
+}
+
+enum PersonNameType {
+  BIRTH
+  MARRIED
+  AKA
+  MAIDEN
+  RELIGIOUS
+  OTHER
 }
 
 model TreemichUser {
@@ -70,6 +82,7 @@ model TreemichUser {
   cooccurrenceJobs    CooccurrenceJob[]
   cooccurrenceEdges   CooccurrenceEdge[]
   cooccurrenceSchedule CooccurrenceSchedule?
+  personNames         PersonName[]
 
   @@unique([immichBaseUrl, immichUserId])
   @@unique([immichBaseUrl, immichEmail])
@@ -112,24 +125,42 @@ model PersonProfile {
   userId              String
   immichPersonId      String
   gender              Gender         @default(UNKNOWN)
-  /// Dual-written with BIRTH/DEATH `LifeEvent` rows until a follow-up migration removes legacy columns.
-  birthDateOverride   String?
   displayNameOverride String?
   givenName           String?
   surname             String?
   nicknames           String?
-  deathDate           String?
-  birthCity           String?
-  birthCountry        String?
+  /// Optional map for interchange (e.g. `{ "gedcomXref": "I42" }`). Not used by core UI yet.
+  externalIds         Json           @default("{}")
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   user                TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
   fromRelationships   Relationship[] @relation("FromPerson")
   toRelationships     Relationship[] @relation("ToPerson")
   lifeEvents          LifeEvent[]
+  personNames         PersonName[]
 
   @@unique([userId, immichPersonId])
   @@index([userId])
+}
+
+model PersonName {
+  id              String         @id @default(cuid())
+  userId          String
+  personProfileId String
+  type            PersonNameType
+  givenName       String?
+  surname         String?
+  prefix          String?
+  suffix          String?
+  isPrimary       Boolean        @default(false)
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  user            TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personProfile   PersonProfile  @relation(fields: [personProfileId], references: [id], onDelete: Cascade)
+
+  @@index([userId, personProfileId])
+  @@index([personProfileId])
 }
 
 model Relationship {
@@ -138,9 +169,6 @@ model Relationship {
   fromPersonId String
   toPersonId String
   type       RelationshipType
-  /// Dual-written with MARRIAGE/DIVORCE `LifeEvent` rows until legacy columns are dropped.
-  marriageAnniversaryDate String?
-  divorceDate String?
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
   user       TreemichUser     @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ImmichPerson } from "../../lib/api";
+import { getPersonDisplayLabel } from "../../lib/personDisplay";
 
 type SearchFallbackMatch = {
   personId: string;
@@ -27,7 +28,12 @@ export const findPersonBySearchTerm = (people: ImmichPerson[], searchTerm: strin
   if (!normalized) {
     return null;
   }
-  return people.find((person) => person.name.toLowerCase().includes(normalized)) ?? null;
+  return (
+    people.find((person) => {
+      const label = getPersonDisplayLabel(person);
+      return label.toLowerCase().includes(normalized) || person.name.toLowerCase().includes(normalized);
+    }) ?? null
+  );
 };
 
 export const resolveFocusPersonRequest = (people: ImmichPerson[], focusPersonRequest: string | null) => {

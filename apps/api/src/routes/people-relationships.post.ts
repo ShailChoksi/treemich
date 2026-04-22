@@ -35,18 +35,23 @@ export const registerPeopleRelationshipsPostRoute = (app: FastifyInstance) => {
     const normalizeOptionalString = (value: string | null | undefined) =>
       value === undefined ? undefined : value?.trim() ? value.trim() : null;
 
+    const marriageAnniversaryDate = normalizeOptionalString(body.marriageAnniversaryDate);
+    const divorceDate = normalizeOptionalString(body.divorceDate);
+
     const created = await app.services.relationshipService.upsertRelationship(
       auth.user.id,
       id,
       body.toPersonId,
-      body.relationshipType,
-      body.relationshipType === "SPOUSE_OF"
-        ? {
-            marriageAnniversaryDate: normalizeOptionalString(body.marriageAnniversaryDate),
-            divorceDate: normalizeOptionalString(body.divorceDate)
-          }
-        : undefined
+      body.relationshipType
     );
+
+    if (body.relationshipType === "SPOUSE_OF") {
+      await app.services.lifeEventService.syncSpouseDatesToLifeEvents(auth.user.id, id, body.toPersonId, {
+        ...(body.marriageAnniversaryDate !== undefined ? { marriageAnniversaryDate } : {}),
+        ...(body.divorceDate !== undefined ? { divorceDate } : {})
+      });
+    }
+
     return reply.code(201).send(created);
   });
 };

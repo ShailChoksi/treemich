@@ -42,6 +42,12 @@ export const registerPeopleLifeEventsRoutes = (app: FastifyInstance) => {
     return { lifeEvents: events.map(lifeEventToJson) };
   });
 
+  app.get("/people/:id/life-events/validation", async (request) => {
+    const auth = getRequiredAuth(request);
+    const { id } = personParamsSchema.parse(request.params);
+    return app.services.lifeEventService.validatePersonLifeEvents(auth.user.id, id);
+  });
+
   app.post("/people/:id/life-events", async (request, reply) => {
     const auth = getRequiredAuth(request);
     const { id } = personParamsSchema.parse(request.params);

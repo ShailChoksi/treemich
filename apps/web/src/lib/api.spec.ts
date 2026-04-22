@@ -4,6 +4,7 @@ import {
   createPersonLifeEvent,
   deleteRelationshipLifeEvent,
   getCurrentUser,
+  getPersonLifeEventValidation,
   getPersonLifeEvents,
   immichPersonUrl,
   login,
@@ -138,6 +139,24 @@ describe("life-events API helpers", () => {
     expect(events[0]?.id).toBe("lev_1");
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "/api/people/person-1/life-events?include=citations",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+
+  it("loads person life event validation", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ findings: [{ code: "x", severity: "warning", message: "m" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const body = await getPersonLifeEventValidation("person-1");
+
+    expect(body.findings).toHaveLength(1);
+    expect(body.findings[0]?.code).toBe("x");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/people/person-1/life-events/validation",
       expect.objectContaining({ credentials: "include", cache: "no-store" })
     );
   });

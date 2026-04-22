@@ -124,22 +124,34 @@ describe("cooccurrence routes", () => {
         upsertRelationship: vi.fn(),
         deleteRelationship: vi.fn(),
         upsertProfile: vi.fn(),
+        hasSpouseRelationship: vi.fn(),
         findTargetsByRelationship: vi.fn(),
         traverseRelationshipChain: vi.fn()
       } as unknown as AppServices["relationshipService"],
       lifeEventService: {
+        getSpouseMarriageDivorceIsoForPairs: vi.fn().mockResolvedValue(new Map()),
         getBirthDeathByPersonProfileIds: vi.fn().mockResolvedValue(new Map()),
-        syncLegacyPersonProfileFields: vi.fn(),
-        syncLegacySpouseDates: vi.fn(),
-        listPersonLifeEvents: vi.fn(),
+        syncPersonProfileFieldsToLifeEvents: vi.fn(),
+        syncSpouseDatesToLifeEvents: vi.fn(),
+        listPersonLifeEvents: vi.fn().mockResolvedValue([]),
         createPersonLifeEvent: vi.fn(),
         updatePersonLifeEvent: vi.fn(),
         deletePersonLifeEvent: vi.fn(),
+        validatePersonLifeEvents: vi.fn().mockResolvedValue({ findings: [] }),
         listRelationshipLifeEvents: vi.fn(),
         createRelationshipLifeEvent: vi.fn(),
         updateRelationshipLifeEvent: vi.fn(),
         deleteRelationshipLifeEvent: vi.fn()
-      } as unknown as AppServices["lifeEventService"]
+      } as unknown as AppServices["lifeEventService"],
+      personNameService: {
+        listByImmichPersonId: vi.fn().mockResolvedValue([]),
+        getPrimaryMapForProfileIds: vi.fn().mockResolvedValue(new Map()),
+        getAllFormattedForUser: vi.fn().mockResolvedValue(new Map()),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        setPrimary: vi.fn()
+      } as unknown as AppServices["personNameService"]
     };
 
     const { buildApp } = await import("../app.js");

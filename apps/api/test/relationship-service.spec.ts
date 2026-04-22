@@ -25,9 +25,14 @@ vi.mock("../src/db/client.js", () => ({
   }
 }));
 
+const mockLifeEventService = {
+  getSpouseMarriageDivorceIsoForPairs: vi.fn().mockResolvedValue(new Map())
+};
+
 describe("RelationshipService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLifeEventService.getSpouseMarriageDivorceIsoForPairs.mockResolvedValue(new Map());
   });
 
   it("creates direct and inverse relationship records", async () => {
@@ -36,7 +41,7 @@ describe("RelationshipService", () => {
       .mockResolvedValueOnce({ id: "inverse-id" });
 
     const { RelationshipService } = await import("../src/relationships/service.js");
-    const service = new RelationshipService();
+    const service = new RelationshipService(mockLifeEventService as never);
     const result = await service.upsertRelationship("user-1", "p1", "p2", "CHILD_OF");
 
     expect(prismaTransactionMock).toHaveBeenCalledTimes(1);
@@ -98,7 +103,7 @@ describe("RelationshipService", () => {
       .mockResolvedValueOnce({ id: "friend-inverse-id" });
 
     const { RelationshipService } = await import("../src/relationships/service.js");
-    const service = new RelationshipService();
+    const service = new RelationshipService(mockLifeEventService as never);
     const result = await service.upsertRelationship("user-1", "p1", "p2", "FRIEND_OF");
 
     expect(relationshipUpsertMock).toHaveBeenNthCalledWith(
@@ -133,7 +138,7 @@ describe("RelationshipService", () => {
     relationshipDeleteManyMock.mockResolvedValue({ count: 2 });
 
     const { RelationshipService } = await import("../src/relationships/service.js");
-    const service = new RelationshipService();
+    const service = new RelationshipService(mockLifeEventService as never);
     const result = await service.deleteRelationship("user-1", "p1", "p2", "PARENT_OF");
 
     expect(relationshipDeleteManyMock).toHaveBeenCalledWith(
@@ -158,7 +163,7 @@ describe("RelationshipService", () => {
       ]);
 
       const { RelationshipService } = await import("../src/relationships/service.js");
-      const service = new RelationshipService();
+      const service = new RelationshipService(mockLifeEventService as never);
       const result = await service.traverseRelationshipChain("user-1", ["mike"], ["SIBLING_OF"]);
 
       expect(result).toEqual(expect.arrayContaining(["sibling-1", "sibling-2"]));
@@ -175,7 +180,7 @@ describe("RelationshipService", () => {
         ]);
 
       const { RelationshipService } = await import("../src/relationships/service.js");
-      const service = new RelationshipService();
+      const service = new RelationshipService(mockLifeEventService as never);
       const result = await service.traverseRelationshipChain("user-1", ["mike"], ["PARENT_OF", "SIBLING_OF"]);
 
       expect(result).toEqual(expect.arrayContaining(["uncle-1", "aunt-1"]));
@@ -193,7 +198,7 @@ describe("RelationshipService", () => {
         ]);
 
       const { RelationshipService } = await import("../src/relationships/service.js");
-      const service = new RelationshipService();
+      const service = new RelationshipService(mockLifeEventService as never);
       const result = await service.traverseRelationshipChain(
         "user-1",
         ["mike"],
@@ -214,7 +219,7 @@ describe("RelationshipService", () => {
         .mockResolvedValueOnce([{ fromPersonId: "second-cousin-1", toPersonId: "first-cousin-1" }]);
 
       const { RelationshipService } = await import("../src/relationships/service.js");
-      const service = new RelationshipService();
+      const service = new RelationshipService(mockLifeEventService as never);
       const result = await service.traverseRelationshipChain(
         "user-1",
         ["mike"],
@@ -229,7 +234,7 @@ describe("RelationshipService", () => {
       relationshipFindManyMock.mockResolvedValueOnce([]);
 
       const { RelationshipService } = await import("../src/relationships/service.js");
-      const service = new RelationshipService();
+      const service = new RelationshipService(mockLifeEventService as never);
       const result = await service.traverseRelationshipChain("user-1", ["mike"], ["PARENT_OF", "SIBLING_OF"]);
 
       expect(result).toEqual([]);
@@ -242,7 +247,7 @@ describe("RelationshipService", () => {
         .mockResolvedValueOnce([]);
 
       const { RelationshipService } = await import("../src/relationships/service.js");
-      const service = new RelationshipService();
+      const service = new RelationshipService(mockLifeEventService as never);
       const result = await service.traverseRelationshipChain("user-1", ["mike"], ["PARENT_OF", "SIBLING_OF"]);
 
       expect(result).toEqual([]);
@@ -256,7 +261,7 @@ describe("RelationshipService", () => {
       ]);
 
       const { RelationshipService } = await import("../src/relationships/service.js");
-      const service = new RelationshipService();
+      const service = new RelationshipService(mockLifeEventService as never);
       const result = await service.traverseRelationshipChain("user-1", ["mike"], ["SIBLING_OF"]);
 
       expect(result).toEqual(["sibling-1"]);
@@ -274,10 +279,102 @@ describe("RelationshipService", () => {
         ]);
 
       const { RelationshipService } = await import("../src/relationships/service.js");
-      const service = new RelationshipService();
+      const service = new RelationshipService(mockLifeEventService as never);
       const result = await service.traverseRelationshipChain("user-1", ["mike"], ["PARENT_OF", "SIBLING_OF"]);
 
       expect(result).toEqual(["shared-uncle"]);
+    });
+  });
+
+  describe("listRelationships", () => {
+    it("omits marriage fields for non-spouse edges", async () => {
+      relationshipFindManyMock.mockResolvedValueOnce([
+        { id: "r1", fromPersonId: "p1", toPersonId: "p2", type: "CHILD_OF" }
+      ]);
+
+      const { RelationshipService } = await import("../src/relationships/service.js");
+      const service = new RelationshipService(mockLifeEventService as never);
+      const result = await service.listRelationships("user-1");
+
+      expect(mockLifeEventService.getSpouseMarriageDivorceIsoForPairs).toHaveBeenCalledWith("user-1", []);
+      expect(result.relationships[0]).toEqual({
+        id: "r1",
+        fromPersonId: "p1",
+        toPersonId: "p2",
+        type: "CHILD_OF"
+      });
+    });
+
+    it("requests spouse dates with lexicographically sorted pair keys (hi → lo edge on disk)", async () => {
+      relationshipFindManyMock.mockResolvedValueOnce([
+        { id: "rs", fromPersonId: "zebra", toPersonId: "apple", type: "SPOUSE_OF" }
+      ]);
+      mockLifeEventService.getSpouseMarriageDivorceIsoForPairs.mockResolvedValueOnce(
+        new Map([["apple:zebra", { marriageAnniversaryDate: "2000-01-01", divorceDate: null }]])
+      );
+
+      const { RelationshipService } = await import("../src/relationships/service.js");
+      const service = new RelationshipService(mockLifeEventService as never);
+      const result = await service.listRelationships("user-1");
+
+      expect(mockLifeEventService.getSpouseMarriageDivorceIsoForPairs).toHaveBeenCalledWith("user-1", [
+        { lo: "apple", hi: "zebra" }
+      ]);
+      expect(result.relationships[0]).toMatchObject({
+        id: "rs",
+        fromPersonId: "zebra",
+        toPersonId: "apple",
+        type: "SPOUSE_OF",
+        marriageAnniversaryDate: "2000-01-01",
+        divorceDate: null
+      });
+    });
+
+    it("applies the same sorted pair to both directed SPOUSE_OF rows in one page", async () => {
+      relationshipFindManyMock.mockResolvedValueOnce([
+        { id: "r1", fromPersonId: "p1", toPersonId: "p2", type: "SPOUSE_OF" },
+        { id: "r2", fromPersonId: "p2", toPersonId: "p1", type: "SPOUSE_OF" }
+      ]);
+      mockLifeEventService.getSpouseMarriageDivorceIsoForPairs.mockResolvedValueOnce(
+        new Map([["p1:p2", { marriageAnniversaryDate: "2011-11-11", divorceDate: null }]])
+      );
+
+      const { RelationshipService } = await import("../src/relationships/service.js");
+      const service = new RelationshipService(mockLifeEventService as never);
+      const result = await service.listRelationships("user-1");
+
+      const pairs = mockLifeEventService.getSpouseMarriageDivorceIsoForPairs.mock.calls[0]?.[1] as {
+        lo: string;
+        hi: string;
+      }[];
+      expect(pairs).toEqual([
+        { lo: "p1", hi: "p2" },
+        { lo: "p1", hi: "p2" }
+      ]);
+      expect(result.relationships).toHaveLength(2);
+      expect(result.relationships[0]).toMatchObject({
+        marriageAnniversaryDate: "2011-11-11",
+        divorceDate: null
+      });
+      expect(result.relationships[1]).toMatchObject({
+        marriageAnniversaryDate: "2011-11-11",
+        divorceDate: null
+      });
+    });
+
+    it("returns nextCursor when more rows exist than limit", async () => {
+      relationshipFindManyMock.mockResolvedValueOnce([
+        { id: "cursor-a", fromPersonId: "p1", toPersonId: "p2", type: "SPOUSE_OF" },
+        { id: "cursor-b", fromPersonId: "p2", toPersonId: "p3", type: "SPOUSE_OF" }
+      ]);
+      mockLifeEventService.getSpouseMarriageDivorceIsoForPairs.mockResolvedValueOnce(new Map());
+
+      const { RelationshipService } = await import("../src/relationships/service.js");
+      const service = new RelationshipService(mockLifeEventService as never);
+      const result = await service.listRelationships("user-1", { limit: 1 });
+
+      expect(result.relationships).toHaveLength(1);
+      expect(result.nextCursor).toBe("cursor-a");
     });
   });
 
@@ -285,7 +382,7 @@ describe("RelationshipService", () => {
     const listAssetsWithPeopleMock = vi.fn().mockResolvedValue([{ assetId: "a1", personIds: ["p1", "p2"] }]);
 
     const { RelationshipService } = await import("../src/relationships/service.js");
-    const service = new RelationshipService();
+    const service = new RelationshipService(mockLifeEventService as never);
     const immichClient = {
       listAssetsWithPeople: listAssetsWithPeopleMock
     } as const;
