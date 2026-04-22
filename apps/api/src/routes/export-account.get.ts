@@ -29,6 +29,7 @@ export type AccountExportPayloadV1 = {
   relationships: unknown[];
   places: unknown[];
   lifeEvents: unknown[];
+  personNames: unknown[];
   treemichSessions: unknown[];
   cooccurrenceJobs: unknown[];
   cooccurrenceEdges: unknown[];
@@ -57,6 +58,7 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
       relationships,
       places,
       lifeEvents,
+      personNames,
       sessions,
       linkedAccount,
       cooccurrenceJobs,
@@ -83,6 +85,7 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
         where: { userId },
         include: { place: true, citations: true }
       }),
+      prisma.personName.findMany({ where: { userId } }),
       prisma.treemichSession.findMany({
         where: { userId },
         select: {
@@ -124,6 +127,7 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
       relationships,
       places,
       lifeEvents: lifeEvents.map((row) => lifeEventToJson(row)),
+      personNames,
       treemichSessions: sessions,
       cooccurrenceJobs,
       cooccurrenceEdges,

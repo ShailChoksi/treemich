@@ -15,6 +15,7 @@ import {
   validatePartialDateTriplet,
   type PartialDateParts
 } from "./dateValue.js";
+import { computePersonLifeEventFindings } from "./personLifeEventValidation.js";
 
 const isoFromLifeEventRow = (event: Pick<LifeEvent, "year" | "month" | "day">) =>
   partialDateToIsoString({
@@ -106,6 +107,45 @@ export class LifeEventService {
     if (existing) {
       throw new HttpConflictError(`A ${eventType} event already exists for this person`);
     }
+  }
+
+  private async assertNoDuplicateRelationshipEvent(
+    userId: string,
+    relationshipId: string,
+    eventType: LifeEventType,
+    excludeEventId?: string
+  ) {
+    if (eventType !== "MARRIAGE" && eventType !== "DIVORCE") {
+      return;
+    }
+    const existing = await prisma.lifeEvent.findFirst({
+      where: {
+        userId,
+        relationshipId,
+        eventType,
+        ...(excludeEventId ? { NOT: { id: excludeEventId } } : {})
+      }
+    });
+    if (existing) {
+      throw new HttpConflictError(`A ${eventType} event already exists for this relationship`);
+    }
+  }
+
+  async validatePersonLifeEvents(
+    userId: string,
+    immichPersonId: string
+  ): Promise<{ findings: ReturnType<typeof computePersonLifeEventFindings> }> {
+    const events = await this.listPersonLifeEvents(userId, immichPersonId, { includeCitations: false });
+    const findings = computePersonLifeEventFindings(
+      events.map((e) => ({
+        eventType: e.eventType,
+        year: e.year,
+        month: e.month,
+        day: e.day
+      })),
+      { immichPersonId }
+    );
+    return { findings };
   }
 
   private buildDateData(body: CreateLifeEventBody | PatchLifeEventBody): {
@@ -334,6 +374,7 @@ export class LifeEventService {
     if (!rel) {
       throw new HttpNotFoundError("Relationship not found");
     }
+    await this.assertNoDuplicateRelationshipEvent(userId, relationshipId, body.eventType);
     const placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
     const dateData = this.buildDateData(body);
     const created = await prisma.lifeEvent.create({
@@ -384,6 +425,9 @@ export class LifeEventService {
     const nextType = body.eventType ?? existing.eventType;
     if (body.eventType) {
       this.assertRelationshipEventAllowed(body.eventType);
+      if (body.eventType !== existing.eventType) {
+        await this.assertNoDuplicateRelationshipEvent(userId, relationshipId, body.eventType, eventId);
+      }
     }
     let placeId: string | null | undefined;
     if (body.placeId !== undefined || body.place !== undefined) {

@@ -1,11 +1,20 @@
-import { useMemo, useState } from "react";
-import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
-import { lifeEventTypeValues } from "@treemich/shared";
-import type { LifeEventRecord } from "../../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import type { CreateLifeEventBody, PatchLifeEventBody, LifeEventTypeValue } from "@treemich/shared";
+import {
+  lifeEventTypeUiGlyph,
+  lifeEventTypeValues,
+  personAttachableLifeEventTypeValues
+} from "@treemich/shared";
+import {
+  getPersonLifeEventValidation,
+  type LifeEventRecord,
+  type PersonLifeEventValidationFinding
+} from "../../lib/api";
 import { summarizeLifeEvent } from "../../lib/lifeEventFormHelpers";
 import { LifeEventRichForm } from "./LifeEventRichForm";
 
 type Props = {
+  personId: string;
   personLifeEvents: LifeEventRecord[] | undefined;
   onCreate: (body: CreateLifeEventBody) => Promise<void>;
   onPatch: (eventId: string, body: PatchLifeEventBody) => Promise<void>;
@@ -13,10 +22,22 @@ type Props = {
   disabled?: boolean;
 };
 
-export const LifeEventsSection = ({ personLifeEvents, onCreate, onPatch, onDelete, disabled }: Props) => {
+export const LifeEventsSection = ({
+  personId,
+  personLifeEvents,
+  onCreate,
+  onPatch,
+  onDelete,
+  disabled
+}: Props) => {
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [validationFindings, setValidationFindings] = useState<PersonLifeEventValidationFinding[] | null>(
+    null
+  );
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<LifeEventTypeValue | "ALL">("ALL");
 
   const hasBirth = useMemo(
     () => (personLifeEvents ?? []).some((e) => e.eventType === "BIRTH"),
@@ -28,7 +49,7 @@ export const LifeEventsSection = ({ personLifeEvents, onCreate, onPatch, onDelet
   );
 
   const allowedCreateTypes = useMemo(() => {
-    return lifeEventTypeValues.filter((t) => {
+    return personAttachableLifeEventTypeValues.filter((t) => {
       if (t === "BIRTH" && hasBirth) {
         return false;
       }
@@ -38,6 +59,39 @@ export const LifeEventsSection = ({ personLifeEvents, onCreate, onPatch, onDelet
       return true;
     });
   }, [hasBirth, hasDeath]);
+
+  const visibleLifeEvents = useMemo(() => {
+    if (personLifeEvents === undefined) {
+      return undefined;
+    }
+    if (typeFilter === "ALL") {
+      return personLifeEvents;
+    }
+    return personLifeEvents.filter((e) => e.eventType === typeFilter);
+  }, [personLifeEvents, typeFilter]);
+
+  useEffect(() => {
+    if (personLifeEvents === undefined) {
+      return;
+    }
+    let cancelled = false;
+    setValidationError(null);
+    void getPersonLifeEventValidation(personId)
+      .then((res) => {
+        if (!cancelled) {
+          setValidationFindings(res.findings);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setValidationFindings(null);
+          setValidationError(err instanceof Error ? err.message : "Validation check failed");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [personId, personLifeEvents]);
 
   const wrap = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -60,6 +114,38 @@ export const LifeEventsSection = ({ personLifeEvents, onCreate, onPatch, onDelet
         Quick profile fields above still save birth, death, and birth place. This section edits the full
         life-event record (partial dates, qualifiers, notes, place details, citations).
       </p>
+      {validationError ? <p className="hint life-events-validation-error">{validationError}</p> : null}
+      {validationFindings && validationFindings.length > 0 ? (
+        <ul className="life-events-validation-findings stack">
+          {validationFindings.map((f) => (
+            <li
+              key={f.code}
+              className={
+                f.severity === "error"
+                  ? "life-events-validation-finding life-events-validation-finding--error"
+                  : "life-events-validation-finding life-events-validation-finding--warning"
+              }
+            >
+              {f.message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <label className="life-events-filter field-group">
+        <span className="field-label">Filter list by type</span>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter((e.target.value as LifeEventTypeValue | "ALL") || "ALL")}
+          disabled={disabled || busy}
+        >
+          <option value="ALL">All types</option>
+          {lifeEventTypeValues.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </label>
       {!creating && !editingId ? (
         <button
           type="button"
@@ -83,7 +169,7 @@ export const LifeEventsSection = ({ personLifeEvents, onCreate, onPatch, onDelet
       ) : null}
 
       <ul className="life-events-list">
-        {personLifeEvents.map((event) => (
+        {(visibleLifeEvents ?? []).map((event) => (
           <li key={event.id} className="life-events-list-item">
             {editingId === event.id ? (
               <LifeEventRichForm
@@ -97,6 +183,13 @@ export const LifeEventsSection = ({ personLifeEvents, onCreate, onPatch, onDelet
               />
             ) : (
               <div className="life-events-row">
+                <span
+                  className="life-events-glyph"
+                  title={event.eventType}
+                  aria-label={`Event type ${event.eventType}`}
+                >
+                  {lifeEventTypeUiGlyph[event.eventType]}
+                </span>
                 <span className="life-events-summary">{summarizeLifeEvent(event)}</span>
                 {event.notes ? <span className="hint">{event.notes}</span> : null}
                 <button

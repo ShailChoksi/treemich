@@ -54,8 +54,8 @@ describe("summarizeLifeEvent", () => {
     updatedAt: "2026-01-01T00:00:00.000Z"
   });
 
-  it("includes type and y-m-d when present", () => {
-    expect(summarizeLifeEvent(base())).toContain("BIRTH");
+  it("includes type label and y-m-d when present", () => {
+    expect(summarizeLifeEvent(base())).toContain("Birth");
     expect(summarizeLifeEvent(base())).toContain("1991-05-06");
   });
 

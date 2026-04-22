@@ -26,6 +26,10 @@ const renderOverlay = (onCenterView = vi.fn()): RenderResult => {
         onCenterView={onCenterView}
         people={[{ id: "person-1", name: "Alex" }]}
         searchFeedback={null}
+        treeValidationIssueCount={null}
+        treeValidationEngineDisabled={false}
+        searchIncludeAlternateNames={false}
+        onSearchIncludeAlternateNamesChange={() => undefined}
       />
     );
   });
@@ -89,6 +93,10 @@ describe("GraphSearchOverlay", () => {
           onCenterView={() => undefined}
           people={people}
           searchFeedback={null}
+          treeValidationIssueCount={null}
+          treeValidationEngineDisabled={false}
+          searchIncludeAlternateNames={false}
+          onSearchIncludeAlternateNamesChange={() => undefined}
         />
       );
     });

@@ -22,12 +22,14 @@ import { registerPeopleCooccurrenceGetRoute } from "./routes/people-cooccurrence
 import { registerPeopleRelationshipsDeleteRoute } from "./routes/people-relationships.delete.js";
 import { registerPeopleRelationshipsPatchRoute } from "./routes/people-relationships.patch.js";
 import { registerPeopleLifeEventsRoutes } from "./routes/people-life-events.js";
+import { registerPeoplePersonNamesRoutes } from "./routes/people-person-names.js";
 import { registerPeoplePatchRoute } from "./routes/people.patch.js";
 import { registerPeopleRelationshipsPostRoute } from "./routes/people-relationships.post.js";
 import { registerPeopleThumbnailGetRoute } from "./routes/people-thumbnail.get.js";
 import { registerRelationshipsGetRoute } from "./routes/relationships.get.js";
 import { registerRelationshipsLifeEventsRoutes } from "./routes/relationships-life-events.js";
 import { registerSearchGetRoute } from "./routes/search.get.js";
+import { registerTreeValidationGetRoute } from "./routes/tree-validation.get.js";
 import { registerUserPreferencesGetRoute } from "./routes/user-preferences.get.js";
 import { registerUserPreferencesPatchRoute } from "./routes/user-preferences.patch.js";
 import { buildServices, registerServices, type AppServices } from "./services.js";
@@ -184,9 +186,11 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerPeopleRelationshipsPatchRoute);
   app.register(registerRelationshipsGetRoute);
   app.register(registerPeopleLifeEventsRoutes);
+  app.register(registerPeoplePersonNamesRoutes);
   app.register(registerRelationshipsLifeEventsRoutes);
   app.register(registerPeoplePatchRoute);
   app.register(registerSearchGetRoute);
+  app.register(registerTreeValidationGetRoute);
   app.register(registerUserPreferencesGetRoute);
   app.register(registerUserPreferencesPatchRoute);
   app.register(registerExportAccountGetRoute);

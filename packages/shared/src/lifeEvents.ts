@@ -20,9 +20,77 @@ export const lifeEventTypeValues = [
   "CHRISTENING",
   "RESIDENCE",
   "IMMIGRATION",
-  "CUSTOM"
+  "CUSTOM",
+  "BAPTISM",
+  "CENSUS",
+  "MILITARY"
 ] as const;
 export type LifeEventTypeValue = (typeof lifeEventTypeValues)[number];
+
+/** MARRIAGE / DIVORCE must be created on a relationship, not on a person profile. */
+export const relationshipScopedLifeEventTypeValues = ["MARRIAGE", "DIVORCE"] as const;
+export type RelationshipScopedLifeEventTypeValue = (typeof relationshipScopedLifeEventTypeValues)[number];
+
+const relationshipScopedLifeEventTypeSet = new Set<string>(relationshipScopedLifeEventTypeValues);
+
+/** Event types allowed on `POST /people/:id/life-events` (excludes relationship-only types). */
+export const personAttachableLifeEventTypeValues = lifeEventTypeValues.filter(
+  (t) => !relationshipScopedLifeEventTypeSet.has(t)
+);
+
+export const lifeEventTypeLabels: Record<LifeEventTypeValue, string> = {
+  BIRTH: "Birth",
+  DEATH: "Death",
+  MARRIAGE: "Marriage",
+  DIVORCE: "Divorce",
+  BURIAL: "Burial",
+  CHRISTENING: "Christening",
+  RESIDENCE: "Residence",
+  IMMIGRATION: "Immigration",
+  CUSTOM: "Custom",
+  BAPTISM: "Baptism",
+  CENSUS: "Census",
+  MILITARY: "Military"
+};
+
+/** UI grouping for life-event type pickers (subset filtered by allowed types per context). */
+export const lifeEventTypePickerGroups: readonly {
+  readonly id: string;
+  readonly label: string;
+  readonly types: readonly LifeEventTypeValue[];
+}[] = [
+  {
+    id: "vital",
+    label: "Vital & sacraments",
+    types: ["BIRTH", "DEATH", "BURIAL", "BAPTISM", "CHRISTENING"]
+  },
+  {
+    id: "union",
+    label: "Union",
+    types: ["MARRIAGE", "DIVORCE"]
+  },
+  {
+    id: "life",
+    label: "Life, residence & records",
+    types: ["RESIDENCE", "IMMIGRATION", "CENSUS", "MILITARY", "CUSTOM"]
+  }
+];
+
+/** Compact hint for list rows (use with visible type label; decorative only). */
+export const lifeEventTypeUiGlyph: Record<LifeEventTypeValue, string> = {
+  BIRTH: "🍼",
+  DEATH: "†",
+  MARRIAGE: "♥",
+  DIVORCE: "⎘",
+  BURIAL: "⚱",
+  CHRISTENING: "◯",
+  RESIDENCE: "⌂",
+  IMMIGRATION: "⇄",
+  CUSTOM: "✎",
+  BAPTISM: "✝",
+  CENSUS: "⌗",
+  MILITARY: "⚔"
+};
 
 export const dateQualifierSchema = z.enum(dateQualifierValues);
 export const lifeEventTypeSchema = z.enum(lifeEventTypeValues);

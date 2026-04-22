@@ -3,7 +3,9 @@ import { z } from "zod";
 import type { Gender, LifeEvent } from "@prisma/client";
 import type { AgeFilter } from "@treemich/shared/search/interpreter";
 import { getRequiredAuth } from "../auth/request.js";
+import { prisma } from "../db/client.js";
 import { partialDateToComparableDate } from "../lifeEvents/dateValue.js";
+import { parseUserPreferences } from "../preferences.js";
 import { RuleBasedInterpreter } from "../search/interpreter/ruleBasedInterpreter.js";
 import { getImmichClientForRequest } from "../services.js";
 
@@ -74,10 +76,27 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
     }
 
     const allPeople = await (await getImmichClientForRequest(request)).listPeople();
+    const userRow = await prisma.treemichUser.findUniqueOrThrow({
+      where: { id: auth.user.id },
+      select: { preferences: true }
+    });
+    const includeAlternateNames =
+      parseUserPreferences(userRow.preferences).searchIncludeAlternateNames === true;
+    const alternateNameTextsByPerson = includeAlternateNames
+      ? await app.services.personNameService.getAllFormattedForUser(auth.user.id)
+      : new Map<string, string[]>();
     const normalizedSourceName = interpreted.parsed.sourceName.trim().toLowerCase();
-    const sourceCandidates = allPeople.filter((person) =>
-      person.name.toLowerCase().includes(normalizedSourceName)
-    );
+    const sourceNameMatches = (nameLower: string) => nameLower.includes(normalizedSourceName);
+    const sourceCandidates = allPeople.filter((person) => {
+      if (sourceNameMatches(person.name.toLowerCase())) {
+        return true;
+      }
+      if (!includeAlternateNames) {
+        return false;
+      }
+      const alts = alternateNameTextsByPerson.get(person.id);
+      return alts != null && alts.some((t) => sourceNameMatches(t));
+    });
     if (sourceCandidates.length === 0) {
       return {
         parsed: interpreted.parsed,

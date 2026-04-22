@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import {
   createLifeEventBodySchema,
   dateQualifierValues,
+  lifeEventTypeLabels,
+  lifeEventTypePickerGroups,
   lifeEventTypeValues,
   patchLifeEventBodySchema,
   type CreateLifeEventBody,
@@ -265,11 +267,30 @@ export const LifeEventRichForm = ({
               onChange={(e) => setEventType(e.target.value as LifeEventTypeValue)}
               disabled={disabled}
             >
-              {typeOptions.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
+              {lifeEventTypePickerGroups.map((group) => {
+                const opts = group.types.filter((t) => typeOptions.includes(t));
+                if (opts.length === 0) {
+                  return null;
+                }
+                return (
+                  <optgroup key={group.id} label={group.label}>
+                    {opts.map((t) => (
+                      <option key={t} value={t}>
+                        {lifeEventTypeLabels[t]}
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              })}
+              {typeOptions
+                .filter(
+                  (t) => !lifeEventTypePickerGroups.some((g) => (g.types as readonly string[]).includes(t))
+                )
+                .map((t) => (
+                  <option key={t} value={t}>
+                    {lifeEventTypeLabels[t]}
+                  </option>
+                ))}
             </select>
           </label>
         ) : null}

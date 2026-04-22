@@ -2,6 +2,7 @@ import type {
   AuthState,
   AuthUser,
   CreateLifeEventBody,
+  CreatePersonNameBody,
   GraphLayoutRequest,
   GraphLayoutResponse,
   GenderValue as Gender,
@@ -10,6 +11,8 @@ import type {
   LifeEventRecord,
   LinkStatus,
   PatchLifeEventBody,
+  PatchPersonNameBody,
+  PersonNameTypeValue,
   PhotoCluster,
   PhotoCooccurrenceEdge,
   RelationshipRecord,
@@ -22,12 +25,15 @@ export type {
   AuthState,
   AuthUser,
   CreateLifeEventBody,
+  CreatePersonNameBody,
   GraphLayoutRequest,
   GraphLayoutResponse,
   Gender,
   LinkStatus,
   LifeEventRecord,
   PatchLifeEventBody,
+  PatchPersonNameBody,
+  PersonNameTypeValue,
   PhotoCluster,
   PhotoCooccurrenceEdge,
   RelationshipRecord,
@@ -428,6 +434,115 @@ export const deletePersonLifeEvent = async (personId: string, eventId: string): 
     })
   );
   await ensureOk(response, "Failed to delete person life event");
+};
+
+export type PersonLifeEventValidationFinding = {
+  code: string;
+  severity: "error" | "warning";
+  message: string;
+  immichPersonId?: string;
+  relationshipId?: string;
+  relatedImmichPersonId?: string;
+};
+
+export type PersonLifeEventValidationResponse = {
+  findings: PersonLifeEventValidationFinding[];
+};
+
+export type PersonNameRecord = {
+  id: string;
+  type: PersonNameTypeValue;
+  givenName: string | null;
+  surname: string | null;
+  prefix: string | null;
+  suffix: string | null;
+  isPrimary: boolean;
+  notes: string | null;
+  display: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TreeValidationResponse = {
+  findings: PersonLifeEventValidationFinding[];
+  engineDisabled: boolean;
+  persist: false;
+};
+
+export const getTreeValidation = async (): Promise<TreeValidationResponse> => {
+  const response = await fetchWithRetry(`${treemichApi}/tree/validation`, { cache: "no-store" });
+  await ensureOk(response, "Failed to load tree validation");
+  return (await response.json()) as TreeValidationResponse;
+};
+
+export const getPersonNames = async (personId: string): Promise<PersonNameRecord[]> => {
+  const response = await fetchWithRetry(`${treemichApi}/people/${encodeURIComponent(personId)}/names`, {
+    cache: "no-store"
+  });
+  await ensureOk(response, "Failed to load person names");
+  const json = (await response.json()) as { names: PersonNameRecord[] };
+  return json.names ?? [];
+};
+
+export const createPersonName = async (
+  personId: string,
+  body: CreatePersonNameBody
+): Promise<PersonNameRecord> => {
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/names`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create person name");
+  return (await response.json()) as PersonNameRecord;
+};
+
+export const updatePersonName = async (
+  personId: string,
+  nameId: string,
+  body: PatchPersonNameBody
+): Promise<PersonNameRecord> => {
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/names/${encodeURIComponent(nameId)}`,
+    withSession({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to update person name");
+  return (await response.json()) as PersonNameRecord;
+};
+
+export const deletePersonName = async (personId: string, nameId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/names/${encodeURIComponent(nameId)}`,
+    withSession({ method: "DELETE" })
+  );
+  await ensureOk(response, "Failed to delete person name");
+};
+
+export const setPrimaryPersonName = async (personId: string, nameId: string): Promise<PersonNameRecord> => {
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/names/${encodeURIComponent(nameId)}/set-primary`,
+    withSession({ method: "POST" })
+  );
+  await ensureOk(response, "Failed to set primary name");
+  return (await response.json()) as PersonNameRecord;
+};
+
+export const getPersonLifeEventValidation = async (
+  personId: string
+): Promise<PersonLifeEventValidationResponse> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/life-events/validation`,
+    { cache: "no-store" }
+  );
+  await ensureOk(response, "Failed to load person life event validation");
+  return (await response.json()) as PersonLifeEventValidationResponse;
 };
 
 export const getRelationshipLifeEvents = async (

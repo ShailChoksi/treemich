@@ -27,6 +27,7 @@ import { GraphFooterStatus } from "./graph/GraphFooterStatus";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { GraphLayerControls } from "./graph/GraphLayerControls";
 import { useGraphKeyboardNavigation } from "./graph/useGraphKeyboardNavigation";
+import { getPersonDisplayLabel } from "../lib/personDisplay";
 
 type Props = {
   people: ImmichPerson[];
@@ -44,6 +45,8 @@ type Props = {
   defaultToNoRelationshipsGraphState: boolean;
   noRelationshipsGraphFilterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]>;
   savedPreferences: UserPreferences | null;
+  treeValidationIssueCount: number | null;
+  treeValidationEngineDisabled: boolean;
   onFocusPersonConsumed: () => void;
   onCameraFocusPersonConsumed: () => void;
   onSelectedPersonChange?: (personId: string | null) => void;
@@ -98,6 +101,8 @@ const PeopleGraph3DComponent = ({
   defaultToNoRelationshipsGraphState,
   noRelationshipsGraphFilterVisibility,
   savedPreferences,
+  treeValidationIssueCount,
+  treeValidationEngineDisabled,
   onFocusPersonConsumed,
   onCameraFocusPersonConsumed,
   onSelectedPersonChange,
@@ -416,6 +421,11 @@ const PeopleGraph3DComponent = ({
     }
   };
 
+  const peopleForSearchList = useMemo(
+    () => people.map((p) => ({ id: p.id, name: getPersonDisplayLabel(p) })),
+    [people]
+  );
+
   return (
     <section className="card graph-card">
       <div className="graph-surface">
@@ -425,8 +435,14 @@ const PeopleGraph3DComponent = ({
           onSearchSubmit={handleSearchSubmit}
           onClearSearch={handleClearSearch}
           onCenterView={frameAllNodes}
-          people={people}
+          people={peopleForSearchList}
           searchFeedback={searchFeedback}
+          treeValidationIssueCount={treeValidationIssueCount}
+          treeValidationEngineDisabled={treeValidationEngineDisabled}
+          searchIncludeAlternateNames={savedPreferences?.searchIncludeAlternateNames === true}
+          onSearchIncludeAlternateNamesChange={(next) =>
+            onPreferencesChange({ searchIncludeAlternateNames: next })
+          }
         />
         <GraphLayerControls
           filterVisibility={filterVisibility}
@@ -442,7 +458,7 @@ const PeopleGraph3DComponent = ({
         {addRelativeIntent && selectedPerson ? (
           <AddRelativePopup
             slot={addRelativeIntent.slot}
-            selectedPersonName={selectedPerson.name}
+            selectedPersonName={getPersonDisplayLabel(selectedPerson)}
             people={people}
             busy={isSavingRelationship}
             onCancel={() => setAddRelativeIntent(null)}

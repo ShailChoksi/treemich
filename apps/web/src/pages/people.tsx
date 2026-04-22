@@ -22,6 +22,7 @@ import {
   getPersonLifeEvents,
   getRelationshipLifeEvents,
   getRelationships,
+  getTreeValidation,
   getUserPreferences,
   updatePersonLifeEvent,
   updateRelationshipLifeEvent,
@@ -33,6 +34,7 @@ import {
   deriveProfileDisplayValuesFromLifeEvents,
   parseDateInputToParts
 } from "../lib/lifeEventUi";
+import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
 
@@ -168,9 +170,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [isSavingRelationship, setIsSavingRelationship] = useState(false);
   const [savedPreferences, setSavedPreferences] = useState<UserPreferences | null>(null);
   const [serverLayout, setServerLayout] = useState<GraphLayoutResponse | null>(null);
+  const [treeValidationIssueCount, setTreeValidationIssueCount] = useState<number | null>(null);
+  const [treeValidationEngineDisabled, setTreeValidationEngineDisabled] = useState(false);
   const selectedPersonIdRef = useRef<string | null>(null);
   const lastPersistedSelectionRef = useRef<string | null>(null);
   const layoutRequestIdRef = useRef(0);
+
+  const refreshPeopleOnly = useCallback(async () => {
+    const peopleResponse = await getImmichPeople();
+    setPeople(sortPeopleStable(peopleResponse));
+  }, []);
 
   useEffect(() => {
     selectedPersonIdRef.current = selectedPersonId;
@@ -231,7 +240,10 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       layoutRequestIdRef.current = layoutRequestId;
       setServerLayout(null);
       computeGraphLayout({
-        people: sortedPeople.map((person) => ({ id: person.id, name: person.name })),
+        people: sortedPeople.map((person) => ({
+          id: person.id,
+          name: getPersonDisplayLabel(person)
+        })),
         relationships: filterGraphLayoutTopologyRelationships(sortedRelationships),
         viewMode: "family",
         familyViewStyle: preferencesResponse.familyViewStyle,
@@ -1011,6 +1023,20 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     selectedPersonId
   ]);
 
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+    void getTreeValidation()
+      .then((r) => {
+        setTreeValidationEngineDisabled(r.engineDisabled);
+        setTreeValidationIssueCount(r.findings.length);
+      })
+      .catch(() => {
+        setTreeValidationIssueCount(null);
+      });
+  }, [isLoading, people, relationships]);
+
   const noRelationshipsDefaultsEnabled = !hasRelationships && !savedPreferences?.graphFilterVisibility;
 
   return (
@@ -1032,6 +1058,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           noRelationshipsGraphFilterVisibility={noRelationshipsGraphFilterVisibility}
           defaultToNoRelationshipsGraphState={noRelationshipsDefaultsEnabled}
           savedPreferences={savedPreferences}
+          treeValidationIssueCount={treeValidationIssueCount}
+          treeValidationEngineDisabled={treeValidationEngineDisabled}
           onFocusPersonConsumed={clearGraphFocus}
           onCameraFocusPersonConsumed={clearGraphCameraFocus}
           onSelectedPersonChange={setSelectedPersonId}
@@ -1082,6 +1110,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onRelationshipLifeEventCreate={handleRelationshipLifeEventCreate}
           onRelationshipLifeEventPatch={handleRelationshipLifeEventPatch}
           onRelationshipLifeEventDelete={handleRelationshipLifeEventDelete}
+          onPersonNamesChanged={refreshPeopleOnly}
         />
       </aside>
     </main>

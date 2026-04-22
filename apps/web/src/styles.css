@@ -185,6 +185,104 @@ body {
   margin: 0;
 }
 
+.life-events-validation-findings {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+
+.life-events-validation-finding--error {
+  color: #fca5a5;
+}
+
+.life-events-validation-finding--warning {
+  color: #fcd34d;
+}
+
+.life-events-validation-error {
+  color: #fca5a5;
+}
+
+.life-events-filter select {
+  max-width: 100%;
+}
+
+.life-events-glyph {
+  min-width: 1.5rem;
+  text-align: center;
+  user-select: none;
+}
+
+.life-events-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+
+.graph-search-alt-names {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.graph-tree-issues {
+  font-size: 0.8rem;
+  color: #fca5a5;
+  margin: 0;
+}
+
+.graph-tree-issues-hint {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.graph-tree-issues-badge {
+  display: inline-block;
+  min-width: 1.25rem;
+  padding: 0 6px;
+  border-radius: 6px;
+  text-align: center;
+  background: rgba(252, 165, 165, 0.2);
+  color: #fecaca;
+  font-weight: 600;
+}
+
+.person-names-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.person-names-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.person-names-type-tag {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.person-names-primary-badge {
+  font-size: 0.7rem;
+  color: #86efac;
+  border: 1px solid rgba(134, 239, 172, 0.35);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
 .stack {
   display: flex;
   flex-direction: column;

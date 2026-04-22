@@ -41,6 +41,7 @@ const linkedImmichAccountFindUniqueMock = vi.fn();
 const cooccurrenceJobFindManyMock = vi.fn();
 const cooccurrenceEdgeFindManyMock = vi.fn();
 const cooccurrenceScheduleFindUniqueMock = vi.fn();
+const personNameFindManyMock = vi.fn();
 const lifeEventServiceMock = {
   getSpouseMarriageDivorceIsoForPairs: vi.fn().mockResolvedValue(new Map()),
   getBirthDeathByPersonProfileIds: vi.fn().mockResolvedValue(new Map()),
@@ -50,10 +51,21 @@ const lifeEventServiceMock = {
   createPersonLifeEvent: vi.fn(),
   updatePersonLifeEvent: vi.fn(),
   deletePersonLifeEvent: vi.fn(),
+  validatePersonLifeEvents: vi.fn().mockResolvedValue({ findings: [] }),
   listRelationshipLifeEvents: vi.fn().mockResolvedValue([]),
   createRelationshipLifeEvent: vi.fn(),
   updateRelationshipLifeEvent: vi.fn(),
   deleteRelationshipLifeEvent: vi.fn()
+};
+
+const personNameServiceMock = {
+  listByImmichPersonId: vi.fn().mockResolvedValue([]),
+  getPrimaryMapForProfileIds: vi.fn().mockResolvedValue(new Map()),
+  getAllFormattedForUser: vi.fn().mockResolvedValue(new Map()),
+  create: vi.fn(),
+  update: vi.fn(),
+  delete: vi.fn(),
+  setPrimary: vi.fn()
 };
 
 vi.mock("../src/db/client.js", () => ({
@@ -68,6 +80,7 @@ vi.mock("../src/db/client.js", () => ({
     relationship: { findMany: relationshipFindManyForExportMock },
     place: { findMany: placeFindManyMock },
     lifeEvent: { findMany: lifeEventFindManyForExportMock },
+    personName: { findMany: personNameFindManyMock },
     treemichSession: { findMany: treemichSessionFindManyMock },
     linkedImmichAccount: { findUnique: linkedImmichAccountFindUniqueMock },
     cooccurrenceJob: { findMany: cooccurrenceJobFindManyMock },
@@ -145,7 +158,11 @@ describe("Treemich API routes", () => {
     lifeEventServiceMock.syncSpouseDatesToLifeEvents.mockResolvedValue(undefined);
     lifeEventServiceMock.getSpouseMarriageDivorceIsoForPairs.mockResolvedValue(new Map());
     lifeEventServiceMock.listPersonLifeEvents.mockResolvedValue([]);
+    lifeEventServiceMock.validatePersonLifeEvents.mockResolvedValue({ findings: [] });
     lifeEventServiceMock.listRelationshipLifeEvents.mockResolvedValue([]);
+    personNameServiceMock.listByImmichPersonId.mockResolvedValue([]);
+    personNameServiceMock.getPrimaryMapForProfileIds.mockResolvedValue(new Map());
+    personNameServiceMock.getAllFormattedForUser.mockResolvedValue(new Map());
     process.env.NODE_ENV = "test";
     process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:54321/treemich_test";
     process.env.IMMICH_BASE_URL = "http://localhost:2283/api";
@@ -162,6 +179,8 @@ describe("Treemich API routes", () => {
     cooccurrenceJobFindManyMock.mockResolvedValue([]);
     cooccurrenceEdgeFindManyMock.mockResolvedValue([]);
     cooccurrenceScheduleFindUniqueMock.mockResolvedValue(null);
+    personNameFindManyMock.mockResolvedValue([]);
+    treemichUserFindUniqueOrThrowMock.mockResolvedValue({ preferences: null });
     getClientMock.mockReturnValue(immichClient);
     requireSessionMock.mockResolvedValue(authContext);
     syncCooccurrenceScheduleFromPreferencesMock.mockResolvedValue(undefined);
@@ -204,7 +223,8 @@ describe("Treemich API routes", () => {
         listRelationships: listRelationshipsMock,
         getPhotoCooccurrence: getPhotoCooccurrenceMock
       } as unknown as AppServices["relationshipService"],
-      lifeEventService: lifeEventServiceMock as unknown as AppServices["lifeEventService"]
+      lifeEventService: lifeEventServiceMock as unknown as AppServices["lifeEventService"],
+      personNameService: personNameServiceMock as unknown as AppServices["personNameService"]
     };
 
     const { buildApp } = await import("../src/app.js");
@@ -1329,6 +1349,78 @@ describe("Treemich API routes", () => {
     expect(response.json()).toEqual({ lifeEvents: [] });
   });
 
+  it("returns life event validation findings for a person", async () => {
+    const findings = [
+      {
+        code: "birth_after_death",
+        severity: "error" as const,
+        message: "BIRTH is dated after DEATH for this person."
+      }
+    ];
+    lifeEventServiceMock.validatePersonLifeEvents.mockResolvedValueOnce({ findings });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/people/p1/life-events/validation"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(lifeEventServiceMock.validatePersonLifeEvents).toHaveBeenCalledWith("user-1", "p1");
+    expect(response.json()).toEqual({ findings });
+  });
+
+  it("returns tree validation with engine flags (read-only aggregate)", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/tree/validation"
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { findings: unknown[]; engineDisabled: boolean; persist: boolean };
+    expect(Array.isArray(body.findings)).toBe(true);
+    expect(body.engineDisabled).toBe(false);
+    expect(body.persist).toBe(false);
+  });
+
+  it("lists person names", async () => {
+    personNameServiceMock.listByImmichPersonId.mockResolvedValueOnce([
+      {
+        id: "n1",
+        type: "BIRTH",
+        givenName: "A",
+        surname: "B",
+        prefix: null,
+        suffix: null,
+        isPrimary: true,
+        notes: null,
+        display: "A B",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      }
+    ]);
+    const response = await app.inject({
+      method: "GET",
+      url: "/people/p1/names"
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      names: [
+        {
+          id: "n1",
+          type: "BIRTH",
+          givenName: "A",
+          surname: "B",
+          prefix: null,
+          suffix: null,
+          isPrimary: true,
+          notes: null,
+          display: "A B",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    });
+  });
+
   it("returns 409 when creating duplicate birth event", async () => {
     lifeEventServiceMock.createPersonLifeEvent.mockRejectedValueOnce(
       new HttpConflictError("A BIRTH event already exists for this person")
@@ -1394,7 +1486,7 @@ describe("Treemich API routes", () => {
     );
     getConnectedPersonIdsMock.mockResolvedValueOnce(new Set(["p1"]));
 
-    lifeEventServiceMock.getBirthDeathByPersonProfileIds.mockResolvedValueOnce(
+    lifeEventServiceMock.getBirthDeathByPersonProfileIds.mockResolvedValue(
       new Map([
         [
           "pp1",

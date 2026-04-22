@@ -50,6 +50,18 @@ enum LifeEventType {
   RESIDENCE
   IMMIGRATION
   CUSTOM
+  BAPTISM
+  CENSUS
+  MILITARY
+}
+
+enum PersonNameType {
+  BIRTH
+  MARRIED
+  AKA
+  MAIDEN
+  RELIGIOUS
+  OTHER
 }
 
 model TreemichUser {
@@ -70,6 +82,7 @@ model TreemichUser {
   cooccurrenceJobs    CooccurrenceJob[]
   cooccurrenceEdges   CooccurrenceEdge[]
   cooccurrenceSchedule CooccurrenceSchedule?
+  personNames         PersonName[]
 
   @@unique([immichBaseUrl, immichUserId])
   @@unique([immichBaseUrl, immichEmail])
@@ -124,9 +137,30 @@ model PersonProfile {
   fromRelationships   Relationship[] @relation("FromPerson")
   toRelationships     Relationship[] @relation("ToPerson")
   lifeEvents          LifeEvent[]
+  personNames         PersonName[]
 
   @@unique([userId, immichPersonId])
   @@index([userId])
+}
+
+model PersonName {
+  id              String         @id @default(cuid())
+  userId          String
+  personProfileId String
+  type            PersonNameType
+  givenName       String?
+  surname         String?
+  prefix          String?
+  suffix          String?
+  isPrimary       Boolean        @default(false)
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  user            TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personProfile   PersonProfile  @relation(fields: [personProfileId], references: [id], onDelete: Cascade)
+
+  @@index([userId, personProfileId])
+  @@index([personProfileId])
 }
 
 model Relationship {

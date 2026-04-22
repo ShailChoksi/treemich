@@ -10,6 +10,7 @@ import { TreemichAuthError } from "./auth/service.js";
 import { CooccurrenceService } from "./cooccurrence/service.js";
 import { ImmichClientFactory } from "./integrations/immich/factory.js";
 import { LifeEventService } from "./lifeEvents/service.js";
+import { PersonNameService } from "./personNames/service.js";
 import { RelationshipService } from "./relationships/service.js";
 
 export type AppServices = {
@@ -18,6 +19,7 @@ export type AppServices = {
   immichClientFactory: ImmichClientFactory;
   relationshipService: RelationshipService;
   lifeEventService: LifeEventService;
+  personNameService: PersonNameService;
 };
 
 export const buildServices = (): AppServices => {
@@ -27,7 +29,8 @@ export const buildServices = (): AppServices => {
     cooccurrenceService: new CooccurrenceService(),
     immichClientFactory: new ImmichClientFactory(),
     relationshipService: new RelationshipService(lifeEventService),
-    lifeEventService
+    lifeEventService,
+    personNameService: new PersonNameService()
   };
 };
 

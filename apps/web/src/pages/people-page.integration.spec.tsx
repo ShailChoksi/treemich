@@ -85,6 +85,10 @@ describe("PeoplePage + life events (integration)", () => {
         });
       }
 
+      if (method === "GET" && url.includes("/people/p1/life-events/validation")) {
+        return jsonResponse({ findings: [] });
+      }
+
       if (method === "GET" && url.includes("/people/p1/life-events")) {
         return jsonResponse({
           lifeEvents: [birthEventPayload]

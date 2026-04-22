@@ -1,3 +1,4 @@
+import { lifeEventTypeLabels } from "@treemich/shared";
 import type { LifeEventRecord } from "./api";
 
 export const optionalInt = (raw: string): number | null => {
@@ -24,7 +25,7 @@ export const nullIfEmpty = (raw: string): string | null => {
 };
 
 export const summarizeLifeEvent = (event: LifeEventRecord): string => {
-  const parts: string[] = [event.eventType];
+  const parts: string[] = [lifeEventTypeLabels[event.eventType] ?? event.eventType];
   const y = event.year != null ? String(event.year) : "?";
   const m = event.month != null ? String(event.month).padStart(2, "0") : "?";
   const d = event.day != null ? String(event.day).padStart(2, "0") : "?";

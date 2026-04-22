@@ -133,15 +133,25 @@ describe("cooccurrence routes", () => {
         getBirthDeathByPersonProfileIds: vi.fn().mockResolvedValue(new Map()),
         syncPersonProfileFieldsToLifeEvents: vi.fn(),
         syncSpouseDatesToLifeEvents: vi.fn(),
-        listPersonLifeEvents: vi.fn(),
+        listPersonLifeEvents: vi.fn().mockResolvedValue([]),
         createPersonLifeEvent: vi.fn(),
         updatePersonLifeEvent: vi.fn(),
         deletePersonLifeEvent: vi.fn(),
+        validatePersonLifeEvents: vi.fn().mockResolvedValue({ findings: [] }),
         listRelationshipLifeEvents: vi.fn(),
         createRelationshipLifeEvent: vi.fn(),
         updateRelationshipLifeEvent: vi.fn(),
         deleteRelationshipLifeEvent: vi.fn()
-      } as unknown as AppServices["lifeEventService"]
+      } as unknown as AppServices["lifeEventService"],
+      personNameService: {
+        listByImmichPersonId: vi.fn().mockResolvedValue([]),
+        getPrimaryMapForProfileIds: vi.fn().mockResolvedValue(new Map()),
+        getAllFormattedForUser: vi.fn().mockResolvedValue(new Map()),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        setPrimary: vi.fn()
+      } as unknown as AppServices["personNameService"]
     };
 
     const { buildApp } = await import("../app.js");
