@@ -1,3 +1,7 @@
+/**
+ * @file Existing relatives and suggestions with add-relationship affordances.
+ */
+
 import { personThumbnailUrl } from "../../lib/api";
 import type { ExtendedFamilyMember } from "../graph/extendedFamily";
 import type { RelativeItem } from "./types";

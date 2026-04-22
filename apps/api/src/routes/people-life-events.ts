@@ -1,3 +1,7 @@
+/**
+ * @file Person-scoped life events: list/create/patch/delete under `/people/:id/life-events`.
+ */
+
 import { createLifeEventBodySchema, patchLifeEventBodySchema } from "@treemich/shared";
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply } from "fastify";

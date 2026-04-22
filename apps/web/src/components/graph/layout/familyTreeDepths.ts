@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: familyTreeDepths.
+ */
+
 import type { ParentChildEdge, SpousePair } from "./familyTreeTypes";
 
 export const assignDepthsForComponent = (

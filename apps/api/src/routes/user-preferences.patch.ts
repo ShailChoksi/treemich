@@ -1,3 +1,7 @@
+/**
+ * @file Registers `PATCH /user/preferences` — partial update of Treemich UI preferences (Zod-validated).
+ */
+
 import type { FastifyInstance } from "fastify";
 import { userPreferencesSchema } from "@treemich/shared";
 import { getRequiredAuth } from "../auth/request.js";

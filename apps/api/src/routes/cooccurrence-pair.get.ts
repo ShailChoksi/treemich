@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /people/cooccurrence/pair` — co-occurrence detail for a specific person pair.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";

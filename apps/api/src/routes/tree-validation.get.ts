@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /tree/validation` — optional full-tree validation findings (feature-flagged).
+ */
+
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { isTreeValidationEngineEnabled } from "../config/env.js";

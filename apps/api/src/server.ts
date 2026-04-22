@@ -1,3 +1,8 @@
+/**
+ * @packageDocumentation
+ * Treemich API process entry: builds Fastify app, listens on `PORT`, runs session cleanup and optional co-occurrence refresh timers.
+ */
+
 import { buildApp } from "./app.js";
 import { CooccurrenceConflictError } from "./cooccurrence/service.js";
 import { env } from "./config/env.js";

@@ -1,3 +1,7 @@
+/**
+ * @file Build line segments for visible relationship edges in overlay space.
+ */
+
 import type { PhotoCooccurrenceEdge, RelationshipRecord } from "../../lib/api";
 import { relationshipKindForType, type RelationshipKind } from "./relationshipStyles";
 import type { GraphLayoutMode, NodePosition } from "./layout";

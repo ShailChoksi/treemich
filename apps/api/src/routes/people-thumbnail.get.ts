@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /people/:id/thumbnail` — proxies Immich face thumbnail bytes for the web UI.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getImmichClientForRequest } from "../services.js";

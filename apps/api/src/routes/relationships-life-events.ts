@@ -1,3 +1,7 @@
+/**
+ * @file Relationship-scoped life events (marriage/divorce) under `/relationships/:id/life-events`.
+ */
+
 import { createLifeEventBodySchema, patchLifeEventBodySchema } from "@treemich/shared";
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply } from "fastify";

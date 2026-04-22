@@ -1,5 +1,14 @@
+/**
+ * @packageDocumentation
+ * Date-only and profile-field bridging between Immich strings, `<input type="date">`, and Treemich life events.
+ */
+
 import type { LifeEventRecord } from "./api";
 
+/**
+ * Produces `YYYY-MM-DD` for an `<input type="date">` from an ISO-ish string, using the calendar date
+ * prefix when present to avoid local-timezone shifts.
+ */
 export const toDateInputValue = (value?: string | null) => {
   if (!value) {
     return "";
@@ -18,6 +27,7 @@ export const toDateInputValue = (value?: string | null) => {
   return parsed.toISOString().slice(0, 10);
 };
 
+/** Builds `YYYY-MM-DD` from structured year/month/day on a life event (or empty if incomplete). */
 export const toDateInputValueFromEvent = (
   event: Pick<LifeEventRecord, "year" | "month" | "day"> | null | undefined
 ) => {
@@ -29,6 +39,7 @@ export const toDateInputValueFromEvent = (
 
 type IsoDateParts = { year: number; month: number; day: number };
 
+/** Strict `YYYY-MM-DD` parse with UTC calendar validation (invalid days → `null`). */
 export const parseDateInputToParts = (value: string): IsoDateParts | null => {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -51,6 +62,9 @@ export const parseDateInputToParts = (value: string): IsoDateParts | null => {
   return { year, month, day };
 };
 
+/**
+ * Builds inline `place` payload for birth sync from quick-edit city/country (two-letter country → `countryCode`).
+ */
 export const buildBirthPlaceInput = (city: string | null, country: string | null) => {
   if (!city && !country) {
     return null;

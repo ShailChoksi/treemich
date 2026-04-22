@@ -1,3 +1,9 @@
+/**
+ * @packageDocumentation
+ * Browser Treemich HTTP client: cookie session auth, people and relationships, life events, map, research tasks.
+ * Base URL from `import.meta.env.VITE_TREEMICH_API_URL` or `"/api"`; read-heavy calls use retry on 5xx/network errors.
+ */
+
 import type {
   AuthState,
   AuthUser,
@@ -24,6 +30,8 @@ import type {
   TreemichPersonProfile,
   UserPreferences
 } from "@treemich/shared";
+
+/** Re-exported `@treemich/shared` types for modules that depend only on the web API layer. */
 export type {
   AuthState,
   AuthUser,
@@ -53,6 +61,7 @@ const treemichApi = import.meta.env.VITE_TREEMICH_API_URL ?? "/api";
 const startupRetryDelayMs = 800;
 const startupRetryAttempts = 5;
 
+/** Non-OK API response mapped to an `Error` with HTTP status for UI handling. */
 export class ApiHttpError extends Error {
   readonly statusCode: number;
 
@@ -63,6 +72,7 @@ export class ApiHttpError extends Error {
   }
 }
 
+/** Immich person plus Treemich profile overlay and UI flags from `/people`. */
 export type ImmichPerson = SharedImmichPerson & {
   id: string;
   name: string;
@@ -70,6 +80,7 @@ export type ImmichPerson = SharedImmichPerson & {
   hasRelationship?: boolean;
 };
 
+/** Optional spouse timeline fields when creating/updating `SPOUSE_OF` edges. */
 export type SpouseRelationshipDates = {
   marriageAnniversaryDate?: string | null;
   divorceDate?: string | null;
@@ -141,6 +152,7 @@ const ensureOk = async (response: Response, fallbackMessage: string) => {
   throw new ApiHttpError(statusCode, message);
 };
 
+/** `POST /auth/login` — establishes session cookie. */
 export const login = async (email: string, password: string): Promise<AuthState> => {
   const response = await fetch(
     `${treemichApi}/auth/login`,
@@ -156,6 +168,7 @@ export const login = async (email: string, password: string): Promise<AuthState>
   return (await response.json()) as AuthState;
 };
 
+/** `POST /auth/logout` — clears session cookie. */
 export const logout = async () => {
   const response = await fetch(
     `${treemichApi}/auth/logout`,
@@ -167,6 +180,7 @@ export const logout = async () => {
   return response.json() as Promise<{ success: boolean }>;
 };
 
+/** `GET /auth/me` — current session and link status (with startup retries). */
 export const getCurrentUser = async (): Promise<AuthState> => {
   const response = await fetchWithRetry(`${treemichApi}/auth/me`, {
     cache: "no-store"
@@ -175,6 +189,7 @@ export const getCurrentUser = async (): Promise<AuthState> => {
   return (await response.json()) as AuthState;
 };
 
+/** `GET /auth/link-status` — Immich link metadata. */
 export const getLinkStatus = async (): Promise<LinkStatus> => {
   const response = await fetchWithRetry(`${treemichApi}/auth/link-status`, {
     cache: "no-store"
@@ -183,6 +198,7 @@ export const getLinkStatus = async (): Promise<LinkStatus> => {
   return (await response.json()) as LinkStatus;
 };
 
+/** `GET /people` — Immich people visible to the linked account. */
 export const getImmichPeople = async (): Promise<ImmichPerson[]> => {
   const response = await fetchWithRetry(`${treemichApi}/people`, {
     cache: "no-store"
@@ -192,6 +208,7 @@ export const getImmichPeople = async (): Promise<ImmichPerson[]> => {
   return json.people ?? [];
 };
 
+/** `PATCH /people/:id` — Treemich profile fields (gender, names, etc.). */
 export const updatePersonProfile = async (
   personId: string,
   profile: {
@@ -219,6 +236,7 @@ export const updatePersonProfile = async (
   return (await response.json()) as TreemichPersonProfile;
 };
 
+/** `POST /people/:fromPersonId/relationships` — add edge; optional spouse dates for `SPOUSE_OF`. */
 export const createRelationship = async (
   fromPersonId: string,
   toPersonId: string,
@@ -243,6 +261,7 @@ export const createRelationship = async (
   return response.json();
 };
 
+/** `PATCH /people/:fromPersonId/relationships` — update marriage/divorce dates only. */
 export const updateSpouseRelationshipDates = async (
   fromPersonId: string,
   toPersonId: string,
@@ -265,6 +284,7 @@ export const updateSpouseRelationshipDates = async (
   return response.json() as Promise<{ updatedCount: number }>;
 };
 
+/** `DELETE /people/:fromPersonId/relationships` — remove edge (optional type filter). */
 export const deleteRelationship = async (
   fromPersonId: string,
   toPersonId: string,
@@ -288,15 +308,18 @@ export const deleteRelationship = async (
   return response.json();
 };
 
+/** `GET /search?q=` — natural-language relationship search. */
 export const searchRelationships = async (query: string): Promise<SearchRelationshipsResponse> => {
   const response = await fetchWithRetry(`${treemichApi}/search?q=${encodeURIComponent(query)}`);
   await ensureOk(response, "Search request failed");
   return (await response.json()) as SearchRelationshipsResponse;
 };
 
+/** Absolute URL for Treemich-proxied person thumbnail image. */
 export const personThumbnailUrl = (personId: string) =>
   `${treemichApi}/people/${encodeURIComponent(personId)}/thumbnail`;
 
+/** Deep link to Immich person page when base URL is known (strips trailing `/api`). */
 export const immichPersonUrl = (personId: string, immichBaseUrl?: string | null) => {
   if (!immichBaseUrl) {
     return null;
@@ -315,6 +338,7 @@ export const immichPersonUrl = (personId: string, immichBaseUrl?: string | null)
   return `${appBase}/people/${encodeURIComponent(personId)}`;
 };
 
+/** `GET /user/preferences` — graph and UI preferences. */
 export const getUserPreferences = async (): Promise<UserPreferences> => {
   const response = await fetchWithRetry(`${treemichApi}/user/preferences`, {
     cache: "no-store"
@@ -323,6 +347,7 @@ export const getUserPreferences = async (): Promise<UserPreferences> => {
   return (await response.json()) as UserPreferences;
 };
 
+/** `PATCH /user/preferences` — partial preference update. */
 export const updateUserPreferences = async (prefs: Partial<UserPreferences>): Promise<UserPreferences> => {
   const response = await fetch(
     `${treemichApi}/user/preferences`,
@@ -336,6 +361,7 @@ export const updateUserPreferences = async (prefs: Partial<UserPreferences>): Pr
   return (await response.json()) as UserPreferences;
 };
 
+/** Paginated `GET /relationships` — loads all pages into one array. */
 export const getRelationships = async (): Promise<RelationshipRecord[]> => {
   const all: RelationshipRecord[] = [];
   let cursor: string | undefined;
@@ -368,6 +394,7 @@ export const getRelationships = async (): Promise<RelationshipRecord[]> => {
   return all;
 };
 
+/** `POST /graph/layout` — server-computed 3D positions. */
 export const computeGraphLayout = async (payload: GraphLayoutRequest): Promise<GraphLayoutResponse> => {
   const response = await fetchWithRetry(`${treemichApi}/graph/layout`, {
     method: "POST",
@@ -382,6 +409,7 @@ export const computeGraphLayout = async (payload: GraphLayoutRequest): Promise<G
 
 const lifeEventsIncludeQuery = (includeCitations?: boolean) => (includeCitations ? "?include=citations" : "");
 
+/** `GET /people/:id/life-events` — optional `?include=citations`. */
 export const getPersonLifeEvents = async (
   personId: string,
   options?: { includeCitations?: boolean }
@@ -395,6 +423,7 @@ export const getPersonLifeEvents = async (
   return json.lifeEvents ?? [];
 };
 
+/** `POST /people/:id/life-events` — person-scoped event (not marriage/divorce). */
 export const createPersonLifeEvent = async (
   personId: string,
   body: CreateLifeEventBody
@@ -413,6 +442,7 @@ export const createPersonLifeEvent = async (
   return (await response.json()) as LifeEventRecord;
 };
 
+/** `PATCH /people/:id/life-events/:eventId`. */
 export const updatePersonLifeEvent = async (
   personId: string,
   eventId: string,
@@ -432,6 +462,7 @@ export const updatePersonLifeEvent = async (
   return (await response.json()) as LifeEventRecord;
 };
 
+/** `DELETE /people/:id/life-events/:eventId`. */
 export const deletePersonLifeEvent = async (personId: string, eventId: string): Promise<void> => {
   const response = await fetch(
     `${treemichApi}/people/${encodeURIComponent(personId)}/life-events/${encodeURIComponent(eventId)}`,
@@ -442,6 +473,7 @@ export const deletePersonLifeEvent = async (personId: string, eventId: string): 
   await ensureOk(response, "Failed to delete person life event");
 };
 
+/** Single validation issue from person-scoped life-event checks. */
 export type PersonLifeEventValidationFinding = {
   code: string;
   severity: "error" | "warning";
@@ -451,10 +483,12 @@ export type PersonLifeEventValidationFinding = {
   relatedImmichPersonId?: string;
 };
 
+/** `GET .../life-events/validation` response wrapper. */
 export type PersonLifeEventValidationResponse = {
   findings: PersonLifeEventValidationFinding[];
 };
 
+/** Alternate name row from Treemich. */
 export type PersonNameRecord = {
   id: string;
   type: PersonNameTypeValue;
@@ -469,18 +503,21 @@ export type PersonNameRecord = {
   updatedAt: string;
 };
 
+/** `GET /tree/validation` — whole-tree consistency findings. */
 export type TreeValidationResponse = {
   findings: PersonLifeEventValidationFinding[];
   engineDisabled: boolean;
   persist: false;
 };
 
+/** `GET /tree/validation`. */
 export const getTreeValidation = async (): Promise<TreeValidationResponse> => {
   const response = await fetchWithRetry(`${treemichApi}/tree/validation`, { cache: "no-store" });
   await ensureOk(response, "Failed to load tree validation");
   return (await response.json()) as TreeValidationResponse;
 };
 
+/** `GET /people/:id/names`. */
 export const getPersonNames = async (personId: string): Promise<PersonNameRecord[]> => {
   const response = await fetchWithRetry(`${treemichApi}/people/${encodeURIComponent(personId)}/names`, {
     cache: "no-store"
@@ -490,6 +527,7 @@ export const getPersonNames = async (personId: string): Promise<PersonNameRecord
   return json.names ?? [];
 };
 
+/** `POST /people/:id/names`. */
 export const createPersonName = async (
   personId: string,
   body: CreatePersonNameBody
@@ -506,6 +544,7 @@ export const createPersonName = async (
   return (await response.json()) as PersonNameRecord;
 };
 
+/** `PATCH /people/:id/names/:nameId`. */
 export const updatePersonName = async (
   personId: string,
   nameId: string,
@@ -523,6 +562,7 @@ export const updatePersonName = async (
   return (await response.json()) as PersonNameRecord;
 };
 
+/** `DELETE /people/:id/names/:nameId`. */
 export const deletePersonName = async (personId: string, nameId: string): Promise<void> => {
   const response = await fetch(
     `${treemichApi}/people/${encodeURIComponent(personId)}/names/${encodeURIComponent(nameId)}`,
@@ -531,6 +571,7 @@ export const deletePersonName = async (personId: string, nameId: string): Promis
   await ensureOk(response, "Failed to delete person name");
 };
 
+/** `POST /people/:id/names/:nameId/set-primary`. */
 export const setPrimaryPersonName = async (personId: string, nameId: string): Promise<PersonNameRecord> => {
   const response = await fetch(
     `${treemichApi}/people/${encodeURIComponent(personId)}/names/${encodeURIComponent(nameId)}/set-primary`,
@@ -540,6 +581,7 @@ export const setPrimaryPersonName = async (personId: string, nameId: string): Pr
   return (await response.json()) as PersonNameRecord;
 };
 
+/** `GET /people/:id/life-events/validation`. */
 export const getPersonLifeEventValidation = async (
   personId: string
 ): Promise<PersonLifeEventValidationResponse> => {
@@ -551,6 +593,7 @@ export const getPersonLifeEventValidation = async (
   return (await response.json()) as PersonLifeEventValidationResponse;
 };
 
+/** `GET /relationships/:id/life-events` — marriage/divorce etc. */
 export const getRelationshipLifeEvents = async (
   relationshipId: string,
   options?: { includeCitations?: boolean }
@@ -564,6 +607,7 @@ export const getRelationshipLifeEvents = async (
   return json.lifeEvents ?? [];
 };
 
+/** `POST /relationships/:id/life-events`. */
 export const createRelationshipLifeEvent = async (
   relationshipId: string,
   body: CreateLifeEventBody
@@ -582,6 +626,7 @@ export const createRelationshipLifeEvent = async (
   return (await response.json()) as LifeEventRecord;
 };
 
+/** `PATCH /relationships/:id/life-events/:eventId`. */
 export const updateRelationshipLifeEvent = async (
   relationshipId: string,
   eventId: string,
@@ -601,6 +646,7 @@ export const updateRelationshipLifeEvent = async (
   return (await response.json()) as LifeEventRecord;
 };
 
+/** `DELETE /relationships/:id/life-events/:eventId`. */
 export const deleteRelationshipLifeEvent = async (relationshipId: string, eventId: string): Promise<void> => {
   const response = await fetch(
     `${treemichApi}/relationships/${encodeURIComponent(relationshipId)}/life-events/${encodeURIComponent(eventId)}`,
@@ -611,14 +657,17 @@ export const deleteRelationshipLifeEvent = async (relationshipId: string, eventI
   await ensureOk(response, "Failed to delete relationship life event");
 };
 
+/** Timeline row: life event plus monotonic `dateSortKey` for ordering. */
 export type TimelineEventRecord = LifeEventRecord & {
   dateSortKey: number;
 };
 
+/** `GET /people/:id/timeline` body. */
 export type PersonTimelineResponse = {
   timeline: TimelineEventRecord[];
 };
 
+/** `GET /people/:id/timeline` — merged chronology for sidebar. */
 export const getPersonTimeline = async (personId: string): Promise<PersonTimelineResponse> => {
   const response = await fetchWithRetry(`${treemichApi}/people/${encodeURIComponent(personId)}/timeline`, {
     cache: "no-store"
@@ -627,6 +676,7 @@ export const getPersonTimeline = async (personId: string): Promise<PersonTimelin
   return (await response.json()) as PersonTimelineResponse;
 };
 
+/** One geocoded place aggregate for the map panel. */
 export type PlacesMapPoint = {
   id: string;
   name: string;
@@ -638,11 +688,13 @@ export type PlacesMapPoint = {
   samplePersonIds: string[];
 };
 
+/** `GET /places/map` — feature flag plus place points. */
 export type PlacesMapResponse = {
   mapUiEnabled: boolean;
   places: PlacesMapPoint[];
 };
 
+/** `GET /places/map` — optional `includeLiving=false` excludes likely-living people's points. */
 export const getPlacesMap = async (options?: { includeLiving?: boolean }): Promise<PlacesMapResponse> => {
   const params = new URLSearchParams();
   if (options?.includeLiving === false) {
@@ -654,6 +706,7 @@ export const getPlacesMap = async (options?: { includeLiving?: boolean }): Promi
   return (await response.json()) as PlacesMapResponse;
 };
 
+/** `GET /research/tasks` — optional `personId` filters to person-linked tasks. */
 export const getResearchTasks = async (personId?: string): Promise<ResearchTaskRecord[]> => {
   const query = personId ? `?personId=${encodeURIComponent(personId)}` : "";
   const response = await fetchWithRetry(`${treemichApi}/research/tasks${query}`, { cache: "no-store" });
@@ -662,6 +715,7 @@ export const getResearchTasks = async (personId?: string): Promise<ResearchTaskR
   return body.tasks ?? [];
 };
 
+/** `POST /research/tasks`. */
 export const createResearchTask = async (body: CreateResearchTaskBody): Promise<ResearchTaskRecord> => {
   const response = await fetch(
     `${treemichApi}/research/tasks`,
@@ -675,6 +729,7 @@ export const createResearchTask = async (body: CreateResearchTaskBody): Promise<
   return (await response.json()) as ResearchTaskRecord;
 };
 
+/** `PATCH /research/tasks/:id`. */
 export const updateResearchTask = async (
   taskId: string,
   body: PatchResearchTaskBody
@@ -691,6 +746,7 @@ export const updateResearchTask = async (
   return (await response.json()) as ResearchTaskRecord;
 };
 
+/** `DELETE /research/tasks/:id`. */
 export const deleteResearchTask = async (taskId: string): Promise<void> => {
   const response = await fetch(
     `${treemichApi}/research/tasks/${encodeURIComponent(taskId)}`,

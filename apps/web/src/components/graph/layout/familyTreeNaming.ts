@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: familyTreeNaming.
+ */
+
 import type { ImmichPerson } from "../../../lib/api";
 
 export const personNameById = (peopleById: Map<string, ImmichPerson>, personId: string) =>

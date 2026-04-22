@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: familyTreeComponents.
+ */
+
 import type { NodePosition } from "./types";
 
 export const collectConnectedComponents = (undirected: Map<string, Set<string>>) => {

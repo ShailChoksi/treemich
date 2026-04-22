@@ -1,3 +1,7 @@
+/**
+ * @file React error boundary with fallback UI for graph or panel subtree failures.
+ */
+
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 type Props = {

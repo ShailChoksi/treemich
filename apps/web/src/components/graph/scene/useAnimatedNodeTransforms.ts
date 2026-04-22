@@ -1,3 +1,7 @@
+/**
+ * @file Three.js scene layer: useAnimatedNodeTransforms.ts.
+ */
+
 import { useEffect, useRef, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, Vector3 } from "three";

@@ -1,3 +1,7 @@
+/**
+ * @file Filter people and edges by relationship-type visibility preferences.
+ */
+
 import type { NodePosition } from "./layout";
 
 export type GraphVisibilityBucket = "near" | "mid" | "far" | "culled";

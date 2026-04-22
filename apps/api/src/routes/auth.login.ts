@@ -1,3 +1,7 @@
+/**
+ * @file Registers `POST /auth/login` — Treemich login with dedicated rate limiting (credential stuffing mitigation).
+ */
+
 import rateLimit from "@fastify/rate-limit";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";

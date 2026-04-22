@@ -1,3 +1,7 @@
+/**
+ * @file Graph-related React hook: useGraphSearch.
+ */
+
 import { useCallback, useEffect, useState } from "react";
 import type { ImmichPerson } from "../../lib/api";
 import { getPersonDisplayLabel } from "../../lib/personDisplay";

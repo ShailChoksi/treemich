@@ -1,3 +1,7 @@
+/**
+ * @file R3F scene: nodes, edges, camera, and animated layout transitions.
+ */
+
 import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, type RootState } from "@react-three/fiber";
 import { useCallback } from "react";

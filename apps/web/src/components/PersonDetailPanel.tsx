@@ -1,3 +1,7 @@
+/**
+ * @file People page sidebar: profile, relatives, life events, timeline, names, research tasks, validation.
+ */
+
 import type { CreateLifeEventBody, CreateResearchTaskBody, PatchLifeEventBody } from "@treemich/shared";
 import { memo, useEffect, useMemo, useState } from "react";
 import type {
@@ -130,6 +134,10 @@ const DEFAULT_COLLAPSED_SECTIONS = {
 type SectionCollapseKey = keyof typeof DEFAULT_COLLAPSED_SECTIONS;
 type SectionCollapsedState = Record<SectionCollapseKey, boolean>;
 
+/**
+ * People-page sidebar: profile quick edit, relatives, life events, timeline, names, tasks, validation.
+ * The default export `PersonDetailPanel` is `memo()` of this component to limit re-renders.
+ */
 const PersonDetailPanelComponent = ({
   person,
   people,
@@ -885,4 +893,5 @@ const PersonDetailPanelComponent = ({
   );
 };
 
+/** Memoized sidebar panel; see `PersonDetailPanelComponent` for the full prop contract. */
 export const PersonDetailPanel = memo(PersonDetailPanelComponent);

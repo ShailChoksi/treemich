@@ -1,3 +1,7 @@
+/**
+ * @file Leaflet map of geocoded life-event places (collapsible popout, filters, living toggle, selection highlight).
+ */
+
 import type { PlacesMapPoint } from "../lib/api";
 import { useEffect, useMemo, useState } from "react";
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
@@ -7,8 +11,23 @@ import {
   filterPlaces,
   filterPlacesByBounds,
   getAdaptiveClusterCellDegrees,
+  placeClusterIncludesImmichPerson,
   type GeoBounds
 } from "./mapPlaces/utils";
+
+const clusterMarkerPathOptionsSelected = {
+  color: "#166534",
+  fillColor: "#22c55e",
+  fillOpacity: 0.78,
+  weight: 2
+} as const;
+
+const clusterMarkerPathOptionsDefault = {
+  color: "#1d4ed8",
+  fillColor: "#3b82f6",
+  fillOpacity: 0.68,
+  weight: 2
+} as const;
 
 type Props = {
   mapUiEnabled: boolean;
@@ -18,6 +37,8 @@ type Props = {
   onIncludeLivingChange: (next: boolean) => void;
   onFocusPerson: (personId: string) => void;
   getPersonLabel: (personId: string) => string;
+  /** When set, clusters that include this Immich person id (via map `samplePersonIds`) render green. */
+  selectedPersonId?: string | null;
   error?: string | null;
 };
 
@@ -77,6 +98,9 @@ const MapViewportController = ({
   return null;
 };
 
+/**
+ * Sidebar map: OSM tiles, clustered geocoded places, filters, and optional highlight for the selected person.
+ */
 export const MapPlacesPanel = ({
   mapUiEnabled,
   places,
@@ -85,6 +109,7 @@ export const MapPlacesPanel = ({
   onIncludeLivingChange,
   onFocusPerson,
   getPersonLabel,
+  selectedPersonId = null,
   error
 }: Props) => {
   const [search, setSearch] = useState("");
@@ -95,9 +120,9 @@ export const MapPlacesPanel = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const placesSafe = places ?? [];
   const hasGeocodedPlaces = placesSafe.length > 0;
-  const panelClassName = `card map-places-panel${
-    hasGeocodedPlaces && isExpanded ? " map-places-panel--expanded" : ""
-  }`;
+  const focusPersonId = selectedPersonId?.trim() ? selectedPersonId.trim() : null;
+  const canToggleMap = hasGeocodedPlaces || isExpanded || !includeLiving;
+  const panelClassName = `card map-places-panel${isExpanded ? " map-places-panel--expanded" : ""}`;
   const filtered = useMemo(
     () => filterPlaces(placesSafe, { search, minEvents }),
     [minEvents, placesSafe, search]
@@ -155,7 +180,7 @@ export const MapPlacesPanel = ({
     <section className={panelClassName}>
       <div className="map-places-header">
         <h3>Map</h3>
-        {hasGeocodedPlaces ? (
+        {canToggleMap ? (
           <button
             type="button"
             className="secondary-button map-places-toggle"
@@ -169,9 +194,7 @@ export const MapPlacesPanel = ({
         Geocoded life-event places ({placesSafe.length} total, {filtered.length} filtered,{" "}
         {visiblePoints.length} in view, {clusters.length} clusters).
       </p>
-      {!hasGeocodedPlaces ? (
-        <p className="hint map-places-empty">No geocoded places found yet for this tree.</p>
-      ) : isExpanded ? (
+      {isExpanded ? (
         <div className="map-places-popout">
           <div className="map-places-controls">
             <input
@@ -214,61 +237,93 @@ export const MapPlacesPanel = ({
               />
               Include living people places
             </label>
+            {focusPersonId ? (
+              <p className="hint map-places-legend">
+                Clusters: <span className="map-places-legend-swatch map-places-legend-swatch--selected" />{" "}
+                selected person &nbsp;
+                <span className="map-places-legend-swatch map-places-legend-swatch--default" /> others (uses
+                sample ids from the map feed).
+              </p>
+            ) : null}
           </div>
-          <MapContainer center={center} zoom={2} scrollWheelZoom className="map-places-canvas">
-            <MapViewportController onZoomChange={setMapZoom} onBoundsChange={setViewportBounds} />
-            <AutoFitBounds points={fitPoints} fitKey={fitKey} />
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {clusters.map((cluster) => (
-              <CircleMarker
-                key={cluster.id}
-                center={[cluster.latitude, cluster.longitude]}
-                radius={Math.min(20, 4 + Math.log2(cluster.eventCount + 1))}
-              >
-                <Popup>
-                  <strong>{cluster.placeNames.slice(0, 3).join(", ")}</strong>
-                  <br />
-                  {cluster.eventCount} events across {cluster.placeCount} places, {cluster.personCount} people
-                  <br />({cluster.latitude.toFixed(3)}, {cluster.longitude.toFixed(3)})
-                  {cluster.samplePersonIds.length > 0 ? (
-                    <div className="map-popup-focus-links">
-                      {cluster.samplePersonIds.map((personId) => (
-                        <button
-                          key={personId}
-                          type="button"
-                          className="text-link-button"
-                          onClick={() => onFocusPerson(personId)}
-                        >
-                          Focus {getPersonLabel(personId)}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </Popup>
-              </CircleMarker>
-            ))}
-          </MapContainer>
-          <p className="hint map-cluster-hint">
-            Adaptive cluster radius: {adaptiveClusterCellDegrees.toFixed(2)}° at zoom {mapZoom.toFixed(1)}.
-          </p>
-          {clusters.length > 0 ? (
-            <ul className="map-places-list">
-              {clusters.slice(0, 10).map((cluster) => (
-                <li key={cluster.id}>
-                  <strong>{cluster.placeNames[0]}</strong> ({cluster.latitude.toFixed(3)},{" "}
-                  {cluster.longitude.toFixed(3)}) · {cluster.eventCount} events
-                </li>
-              ))}
-            </ul>
+          {hasGeocodedPlaces ? (
+            <>
+              <MapContainer center={center} zoom={2} scrollWheelZoom className="map-places-canvas">
+                <MapViewportController onZoomChange={setMapZoom} onBoundsChange={setViewportBounds} />
+                <AutoFitBounds points={fitPoints} fitKey={fitKey} />
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                {clusters.map((cluster) => {
+                  const includesSelected =
+                    focusPersonId != null && placeClusterIncludesImmichPerson(cluster, focusPersonId);
+                  const pathOptions = includesSelected
+                    ? clusterMarkerPathOptionsSelected
+                    : clusterMarkerPathOptionsDefault;
+                  return (
+                    <CircleMarker
+                      key={cluster.id}
+                      center={[cluster.latitude, cluster.longitude]}
+                      radius={Math.min(20, 4 + Math.log2(cluster.eventCount + 1))}
+                      pathOptions={pathOptions}
+                    >
+                      <Popup>
+                        <strong>{cluster.placeNames.slice(0, 3).join(", ")}</strong>
+                        <br />
+                        {cluster.eventCount} events across {cluster.placeCount} places, {cluster.personCount}{" "}
+                        people
+                        <br />({cluster.latitude.toFixed(3)}, {cluster.longitude.toFixed(3)})
+                        {cluster.samplePersonIds.length > 0 ? (
+                          <div className="map-popup-focus-links">
+                            {cluster.samplePersonIds.map((personId) => (
+                              <button
+                                key={personId}
+                                type="button"
+                                className="text-link-button"
+                                onClick={() => onFocusPerson(personId)}
+                              >
+                                Focus {getPersonLabel(personId)}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </Popup>
+                    </CircleMarker>
+                  );
+                })}
+              </MapContainer>
+              <p className="hint map-cluster-hint">
+                Adaptive cluster radius: {adaptiveClusterCellDegrees.toFixed(2)}° at zoom {mapZoom.toFixed(1)}
+                .
+              </p>
+              {clusters.length > 0 ? (
+                <ul className="map-places-list">
+                  {clusters.slice(0, 10).map((cluster) => (
+                    <li key={cluster.id}>
+                      <strong>{cluster.placeNames[0]}</strong> ({cluster.latitude.toFixed(3)},{" "}
+                      {cluster.longitude.toFixed(3)}) · {cluster.eventCount} events
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="hint map-places-empty">No places match the current filters.</p>
+              )}
+            </>
           ) : (
-            <p className="hint map-places-empty">No places match the current filters.</p>
+            <p className="hint map-places-empty">
+              {includeLiving
+                ? "No geocoded places found yet for this tree."
+                : 'No deceased-people places found. Re-enable "Include living people places" to show all geocoded places.'}
+            </p>
           )}
         </div>
       ) : (
-        <p className="hint map-places-empty">Map is collapsed to keep profile details visible.</p>
+        <p className="hint map-places-empty">
+          {hasGeocodedPlaces
+            ? "Map is collapsed to keep profile details visible."
+            : "No geocoded places found yet for this tree."}
+        </p>
       )}
     </section>
   );

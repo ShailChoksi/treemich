@@ -1,3 +1,7 @@
+/**
+ * @file Pick closest graph items to a screen point (hit testing helpers).
+ */
+
 import type { ImmichPerson } from "../../lib/api";
 import { distanceSquared, type NodePosition } from "./layout";
 

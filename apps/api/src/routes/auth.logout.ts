@@ -1,3 +1,7 @@
+/**
+ * @file Registers `POST /auth/logout` — clears Treemich session cookie.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { clearSessionCookie, readCookie } from "../auth/request.js";
 

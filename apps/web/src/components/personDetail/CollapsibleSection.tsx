@@ -1,3 +1,7 @@
+/**
+ * @file Accessible collapsible section; subtitle only when expanded.
+ */
+
 import type { ReactNode } from "react";
 
 type CollapsibleSectionProps = {

@@ -1,3 +1,7 @@
+/**
+ * @file Suggest likely missing edges (e.g. parents) from graph structure heuristics.
+ */
+
 import type { ImmichPerson, RelationshipRecord, RelationshipType } from "../../lib/api";
 import { buildParentChildIndex } from "./layout";
 

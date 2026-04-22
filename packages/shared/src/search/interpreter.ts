@@ -1,5 +1,12 @@
+/**
+ * @packageDocumentation
+ * Natural-language search interpreter: maps free-text queries to graph traversal intents
+ * (`RelationshipType` hop chains) plus optional age filters.
+ */
+
 import type { RelationshipType } from "../index.js";
 
+/** High-level relationship query intent produced by {@link RuleBasedInterpreter}. */
 export type InterpreterIntent =
   | "FIND_CHILDREN"
   | "FIND_SONS"
@@ -39,6 +46,7 @@ export type InterpreterIntent =
   | "FIND_AUNTS_IN_LAW"
   | "FIND_COUSINS_IN_LAW";
 
+/** Optional numeric age / birth-year constraints parsed from the query tail. */
 export type AgeFilter =
   | { kind: "minAge"; years: number }
   | { kind: "maxAge"; years: number }
@@ -47,6 +55,7 @@ export type AgeFilter =
   | { kind: "bornBefore"; year: number }
   | { kind: "bornInYear"; year: number };
 
+/** Successful parse: who to start from, which hops to walk, and optional filters. */
 export type ParsedQuery = {
   intent: InterpreterIntent;
   sourceName: string;
@@ -55,6 +64,7 @@ export type ParsedQuery = {
   ageFilter?: AgeFilter;
 };
 
+/** Either a structured parse or a human-readable failure reason. */
 export type InterpreterResult =
   | {
       ok: true;
@@ -65,6 +75,7 @@ export type InterpreterResult =
       reason: string;
     };
 
+/** Pluggable interpreter for people search (shared contract for API and tests). */
 export interface QueryInterpreter {
   interpret(query: string): InterpreterResult;
 }
@@ -380,6 +391,9 @@ const SUPPORTED_QUERIES = [
   "Suffix with age filter: older than N, under N, born in YYYY, etc."
 ].join(", ");
 
+/**
+ * Regex-driven English query interpreter (e.g. `"children of Alice"`, `"male cousins of Bob under 30"`).
+ */
 export class RuleBasedInterpreter implements QueryInterpreter {
   interpret(query: string): InterpreterResult {
     const normalized = query.trim();

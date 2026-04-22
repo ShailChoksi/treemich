@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /people/:id/cooccurrence` — photo co-occurrence suggestions for one person.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";

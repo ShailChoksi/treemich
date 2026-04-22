@@ -12,6 +12,7 @@ vi.mock("../components/PeopleGraph3D", () => ({
 
 type MapPanelProps = {
   places: Array<{ id: string; name: string; latitude: number; longitude: number }> | null;
+  selectedPersonId?: string | null;
 };
 let latestMapPanelProps: MapPanelProps | null = null;
 vi.mock("../components/MapPlacesPanel", () => ({

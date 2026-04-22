@@ -1,3 +1,7 @@
+/**
+ * @file Person life events list and entry to advanced create/edit flows.
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import type { CreateLifeEventBody, PatchLifeEventBody, LifeEventTypeValue } from "@treemich/shared";
 import {

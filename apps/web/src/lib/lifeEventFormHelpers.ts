@@ -1,6 +1,12 @@
+/**
+ * @packageDocumentation
+ * Small parsers and formatters shared by life-event forms (`optionalInt`, `optionalFloat`, labels).
+ */
+
 import { lifeEventTypeLabels } from "@treemich/shared";
 import type { LifeEventRecord } from "./api";
 
+/** Parses a trimmed integer string, or `null` if empty / non-finite. */
 export const optionalInt = (raw: string): number | null => {
   const t = raw.trim();
   if (!t) {
@@ -10,6 +16,10 @@ export const optionalInt = (raw: string): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+/**
+ * Parses a float from user input; normalizes Unicode minus and comma decimals before `Number()`.
+ * Returns `null` for empty input or non-finite values.
+ */
 export const optionalFloat = (raw: string): number | null => {
   const t = raw.trim();
   if (!t) {
@@ -20,11 +30,13 @@ export const optionalFloat = (raw: string): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+/** Returns `null` when the trimmed string is empty (optional API fields). */
 export const nullIfEmpty = (raw: string): string | null => {
   const t = raw.trim();
   return t ? t : null;
 };
 
+/** One-line summary for pickers and lists (type label + Y-M-D + qualifier when not exact). */
 export const summarizeLifeEvent = (event: LifeEventRecord): string => {
   const parts: string[] = [lifeEventTypeLabels[event.eventType] ?? event.eventType];
   const y = event.year != null ? String(event.year) : "?";

@@ -1,3 +1,7 @@
+/**
+ * @file Visual tokens for relationship kinds (edge colors, dash patterns).
+ */
+
 import type { RelationshipType } from "../../lib/api";
 
 export type RelationshipKind = "PARENT_CHILD" | "SPOUSE" | "SIBLING" | "FRIEND" | "PET" | "CO_OCCURRENCE";

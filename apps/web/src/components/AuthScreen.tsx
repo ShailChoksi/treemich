@@ -1,3 +1,7 @@
+/**
+ * @file Login and Immich account linking for unauthenticated sessions.
+ */
+
 import { useState } from "react";
 
 type Props = {

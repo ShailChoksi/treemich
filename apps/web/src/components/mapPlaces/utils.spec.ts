@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { PlacesMapPoint } from "../../lib/api";
-import { clusterPlaces, filterPlaces, filterPlacesByBounds, getAdaptiveClusterCellDegrees } from "./utils";
+import {
+  clusterPlaces,
+  filterPlaces,
+  filterPlacesByBounds,
+  getAdaptiveClusterCellDegrees,
+  placeClusterIncludesImmichPerson
+} from "./utils";
 
 const point = (overrides: Partial<PlacesMapPoint>): PlacesMapPoint => ({
   id: overrides.id ?? "p",
@@ -66,6 +72,23 @@ describe("clusterPlaces", () => {
       5
     );
     expect(clusters[0]?.samplePersonIds).toEqual(["p1", "p2", "p3", "p4", "p5"]);
+  });
+});
+
+describe("placeClusterIncludesImmichPerson", () => {
+  it("is true when any clustered place lists the person in sample ids", () => {
+    const clusters = clusterPlaces(
+      [point({ id: "a", samplePersonIds: ["x"] }), point({ id: "b", samplePersonIds: ["y"] })],
+      5
+    );
+    expect(placeClusterIncludesImmichPerson(clusters[0]!, "x")).toBe(true);
+    expect(placeClusterIncludesImmichPerson(clusters[0]!, "missing")).toBe(false);
+  });
+
+  it("is false when person id is empty", () => {
+    const clusters = clusterPlaces([point({ id: "a", samplePersonIds: ["x"] })], 5);
+    expect(placeClusterIncludesImmichPerson(clusters[0]!, null)).toBe(false);
+    expect(placeClusterIncludesImmichPerson(clusters[0]!, "")).toBe(false);
   });
 });
 

@@ -1,3 +1,7 @@
+/**
+ * @file Graph-related React hook: useGraphCameraControls.
+ */
+
 import { useCallback } from "react";
 import { Vector3, type PerspectiveCamera } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";

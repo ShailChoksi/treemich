@@ -1,3 +1,7 @@
+/**
+ * @file Toggles for relationship categories and graph display options.
+ */
+
 import type { GraphFilter, GraphFilterVisibility } from "./relationshipStyles";
 import { relationshipStyleByKind } from "./relationshipStyles";
 

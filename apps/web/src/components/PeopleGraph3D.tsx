@@ -1,3 +1,7 @@
+/**
+ * @file Three.js relationship graph, overlays, search, and server layout integration.
+ */
+
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -85,6 +89,10 @@ const resolveInitialGraphViewPreferences = (
   showSingleFamilyTree: savedPreferences?.showSingleFamilyTree ?? false
 });
 
+/**
+ * Interactive 3D graph: Immich people, Treemich relationships, layout worker, search, and chrome controls.
+ * Exported as memo-wrapped `PeopleGraph3D`.
+ */
 const PeopleGraph3DComponent = ({
   people,
   relationships,
@@ -500,4 +508,5 @@ const PeopleGraph3DComponent = ({
   );
 };
 
+/** Memoized main graph surface for the people page. */
 export const PeopleGraph3D = memo(PeopleGraph3DComponent);

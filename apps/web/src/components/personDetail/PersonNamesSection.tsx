@@ -1,3 +1,7 @@
+/**
+ * @file Alternate names CRUD and primary display name selection.
+ */
+
 import { useCallback, useEffect, useState } from "react";
 import {
   createPersonName,

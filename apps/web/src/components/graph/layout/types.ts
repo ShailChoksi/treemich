@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: types.
+ */
+
 export type NodePosition = [number, number, number];
 export type GraphLayoutMode = "family" | "photo";
 export type FamilyViewStyle = "generationTree";

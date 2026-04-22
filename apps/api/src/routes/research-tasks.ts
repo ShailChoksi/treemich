@@ -1,3 +1,7 @@
+/**
+ * @file Research tasks: list/create/patch/delete under `/research/tasks`.
+ */
+
 import {
   createResearchTaskBodySchema,
   patchResearchTaskBodySchema,

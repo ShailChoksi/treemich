@@ -1,3 +1,7 @@
+/**
+ * @file Web worker entry: layout.worker.ts.
+ */
+
 /// <reference lib="webworker" />
 
 import { positionPeople } from "./layout";

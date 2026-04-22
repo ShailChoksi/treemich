@@ -1,3 +1,8 @@
+/**
+ * @packageDocumentation
+ * Fastify application factory: CORS, rate limiting, global error handling, and route registration for the REST API.
+ */
+
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyReply } from "fastify";

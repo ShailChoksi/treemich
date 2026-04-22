@@ -1,3 +1,7 @@
+/**
+ * @file Compact status and actions row under the graph canvas.
+ */
+
 type Props = {
   status: string | null;
   busy: boolean;

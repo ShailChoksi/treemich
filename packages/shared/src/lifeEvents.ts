@@ -1,5 +1,12 @@
+/**
+ * @packageDocumentation
+ * Zod request bodies and TypeScript types for Treemich life events (person and relationship scoped),
+ * including partial dates, places, and citations.
+ */
+
 import { z } from "zod";
 
+/** GEDCOM-style date precision / qualifier for a life event date. */
 export const dateQualifierValues = [
   "EXACT",
   "ABOUT",
@@ -11,6 +18,7 @@ export const dateQualifierValues = [
 ] as const;
 export type DateQualifierValue = (typeof dateQualifierValues)[number];
 
+/** All life-event kinds Treemich can store (subset may be used per API route). */
 export const lifeEventTypeValues = [
   "BIRTH",
   "DEATH",
@@ -99,7 +107,7 @@ const yearSchema = z.number().int().min(1).max(9999);
 const monthSchema = z.number().int().min(1).max(12);
 const daySchema = z.number().int().min(1).max(31);
 
-/** Partial date components; validated as a group by validatePartialDateTriplet. */
+/** Partial calendar date fields (nullable pieces); API validates sensible combinations. */
 export const partialDatePartsSchema = z.object({
   year: yearSchema.optional().nullable(),
   month: monthSchema.optional().nullable(),
@@ -109,6 +117,7 @@ export const partialDatePartsSchema = z.object({
   endDay: daySchema.optional().nullable()
 });
 
+/** Inline place payload when creating/updating an event (alternative to linking `placeId`). */
 export const placeInputSchema = z.object({
   name: z.string().min(1),
   addressLine1: z.string().optional().nullable(),
@@ -121,6 +130,7 @@ export const placeInputSchema = z.object({
   notes: z.string().optional().nullable()
 });
 
+/** Source citation attached to a life event. */
 export const lifeEventCitationInputSchema = z.object({
   title: z.string().optional().nullable(),
   repository: z.string().optional().nullable(),
@@ -130,6 +140,7 @@ export const lifeEventCitationInputSchema = z.object({
   citedAt: z.string().optional().nullable()
 });
 
+/** `POST` life-event body: type, optional partial dates, place or placeId, notes, citations. */
 export const createLifeEventBodySchema = z
   .object({
     eventType: lifeEventTypeSchema,
@@ -160,6 +171,7 @@ export const createLifeEventBodySchema = z
     }
   });
 
+/** `PATCH` life-event body: all fields optional; same place rules as create. */
 export const patchLifeEventBodySchema = z
   .object({
     eventType: lifeEventTypeSchema.optional(),
@@ -185,14 +197,17 @@ export type PlaceInput = z.infer<typeof placeInputSchema>;
 export type CreateLifeEventBody = z.infer<typeof createLifeEventBodySchema>;
 export type PatchLifeEventBody = z.infer<typeof patchLifeEventBodySchema>;
 
+/** Resolved place row returned with a life event. */
 export type LifeEventPlaceRecord = PlaceInput & {
   id: string;
 };
 
+/** Citation row as returned from the API (includes server id). */
 export type LifeEventCitationRecord = z.infer<typeof lifeEventCitationInputSchema> & {
   id: string;
 };
 
+/** Full life-event row including place and citations. */
 export type LifeEventRecord = {
   id: string;
   eventType: LifeEventTypeValue;
@@ -210,6 +225,7 @@ export type LifeEventRecord = {
   updatedAt: string;
 };
 
+/** Standard list wrapper for life-event collections. */
 export type LifeEventListResponse = {
   lifeEvents: LifeEventRecord[];
 };

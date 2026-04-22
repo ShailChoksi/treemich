@@ -1,3 +1,7 @@
+/**
+ * @file Shared TypeScript props/shapes for person-detail subcomponents.
+ */
+
 import type { RelationshipRecord, RelationshipType } from "../../lib/api";
 
 export type RelativeItem = {

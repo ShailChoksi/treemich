@@ -1,3 +1,7 @@
+/**
+ * @file Create/edit rich life event with partial dates, place, and citations.
+ */
+
 import { useMemo, useState } from "react";
 import {
   createLifeEventBodySchema,

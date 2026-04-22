@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /people/:id/timeline` — chronological merged life events for sidebar timeline.
+ */
+
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";

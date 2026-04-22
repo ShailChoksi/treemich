@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /export/account` — JSON (+ manifest) account export for GDPR-style portability.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";

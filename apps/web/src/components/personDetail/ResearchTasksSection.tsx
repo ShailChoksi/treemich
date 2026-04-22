@@ -1,3 +1,7 @@
+/**
+ * @file Research tasks: create list items, optional global tasks.
+ */
+
 import {
   researchTaskStatusValues,
   type CreateResearchTaskBody,

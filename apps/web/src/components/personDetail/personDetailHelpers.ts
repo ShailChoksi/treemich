@@ -1,3 +1,7 @@
+/**
+ * @file Pure helpers: labels, date/gender formatting, relationship picker data.
+ */
+
 import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType } from "../../lib/api";
 import type { PrimaryFamilyOption } from "./types";
 

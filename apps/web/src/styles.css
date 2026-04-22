@@ -520,6 +520,35 @@ body {
   margin: 0;
 }
 
+.map-places-legend {
+  margin: 4px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  line-height: 1.35;
+}
+
+.map-places-legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  vertical-align: middle;
+  border: 2px solid rgba(15, 23, 42, 0.55);
+  flex: 0 0 auto;
+}
+
+.map-places-legend-swatch--selected {
+  background: #22c55e;
+  border-color: #166534;
+}
+
+.map-places-legend-swatch--default {
+  background: #3b82f6;
+  border-color: #1d4ed8;
+}
+
 .map-places-canvas .leaflet-tile-pane {
   filter: saturate(0.85) brightness(0.92);
 }

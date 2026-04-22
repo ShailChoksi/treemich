@@ -1,3 +1,7 @@
+/**
+ * @file Graph-related React hook: useGraphSelection.
+ */
+
 import { useCallback } from "react";
 
 type UseGraphSelectionOptions = {

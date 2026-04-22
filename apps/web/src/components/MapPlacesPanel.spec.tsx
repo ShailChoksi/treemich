@@ -1,4 +1,4 @@
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MapPlacesPanel } from "./MapPlacesPanel";
@@ -27,7 +27,8 @@ const leafletMocks = vi.hoisted(() => {
 vi.mock("react-leaflet", () => ({
   MapContainer: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
   TileLayer: () => createElement("div"),
-  CircleMarker: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
+  CircleMarker: ({ children, pathOptions }: { children: ReactNode; pathOptions?: { fillColor?: string } }) =>
+    createElement("div", { "data-marker-fill": pathOptions?.fillColor ?? "" }, children),
   Popup: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
   useMap: () => leafletMocks.map,
   useMapEvents: (handlers: { zoomend?: () => void; moveend?: () => void }) => {
@@ -237,6 +238,95 @@ describe("MapPlacesPanel", () => {
       checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onIncludeLivingChange).toHaveBeenCalled();
+    root.unmount();
+  });
+
+  it("styles cluster markers green when selected person appears in cluster sample ids", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        createElement(MapPlacesPanel, {
+          mapUiEnabled: true,
+          places: [
+            {
+              id: "pl-paris",
+              name: "Paris",
+              latitude: 48.8566,
+              longitude: 2.3522,
+              eventCount: 2,
+              personCount: 1,
+              lastEventYear: 1990,
+              samplePersonIds: ["person-a"]
+            },
+            {
+              id: "pl-tokyo",
+              name: "Tokyo",
+              latitude: 35.6764,
+              longitude: 139.65,
+              eventCount: 1,
+              personCount: 1,
+              lastEventYear: 1991,
+              samplePersonIds: ["person-b"]
+            }
+          ],
+          includeLiving: true,
+          selectedPersonId: "person-a",
+          onIncludeLivingChange: vi.fn(),
+          onFocusPerson: vi.fn(),
+          getPersonLabel: (id: string) => id
+        })
+      );
+    });
+    await expandMap(container);
+    const fills = [...container.querySelectorAll("[data-marker-fill]")].map((el) =>
+      el.getAttribute("data-marker-fill")
+    );
+    expect(fills).toContain("#22c55e");
+    expect(fills).toContain("#3b82f6");
+    expect(container.textContent).toContain("sample ids from the map feed");
+    root.unmount();
+  });
+
+  it("keeps map controls visible when living filter yields zero places", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const point = {
+      id: "pl1",
+      name: "Paris",
+      latitude: 48.8566,
+      longitude: 2.3522,
+      eventCount: 2,
+      personCount: 1,
+      lastEventYear: 1980,
+      samplePersonIds: ["p1"]
+    };
+    const Harness = () => {
+      const [includeLiving, setIncludeLiving] = useState(true);
+      return createElement(MapPlacesPanel, {
+        mapUiEnabled: true,
+        places: includeLiving ? [point] : [],
+        includeLiving,
+        onIncludeLivingChange: setIncludeLiving,
+        onFocusPerson: vi.fn(),
+        getPersonLabel: (id: string) => id
+      });
+    };
+    await act(async () => {
+      root.render(createElement(Harness));
+    });
+    await expandMap(container);
+    let checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+    expect(checkbox).toBeTruthy();
+    await act(async () => {
+      checkbox?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("No deceased-people places found");
+    expect(container.textContent).toContain("Include living people places");
+    checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+    expect(checkbox).toBeTruthy();
     root.unmount();
   });
 

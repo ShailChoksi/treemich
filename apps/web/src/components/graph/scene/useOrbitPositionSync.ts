@@ -1,3 +1,7 @@
+/**
+ * @file Three.js scene layer: useOrbitPositionSync.ts.
+ */
+
 import { useCallback, useRef, type MutableRefObject } from "react";
 import { Vector3 } from "three";
 

@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: familyTreeBuchheimLayout.
+ */
+
 import type { ImmichPerson } from "../../../lib/api";
 import { personNameById } from "./familyTreeNaming";
 import type { FamilyUnit } from "./familyTreeUnits";

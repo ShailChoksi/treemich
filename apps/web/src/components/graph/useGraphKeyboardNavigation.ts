@@ -1,3 +1,7 @@
+/**
+ * @file Graph-related React hook: useGraphKeyboardNavigation.
+ */
+
 import { useEffect, useMemo, useRef } from "react";
 import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
 import {

@@ -1,3 +1,7 @@
+/**
+ * @file Registers `POST /people/:id/relationships` — create relationship edge (and optional spouse dates).
+ */
+
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";

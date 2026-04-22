@@ -1,3 +1,7 @@
+/**
+ * @file Registers `PATCH /people/:id/relationships` — update spouse dates or similar partial edge updates.
+ */
+
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";

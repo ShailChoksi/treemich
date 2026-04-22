@@ -1,3 +1,7 @@
+/**
+ * @file 2D SVG/HTML overlays above the WebGL graph (lines, controls chrome).
+ */
+
 type Props = {
   isLoading: boolean;
   loadError: string | null;

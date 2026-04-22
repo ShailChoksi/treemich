@@ -1,3 +1,7 @@
+/**
+ * @file In-graph action buttons anchored near a focused person node.
+ */
+
 import { Html } from "@react-three/drei";
 
 export type AddRelativeSlot = "parent" | "siblingOrSpouse" | "child";

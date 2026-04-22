@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /places/map` — geocoded life-event place aggregates for the map UI.
+ */
+
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";

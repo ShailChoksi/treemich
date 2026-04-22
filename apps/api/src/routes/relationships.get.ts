@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /relationships` — paginated Treemich relationship edges for the graph.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";

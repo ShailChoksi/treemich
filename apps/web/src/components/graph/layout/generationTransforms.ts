@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: generationTransforms.
+ */
+
 import type { ImmichPerson } from "../../../lib/api";
 import type { NodePosition } from "./types";
 

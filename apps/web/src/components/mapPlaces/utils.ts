@@ -1,3 +1,7 @@
+/**
+ * @file Map place filtering, viewport bounds culling, and degree-cell clustering.
+ */
+
 import type { PlacesMapPoint } from "../../lib/api";
 
 export type PlaceCluster = {
@@ -71,6 +75,17 @@ export const clusterPlaces = (places: PlacesMapPoint[], cellDegrees: number): Pl
       personCount: cluster.points.reduce((sum, point) => sum + point.personCount, 0)
     }))
     .sort((left, right) => right.eventCount - left.eventCount || left.id.localeCompare(right.id));
+};
+
+/** Uses each place's `samplePersonIds` from the map feed (capped server-side). */
+export const placeClusterIncludesImmichPerson = (
+  cluster: PlaceCluster,
+  immichPersonId: string | null | undefined
+): boolean => {
+  if (!immichPersonId) {
+    return false;
+  }
+  return cluster.points.some((p) => p.samplePersonIds.includes(immichPersonId));
 };
 
 export const getAdaptiveClusterCellDegrees = (baseCellDegrees: number, zoom: number): number => {

@@ -1,3 +1,7 @@
+/**
+ * @file Chronological timeline for the selected person.
+ */
+
 import { lifeEventTypeUiGlyph } from "@treemich/shared";
 import { useState } from "react";
 import type { TimelineEventRecord } from "../../lib/api";

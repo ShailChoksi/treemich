@@ -1,3 +1,7 @@
+/**
+ * @file Registers `DELETE /people/:id/relationships` — remove a relationship edge.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";

@@ -1304,6 +1304,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onIncludeLivingChange={setMapIncludeLiving}
           onFocusPerson={focusPersonInGraph}
           getPersonLabel={getPersonLabelForMap}
+          selectedPersonId={selectedPersonId}
           error={mapLoadError}
         />
       </aside>

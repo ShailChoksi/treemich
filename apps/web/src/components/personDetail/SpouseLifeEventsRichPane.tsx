@@ -1,3 +1,7 @@
+/**
+ * @file Marriage and divorce life events for spouse relationships.
+ */
+
 import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
 import type { LifeEventRecord } from "../../lib/api";
 import { LifeEventRichForm } from "./LifeEventRichForm";

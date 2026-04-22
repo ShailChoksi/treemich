@@ -1,3 +1,8 @@
+/**
+ * @packageDocumentation
+ * Typed process environment for the API: loads repo-root `.env`, parses with Zod, exposes feature toggles.
+ */
+
 import { config } from "dotenv";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
@@ -35,8 +40,10 @@ const envSchema = z.object({
 
 export type AppEnv = z.infer<typeof envSchema>;
 
+/** Parsed and validated environment (throws at boot on misconfiguration). */
 export const env: AppEnv = envSchema.parse(process.env);
 
+/** Feature flag: whole-tree validation engine (`GET /tree/validation`). */
 export const isTreeValidationEngineEnabled = (): boolean => {
   const v = env.TREEMICH_VALIDATION_ENGINE_ENABLED;
   if (v == null || v === "") {
@@ -45,6 +52,7 @@ export const isTreeValidationEngineEnabled = (): boolean => {
   return !["0", "false", "no", "off"].includes(v.toLowerCase());
 };
 
+/** Feature flag: geocoded places map feed (`GET /places/map`). */
 export const isMapUiEnabled = (): boolean => {
   const v = env.MAP_UI_ENABLED;
   if (v == null || v === "") {
@@ -53,6 +61,7 @@ export const isMapUiEnabled = (): boolean => {
   return !["0", "false", "no", "off"].includes(v.toLowerCase());
 };
 
+/** Feature flag: Nominatim backfill when profile birth city/country is saved. */
 export const isProfilePlaceGeocodingEnabled = (): boolean => {
   const v = env.TREEMICH_PROFILE_PLACE_GEOCODING_ENABLED;
   if (v == null || v === "") {
