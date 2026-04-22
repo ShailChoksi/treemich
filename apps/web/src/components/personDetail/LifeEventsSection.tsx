@@ -110,10 +110,6 @@ export const LifeEventsSection = ({
 
   return (
     <div className="life-events-section stack">
-      <p className="hint">
-        Quick profile fields above still save birth, death, and birth place. This section edits the full
-        life-event record (partial dates, qualifiers, notes, place details, citations).
-      </p>
       {validationError ? <p className="hint life-events-validation-error">{validationError}</p> : null}
       {validationFindings && validationFindings.length > 0 ? (
         <ul className="life-events-validation-findings stack">

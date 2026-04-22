@@ -52,25 +52,28 @@ export const ResearchTasksSection = ({ personId, tasks, disabled, onCreate, onUp
     <div className="stack">
       <div className="research-task-create">
         <input
+          className="research-task-input"
           value={newTitle}
           onChange={(event) => setNewTitle(event.target.value)}
           placeholder="Add a research task title"
           disabled={disabled || busy}
         />
         <input
+          className="research-task-input"
           type="date"
           value={newDueDate}
           onChange={(event) => setNewDueDate(event.target.value)}
           disabled={disabled || busy}
         />
         <textarea
+          className="research-task-notes-input"
           value={newNotes}
           onChange={(event) => setNewNotes(event.target.value)}
           placeholder="Optional notes"
           rows={2}
           disabled={disabled || busy}
         />
-        <label className="graph-search-alt-names">
+        <label className="research-task-scope-toggle">
           <input
             type="checkbox"
             checked={createGlobal}
@@ -118,8 +121,9 @@ export const ResearchTasksSection = ({ personId, tasks, disabled, onCreate, onUp
                 </option>
               ))}
             </select>
-            <span>{task.title}</span>
+            <span className="research-task-title">{task.title}</span>
             <input
+              className="research-task-due-input"
               type="date"
               value={task.dueDate ?? ""}
               disabled={disabled || busy}
@@ -135,8 +139,8 @@ export const ResearchTasksSection = ({ personId, tasks, disabled, onCreate, onUp
             >
               Remove
             </button>
-            {task.immichPersonId == null ? <span className="hint">Global</span> : null}
-            {task.notes ? <p className="hint">{task.notes}</p> : null}
+            {task.immichPersonId == null ? <span className="hint research-task-meta">Global</span> : null}
+            {task.notes ? <p className="hint research-task-meta">{task.notes}</p> : null}
           </li>
         ))}
       </ul>

@@ -48,6 +48,7 @@ export const PersonTimelineSection = ({ timeline }: Props) => {
   return (
     <div className="stack">
       <input
+        className="person-timeline-search"
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         placeholder="Filter timeline events"

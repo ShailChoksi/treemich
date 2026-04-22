@@ -15,7 +15,8 @@ export const optionalFloat = (raw: string): number | null => {
   if (!t) {
     return null;
   }
-  const n = Number.parseFloat(t);
+  const normalized = t.replace(/[−–—]/g, "-").replace(",", ".");
+  const n = Number(normalized);
   return Number.isFinite(n) ? n : null;
 };
 

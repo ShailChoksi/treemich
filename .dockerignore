@@ -1,7 +1,10 @@
 node_modules
+**/node_modules
 dist
+**/dist
 .git
 .env
 .env.local
 coverage
+**/coverage
 apps/api/generated

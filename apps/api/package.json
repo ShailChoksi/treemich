@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon --config nodemon.json",
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run build -w @treemich/shared && tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

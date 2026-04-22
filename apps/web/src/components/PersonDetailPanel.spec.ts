@@ -322,7 +322,15 @@ describe("PersonDetailPanel", () => {
       }
     });
     expect(container.textContent).toContain("Life events (advanced)");
-    expect(container.textContent).toContain("Partial dates");
+    expect((container.textContent ?? "").includes("Partial dates")).toBe(false);
+
+    const lifeEventsToggle = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Life events (advanced)")
+    ) as HTMLButtonElement | undefined;
+    act(() => {
+      lifeEventsToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Filter list by type");
 
     act(() => {
       root.unmount();

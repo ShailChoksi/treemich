@@ -28,7 +28,9 @@ const envSchema = z.object({
   /** When "false" / "0" / "no" / "off", `GET /tree/validation` returns empty `findings` (omitted in omitted env). */
   TREEMICH_VALIDATION_ENGINE_ENABLED: z.string().optional(),
   /** When "false" / "0" / "no" / "off", `GET /places/map` returns no place points for map UI. */
-  MAP_UI_ENABLED: z.string().optional()
+  MAP_UI_ENABLED: z.string().optional(),
+  /** When "false" / "0" / "no" / "off", skip automatic geocoding for profile birth city/country edits. */
+  TREEMICH_PROFILE_PLACE_GEOCODING_ENABLED: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -45,6 +47,14 @@ export const isTreeValidationEngineEnabled = (): boolean => {
 
 export const isMapUiEnabled = (): boolean => {
   const v = env.MAP_UI_ENABLED;
+  if (v == null || v === "") {
+    return true;
+  }
+  return !["0", "false", "no", "off"].includes(v.toLowerCase());
+};
+
+export const isProfilePlaceGeocodingEnabled = (): boolean => {
+  const v = env.TREEMICH_PROFILE_PLACE_GEOCODING_ENABLED;
   if (v == null || v === "") {
     return true;
   }

@@ -64,13 +64,9 @@ export const PersonNamesSection = ({ personId, disabled, onNamesChanged }: Props
 
   return (
     <div className="person-names-section stack">
-      <p className="hint">
-        Treemich stores multiple name forms. The primary name is used for the graph and search (with your
-        preferences). Immich’s person name is unchanged in Immich; override display here.
-      </p>
       {creating ? (
         <div className="person-names-create stack">
-          <label>
+          <label className="field-group">
             <span className="field-label">Type</span>
             <select
               value={draft.type}
@@ -85,7 +81,7 @@ export const PersonNamesSection = ({ personId, disabled, onNamesChanged }: Props
               ))}
             </select>
           </label>
-          <label>
+          <label className="field-group">
             <span className="field-label">Given</span>
             <input
               value={draft.givenName ?? ""}
@@ -94,7 +90,7 @@ export const PersonNamesSection = ({ personId, disabled, onNamesChanged }: Props
               }
             />
           </label>
-          <label>
+          <label className="field-group">
             <span className="field-label">Surname</span>
             <input
               value={draft.surname ?? ""}
@@ -109,7 +105,7 @@ export const PersonNamesSection = ({ personId, disabled, onNamesChanged }: Props
               checked={draft.isPrimary ?? false}
               onChange={(e) => setDraft((d: CreatePersonNameBody) => ({ ...d, isPrimary: e.target.checked }))}
             />
-            Set as primary
+            <span>Set as primary</span>
           </label>
           <div className="person-names-actions">
             <button
@@ -122,7 +118,7 @@ export const PersonNamesSection = ({ personId, disabled, onNamesChanged }: Props
             </button>
             <button
               type="button"
-              className="text-link-button"
+              className="text-link-button person-names-cancel"
               onClick={() => setCreating(false)}
               disabled={busy}
             >

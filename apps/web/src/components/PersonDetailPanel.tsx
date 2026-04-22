@@ -308,7 +308,6 @@ const PersonDetailPanelComponent = ({
       )
     : [];
   const sourceBirthDate = formatBirthDate(person?.birthDate);
-  const hasBirthDateOverride = Boolean(birthDateValue);
   const immichPersonPageUrl = person ? immichPersonUrl(person.id, immichBaseUrl) : null;
   const spouseDisplay = useMemo(() => {
     if (!activeRelationship || activeRelationship.record.type !== "SPOUSE_OF") {
@@ -507,11 +506,6 @@ const PersonDetailPanelComponent = ({
                 />
               </label>
             </div>
-            <p className="hint">
-              {hasBirthDateOverride
-                ? `Treemich BIRTH life event (quick edit): ${formatBirthDate(birthDateValue)}`
-                : "No BIRTH life event date yet. The Immich birth date above is for reference only."}
-            </p>
             {immichPersonPageUrl ? (
               <a
                 className="text-link-button person-detail-immich-link"
@@ -552,7 +546,7 @@ const PersonDetailPanelComponent = ({
             <CollapsibleSection
               sectionKey="names"
               title="Names (Treemich)"
-              subtitle="Primary and alternate name forms; used for graph label and search (optional)"
+              infoTooltip="Add alternate names used for display and search. Immich names are unchanged."
               isCollapsed={collapsedSections.names}
               onToggleCollapsed={() => toggleSectionCollapsed("names")}
             >
@@ -567,7 +561,7 @@ const PersonDetailPanelComponent = ({
             <CollapsibleSection
               sectionKey="timeline"
               title="Timeline"
-              subtitle="Chronological view of this person’s life events."
+              infoTooltip="Chronological list of this person’s life events."
               isCollapsed={collapsedSections.timeline}
               onToggleCollapsed={() => toggleSectionCollapsed("timeline")}
             >
@@ -578,7 +572,7 @@ const PersonDetailPanelComponent = ({
             <CollapsibleSection
               sectionKey="research-tasks"
               title="Research tasks"
-              subtitle="Track unresolved questions and next research steps."
+              infoTooltip="Track unresolved questions and next research steps."
               isCollapsed={collapsedSections.researchTasks}
               onToggleCollapsed={() => toggleSectionCollapsed("researchTasks")}
             >
@@ -596,7 +590,7 @@ const PersonDetailPanelComponent = ({
             <CollapsibleSection
               sectionKey="life-events"
               title="Life events (advanced)"
-              subtitle="Partial dates, qualifiers, notes, place details, citations"
+              infoTooltip="Advanced editor for partial dates, notes, place details, and citations."
               isCollapsed={collapsedSections.lifeEvents}
               onToggleCollapsed={() => toggleSectionCollapsed("lifeEvents")}
             >

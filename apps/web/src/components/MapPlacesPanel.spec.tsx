@@ -42,6 +42,16 @@ vi.mock("react-leaflet", () => ({
 }));
 
 describe("MapPlacesPanel", () => {
+  const expandMap = async (container: HTMLDivElement) => {
+    const toggle = [...container.querySelectorAll("button")].find((node) =>
+      node.textContent?.includes("Show map")
+    ) as HTMLButtonElement | undefined;
+    expect(toggle).toBeDefined();
+    await act(async () => {
+      toggle?.click();
+    });
+  };
+
   afterEach(() => {
     document.body.innerHTML = "";
     vi.restoreAllMocks();
@@ -76,6 +86,123 @@ describe("MapPlacesPanel", () => {
     root.unmount();
   });
 
+  it("can rerender from loading state to loaded state without hook-order crash", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        createElement(MapPlacesPanel, {
+          mapUiEnabled: true,
+          places: null,
+          isLoading: true,
+          includeLiving: true,
+          onIncludeLivingChange: vi.fn(),
+          onFocusPerson: vi.fn(),
+          getPersonLabel: (id: string) => id
+        })
+      );
+    });
+    expect(container.textContent).toContain("Loading geocoded places");
+
+    await act(async () => {
+      root.render(
+        createElement(MapPlacesPanel, {
+          mapUiEnabled: true,
+          places: [
+            {
+              id: "pl1",
+              name: "Paris",
+              latitude: 48.8566,
+              longitude: 2.3522,
+              eventCount: 2,
+              personCount: 1,
+              lastEventYear: 1980,
+              samplePersonIds: ["p1"]
+            }
+          ],
+          isLoading: false,
+          includeLiving: true,
+          onIncludeLivingChange: vi.fn(),
+          onFocusPerson: vi.fn(),
+          getPersonLabel: (id: string) => id
+        })
+      );
+    });
+
+    expect(container.textContent).toContain("Geocoded life-event places");
+    root.unmount();
+  });
+
+  it("starts collapsed to keep sidebar compact", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        createElement(MapPlacesPanel, {
+          mapUiEnabled: true,
+          places: [
+            {
+              id: "pl1",
+              name: "Paris",
+              latitude: 48.8566,
+              longitude: 2.3522,
+              eventCount: 2,
+              personCount: 1,
+              lastEventYear: 1980,
+              samplePersonIds: ["p1"]
+            }
+          ],
+          includeLiving: true,
+          onIncludeLivingChange: vi.fn(),
+          onFocusPerson: vi.fn(),
+          getPersonLabel: (id: string) => id
+        })
+      );
+    });
+    expect(container.textContent).toContain("Map is collapsed");
+    expect(container.textContent).toContain("Show map");
+    root.unmount();
+  });
+
+  it("renders expanded content inside the map popout container", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        createElement(MapPlacesPanel, {
+          mapUiEnabled: true,
+          places: [
+            {
+              id: "pl1",
+              name: "Paris",
+              latitude: 48.8566,
+              longitude: 2.3522,
+              eventCount: 2,
+              personCount: 1,
+              lastEventYear: 1980,
+              samplePersonIds: ["p1"]
+            }
+          ],
+          includeLiving: true,
+          onIncludeLivingChange: vi.fn(),
+          onFocusPerson: vi.fn(),
+          getPersonLabel: (id: string) => id
+        })
+      );
+    });
+    const toggle = [...container.querySelectorAll("button")].find((node) =>
+      node.textContent?.includes("Show map")
+    ) as HTMLButtonElement | undefined;
+    await act(async () => {
+      toggle?.click();
+    });
+    expect(container.querySelector(".map-places-popout")).toBeTruthy();
+    root.unmount();
+  });
+
   it("calls includeLiving change handler from toggle", async () => {
     const onIncludeLivingChange = vi.fn();
     const container = document.createElement("div");
@@ -104,6 +231,7 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
+    await expandMap(container);
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     await act(async () => {
       checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -140,6 +268,7 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
+    await expandMap(container);
     const focusButtons = [...container.querySelectorAll("button")].filter((node) =>
       node.textContent?.includes("Focus Person")
     );
@@ -179,6 +308,7 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
+    await expandMap(container);
     expect(leafletMocks.fitBounds.mock.calls.length).toBe(0);
     await act(async () => {
       vi.advanceTimersByTime(200);
@@ -215,6 +345,7 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
+    await expandMap(container);
     expect(container.textContent).toContain("at zoom 2.0");
     leafletMocks.map.getZoom.mockReturnValue(8);
     await act(async () => {
@@ -264,6 +395,7 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
+    await expandMap(container);
     expect(container.textContent).toContain("2 in view");
 
     leafletMocks.map.getBounds.mockReturnValue(leafletMocks.createBounds(40, -10, 55, 10));
@@ -273,6 +405,53 @@ describe("MapPlacesPanel", () => {
       }
     });
     expect(container.textContent).toContain("1 in view");
+    root.unmount();
+  });
+
+  it("does not re-trigger fitBounds on viewport-only move events", async () => {
+    vi.useFakeTimers();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        createElement(MapPlacesPanel, {
+          mapUiEnabled: true,
+          places: [
+            {
+              id: "pl1",
+              name: "Paris",
+              latitude: 48.8566,
+              longitude: 2.3522,
+              eventCount: 2,
+              personCount: 1,
+              lastEventYear: 1980,
+              samplePersonIds: ["p1"]
+            }
+          ],
+          includeLiving: true,
+          onIncludeLivingChange: vi.fn(),
+          onFocusPerson: vi.fn(),
+          getPersonLabel: (id: string) => id
+        })
+      );
+    });
+    await expandMap(container);
+
+    await act(async () => {
+      vi.advanceTimersByTime(220);
+    });
+    expect(leafletMocks.fitBounds).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      for (const handler of leafletMocks.moveHandlers) {
+        handler();
+      }
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(220);
+    });
+    expect(leafletMocks.fitBounds).toHaveBeenCalledTimes(1);
     root.unmount();
   });
 });

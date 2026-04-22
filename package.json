@@ -11,7 +11,7 @@
   },
   "scripts": {
     "prisma:generate": "prisma generate",
-    "build": "npm run build -w @treemich/api && npm run build -w @treemich/web",
+    "build": "npm run build -w @treemich/shared && npm run build -w @treemich/api && npm run build -w @treemich/web",
     "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm run dev -w @treemich/api",
     "dev:web": "npm run dev -w @treemich/web",
