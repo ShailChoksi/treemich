@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: photoLayout.
+ */
+
 import type { ImmichPerson, PhotoCluster } from "../../../lib/api";
 import type { NodePosition } from "./types";
 

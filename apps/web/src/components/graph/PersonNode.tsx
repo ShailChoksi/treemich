@@ -1,3 +1,7 @@
+/**
+ * @file Single person sphere/mesh with selection and hover affordances.
+ */
+
 import { Billboard, Text } from "@react-three/drei";
 import { memo, useEffect, useMemo, useState } from "react";
 import {

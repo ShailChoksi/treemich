@@ -1,3 +1,7 @@
+/**
+ * @file Web worker entry: thumbnailLoader.worker.ts.
+ */
+
 /// <reference lib="webworker" />
 
 import type {

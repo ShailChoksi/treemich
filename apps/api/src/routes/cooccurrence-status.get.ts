@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /people/cooccurrence/status` — current co-occurrence job and schedule snapshot.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
 

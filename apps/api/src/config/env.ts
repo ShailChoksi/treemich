@@ -1,3 +1,8 @@
+/**
+ * @packageDocumentation
+ * Typed process environment for the API: loads repo-root `.env`, parses with Zod, exposes feature toggles.
+ */
+
 import { config } from "dotenv";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
@@ -26,15 +31,39 @@ const envSchema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   RATE_LIMIT_TIME_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   /** When "false" / "0" / "no" / "off", `GET /tree/validation` returns empty `findings` (omitted in omitted env). */
-  TREEMICH_VALIDATION_ENGINE_ENABLED: z.string().optional()
+  TREEMICH_VALIDATION_ENGINE_ENABLED: z.string().optional(),
+  /** When "false" / "0" / "no" / "off", `GET /places/map` returns no place points for map UI. */
+  MAP_UI_ENABLED: z.string().optional(),
+  /** When "false" / "0" / "no" / "off", skip automatic geocoding for profile birth city/country edits. */
+  TREEMICH_PROFILE_PLACE_GEOCODING_ENABLED: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
 
+/** Parsed and validated environment (throws at boot on misconfiguration). */
 export const env: AppEnv = envSchema.parse(process.env);
 
+/** Feature flag: whole-tree validation engine (`GET /tree/validation`). */
 export const isTreeValidationEngineEnabled = (): boolean => {
   const v = env.TREEMICH_VALIDATION_ENGINE_ENABLED;
+  if (v == null || v === "") {
+    return true;
+  }
+  return !["0", "false", "no", "off"].includes(v.toLowerCase());
+};
+
+/** Feature flag: geocoded places map feed (`GET /places/map`). */
+export const isMapUiEnabled = (): boolean => {
+  const v = env.MAP_UI_ENABLED;
+  if (v == null || v === "") {
+    return true;
+  }
+  return !["0", "false", "no", "off"].includes(v.toLowerCase());
+};
+
+/** Feature flag: Nominatim backfill when profile birth city/country is saved. */
+export const isProfilePlaceGeocodingEnabled = (): boolean => {
+  const v = env.TREEMICH_PROFILE_PLACE_GEOCODING_ENABLED;
   if (v == null || v === "") {
     return true;
   }

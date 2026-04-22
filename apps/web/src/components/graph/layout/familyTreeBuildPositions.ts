@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: familyTreeBuildPositions.
+ */
+
 import type { ImmichPerson } from "../../../lib/api";
 import type { NodePosition } from "./types";
 import { collectConnectedComponents, buildComponentCenters } from "./familyTreeComponents";

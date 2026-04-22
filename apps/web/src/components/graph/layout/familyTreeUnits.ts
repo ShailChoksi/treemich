@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: familyTreeUnits.
+ */
+
 import type { ImmichPerson } from "../../../lib/api";
 import { sortPersonIdsByName } from "./familyTreeNaming";
 import type { SpousePair } from "./familyTreeTypes";

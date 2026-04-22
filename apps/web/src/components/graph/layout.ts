@@ -1,3 +1,7 @@
+/**
+ * @file Graph layout facade: family tree vs photo layout selection and exports.
+ */
+
 export type {
   DirectionalNeighborBuckets,
   FamilyViewStyle,

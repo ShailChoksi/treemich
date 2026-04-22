@@ -1,3 +1,7 @@
+/**
+ * @file Registers `POST /people/cooccurrence/compute` — kicks off (or resumes) photo co-occurrence edge computation.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
 import { getImmichClientForRequest } from "../services.js";

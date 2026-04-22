@@ -1,3 +1,7 @@
+/**
+ * @file Create/edit rich life event with partial dates, place, and citations.
+ */
+
 import { useMemo, useState } from "react";
 import {
   createLifeEventBodySchema,
@@ -99,7 +103,10 @@ export const LifeEventRichForm = ({
     return [...lifeEventTypeValues];
   }, [allowedCreateTypes, fixedEventType]);
 
-  const buildPlacePayload = () => {
+  const buildPlacePayload = (
+    lat: number | null,
+    lng: number | null
+  ): { value: NonNullable<CreateLifeEventBody["place"]> | null; error: string | null } => {
     const name = nullIfEmpty(placeName);
     const locality = nullIfEmpty(placeLocality);
     const countryRaw = nullIfEmpty(placeCountryCode);
@@ -107,35 +114,36 @@ export const LifeEventRichForm = ({
     const addressLine1 = nullIfEmpty(placeAddressLine1);
     const adminArea = nullIfEmpty(placeAdminArea);
     const postalCode = nullIfEmpty(placePostalCode);
-    const lat = optionalFloat(placeLat);
-    const lng = optionalFloat(placeLng);
     const pNotes = nullIfEmpty(placeNotes);
-    if (
-      !name &&
-      !locality &&
-      !countryCode &&
-      !addressLine1 &&
-      !adminArea &&
-      !postalCode &&
-      lat == null &&
-      lng == null &&
-      !pNotes
-    ) {
-      return null;
+    const hasAnyPlaceInput =
+      !!name ||
+      !!locality ||
+      !!countryCode ||
+      !!addressLine1 ||
+      !!adminArea ||
+      !!postalCode ||
+      lat != null ||
+      lng != null ||
+      !!pNotes;
+    if (!hasAnyPlaceInput) {
+      return { value: null, error: null };
     }
     if (!name) {
-      return null;
+      return { value: null, error: "Place name is required when entering place details." };
     }
     return {
-      name,
-      locality,
-      countryCode,
-      addressLine1,
-      adminArea,
-      postalCode,
-      latitude: lat,
-      longitude: lng,
-      notes: pNotes
+      value: {
+        name,
+        locality,
+        countryCode,
+        addressLine1,
+        adminArea,
+        postalCode,
+        latitude: lat,
+        longitude: lng,
+        notes: pNotes
+      },
+      error: null
     };
   };
 
@@ -175,7 +183,32 @@ export const LifeEventRichForm = ({
     const ey = optionalInt(endYear);
     const em = optionalInt(endMonth);
     const ed = optionalInt(endDay);
-    const place = buildPlacePayload();
+    const latRaw = placeLat.trim();
+    const lngRaw = placeLng.trim();
+    const lat = optionalFloat(placeLat);
+    const lng = optionalFloat(placeLng);
+    if (latRaw && lat == null) {
+      setError("Latitude must be a valid number (e.g. 40.7128).");
+      return;
+    }
+    if (lngRaw && lng == null) {
+      setError("Longitude must be a valid number (e.g. -74.0060).");
+      return;
+    }
+    if (lat != null && (lat < -90 || lat > 90)) {
+      setError("Latitude must be between -90 and 90.");
+      return;
+    }
+    if (lng != null && (lng < -180 || lng > 180)) {
+      setError("Longitude must be between -180 and 180.");
+      return;
+    }
+    const placeResult = buildPlacePayload(lat, lng);
+    if (placeResult.error) {
+      setError(placeResult.error);
+      return;
+    }
+    const place = placeResult.value;
 
     if (variant === "create") {
       const body: CreateLifeEventBody = {

@@ -1,3 +1,7 @@
+/**
+ * @file Accessible collapsible section; subtitle only when expanded.
+ */
+
 import type { ReactNode } from "react";
 
 type CollapsibleSectionProps = {
@@ -7,6 +11,7 @@ type CollapsibleSectionProps = {
   onToggleCollapsed: () => void;
   count?: string | number;
   subtitle?: string;
+  infoTooltip?: string;
   className?: string;
   children: ReactNode;
 };
@@ -18,6 +23,7 @@ export const CollapsibleSection = ({
   onToggleCollapsed,
   count,
   subtitle,
+  infoTooltip,
   className,
   children
 }: CollapsibleSectionProps) => {
@@ -34,8 +40,19 @@ export const CollapsibleSection = ({
           aria-controls={contentId}
         >
           <div className="stack">
-            <h3>{title}</h3>
-            {subtitle ? <p className="hint">{subtitle}</p> : null}
+            <div className="person-detail-section-title-row">
+              <h3>{title}</h3>
+              {infoTooltip ? (
+                <span
+                  className="person-detail-section-info"
+                  title={infoTooltip}
+                  aria-label={`Info: ${infoTooltip}`}
+                >
+                  ?
+                </span>
+              ) : null}
+            </div>
+            {subtitle && !isCollapsed ? <p className="hint">{subtitle}</p> : null}
           </div>
           <span className="person-detail-section-toggle-indicator" aria-hidden="true">
             {isCollapsed ? "▸" : "▾"}

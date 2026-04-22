@@ -1,3 +1,7 @@
+/**
+ * @file Face thumbnail loading pipeline: thumbnailWorkerTypes.ts.
+ */
+
 export type ThumbnailWorkerRequestItem = {
   personId: string;
   url: string;

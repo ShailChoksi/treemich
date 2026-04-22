@@ -1,3 +1,7 @@
+/**
+ * @file Three.js scene layer: AnimatedNodes.tsx.
+ */
+
 import { Suspense, useMemo } from "react";
 import type { Texture } from "three";
 import type { ImmichPerson } from "../../../lib/api";

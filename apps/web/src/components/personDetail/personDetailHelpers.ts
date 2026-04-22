@@ -1,3 +1,7 @@
+/**
+ * @file Pure helpers: labels, date/gender formatting, relationship picker data.
+ */
+
 import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType } from "../../lib/api";
 import type { PrimaryFamilyOption } from "./types";
 
@@ -144,16 +148,35 @@ export const formatBirthDate = (birthDate?: string | null) => {
     return "Unknown";
   }
 
-  const date = new Date(birthDate);
-  if (Number.isNaN(date.getTime())) {
-    return birthDate;
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
+  const trimmed = birthDate.trim();
+  const isoDateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+  const formatter = new Intl.DateTimeFormat(undefined, {
     year: "numeric",
     month: "short",
-    day: "numeric"
-  }).format(date);
+    day: "numeric",
+    timeZone: "UTC"
+  });
+
+  if (isoDateMatch) {
+    const year = Number(isoDateMatch[1]);
+    const month = Number(isoDateMatch[2]);
+    const day = Number(isoDateMatch[3]);
+    const utcDate = new Date(Date.UTC(year, month - 1, day));
+    if (
+      utcDate.getUTCFullYear() === year &&
+      utcDate.getUTCMonth() + 1 === month &&
+      utcDate.getUTCDate() === day
+    ) {
+      return formatter.format(utcDate);
+    }
+  }
+
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) {
+    return trimmed;
+  }
+
+  return formatter.format(date);
 };
 
 export const formatGenderLabel = (gender: Gender) => gender.charAt(0) + gender.slice(1).toLowerCase();

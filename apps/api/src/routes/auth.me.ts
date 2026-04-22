@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /auth/me` — current session user and link metadata.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { clearSessionCookie, readCookie } from "../auth/request.js";
 

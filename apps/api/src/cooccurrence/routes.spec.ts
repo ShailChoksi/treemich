@@ -151,7 +151,13 @@ describe("cooccurrence routes", () => {
         update: vi.fn(),
         delete: vi.fn(),
         setPrimary: vi.fn()
-      } as unknown as AppServices["personNameService"]
+      } as unknown as AppServices["personNameService"],
+      researchTaskService: {
+        list: vi.fn().mockResolvedValue([]),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      } as unknown as AppServices["researchTaskService"]
     };
 
     const { buildApp } = await import("../app.js");

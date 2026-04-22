@@ -1,3 +1,7 @@
+/**
+ * @file Three.js scene layer: createWebGlRenderer.ts.
+ */
+
 import type { CanvasProps } from "@react-three/fiber";
 import { WebGLRenderer } from "three";
 

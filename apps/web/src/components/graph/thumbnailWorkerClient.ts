@@ -1,3 +1,7 @@
+/**
+ * @file Face thumbnail loading pipeline: thumbnailWorkerClient.ts.
+ */
+
 import type {
   ThumbnailWorkerRequestItem,
   ThumbnailWorkerResponse,

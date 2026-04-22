@@ -1,11 +1,25 @@
-import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
+/**
+ * @file People page sidebar: profile, relatives, life events, timeline, names, research tasks, validation.
+ */
+
+import type { CreateLifeEventBody, CreateResearchTaskBody, PatchLifeEventBody } from "@treemich/shared";
 import { memo, useEffect, useMemo, useState } from "react";
-import type { Gender, ImmichPerson, LifeEventRecord, RelationshipRecord, RelationshipType } from "../lib/api";
+import type {
+  Gender,
+  ImmichPerson,
+  LifeEventRecord,
+  RelationshipRecord,
+  RelationshipType,
+  ResearchTaskRecord,
+  TimelineEventRecord
+} from "../lib/api";
 import { immichPersonUrl, personThumbnailUrl } from "../lib/api";
 import { deriveSpouseDatesFromRelationshipEvents } from "../lib/lifeEventUi";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { LifeEventsSection } from "./personDetail/LifeEventsSection";
 import { PersonNamesSection } from "./personDetail/PersonNamesSection";
+import { PersonTimelineSection } from "./personDetail/PersonTimelineSection";
+import { ResearchTasksSection } from "./personDetail/ResearchTasksSection";
 import { SpouseLifeEventsRichPane } from "./personDetail/SpouseLifeEventsRichPane";
 import { computeExtendedFamily, computeInLawFamily } from "./graph/extendedFamily";
 import { inverseRelationshipType } from "./graph/layout";
@@ -91,6 +105,14 @@ type Props = {
   ) => Promise<void>;
   onRelationshipLifeEventDelete?: (relationshipId: string, eventId: string) => Promise<void>;
   onPersonNamesChanged?: () => void;
+  personTimeline?: TimelineEventRecord[];
+  researchTasks?: ResearchTaskRecord[];
+  onResearchTaskCreate?: (body: CreateResearchTaskBody) => Promise<void>;
+  onResearchTaskUpdate?: (
+    taskId: string,
+    patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "immichPersonId">>
+  ) => Promise<void>;
+  onResearchTaskDelete?: (taskId: string) => Promise<void>;
 };
 
 const maxVisibleSuggestions = 5;
@@ -104,12 +126,18 @@ const DEFAULT_COLLAPSED_SECTIONS = {
   pets: false,
   editRelationship: false,
   removeRelationship: false,
-  lifeEvents: true
+  lifeEvents: true,
+  timeline: true,
+  researchTasks: true
 } as const;
 
 type SectionCollapseKey = keyof typeof DEFAULT_COLLAPSED_SECTIONS;
 type SectionCollapsedState = Record<SectionCollapseKey, boolean>;
 
+/**
+ * People-page sidebar: profile quick edit, relatives, life events, timeline, names, tasks, validation.
+ * The default export `PersonDetailPanel` is `memo()` of this component to limit re-renders.
+ */
 const PersonDetailPanelComponent = ({
   person,
   people,
@@ -151,7 +179,12 @@ const PersonDetailPanelComponent = ({
   onRelationshipLifeEventCreate,
   onRelationshipLifeEventPatch,
   onRelationshipLifeEventDelete,
-  onPersonNamesChanged
+  onPersonNamesChanged,
+  personTimeline,
+  researchTasks,
+  onResearchTaskCreate,
+  onResearchTaskUpdate,
+  onResearchTaskDelete
 }: Props) => {
   const [editingRelationshipKey, setEditingRelationshipKey] = useState<string | null>(null);
   const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>("SIBLING_OF");
@@ -283,7 +316,6 @@ const PersonDetailPanelComponent = ({
       )
     : [];
   const sourceBirthDate = formatBirthDate(person?.birthDate);
-  const hasBirthDateOverride = Boolean(birthDateValue);
   const immichPersonPageUrl = person ? immichPersonUrl(person.id, immichBaseUrl) : null;
   const spouseDisplay = useMemo(() => {
     if (!activeRelationship || activeRelationship.record.type !== "SPOUSE_OF") {
@@ -482,11 +514,6 @@ const PersonDetailPanelComponent = ({
                 />
               </label>
             </div>
-            <p className="hint">
-              {hasBirthDateOverride
-                ? `Treemich BIRTH life event (quick edit): ${formatBirthDate(birthDateValue)}`
-                : "No BIRTH life event date yet. The Immich birth date above is for reference only."}
-            </p>
             {immichPersonPageUrl ? (
               <a
                 className="text-link-button person-detail-immich-link"
@@ -527,7 +554,7 @@ const PersonDetailPanelComponent = ({
             <CollapsibleSection
               sectionKey="names"
               title="Names (Treemich)"
-              subtitle="Primary and alternate name forms; used for graph label and search (optional)"
+              infoTooltip="Add alternate names used for display and search. Immich names are unchanged."
               isCollapsed={collapsedSections.names}
               onToggleCollapsed={() => toggleSectionCollapsed("names")}
             >
@@ -538,11 +565,40 @@ const PersonDetailPanelComponent = ({
               />
             </CollapsibleSection>
           ) : null}
+          {person ? (
+            <CollapsibleSection
+              sectionKey="timeline"
+              title="Timeline"
+              infoTooltip="Chronological list of this person’s life events."
+              isCollapsed={collapsedSections.timeline}
+              onToggleCollapsed={() => toggleSectionCollapsed("timeline")}
+            >
+              <PersonTimelineSection timeline={personTimeline} />
+            </CollapsibleSection>
+          ) : null}
+          {person && onResearchTaskCreate && onResearchTaskUpdate && onResearchTaskDelete ? (
+            <CollapsibleSection
+              sectionKey="research-tasks"
+              title="Research tasks"
+              infoTooltip="Track unresolved questions and next research steps."
+              isCollapsed={collapsedSections.researchTasks}
+              onToggleCollapsed={() => toggleSectionCollapsed("researchTasks")}
+            >
+              <ResearchTasksSection
+                personId={person.id}
+                tasks={researchTasks}
+                disabled={isSavingProfile || isSavingRelationship}
+                onCreate={onResearchTaskCreate}
+                onUpdate={onResearchTaskUpdate}
+                onDelete={onResearchTaskDelete}
+              />
+            </CollapsibleSection>
+          ) : null}
           {person && onPersonLifeEventCreate && onPersonLifeEventPatch && onPersonLifeEventDelete ? (
             <CollapsibleSection
               sectionKey="life-events"
               title="Life events (advanced)"
-              subtitle="Partial dates, qualifiers, notes, place details, citations"
+              infoTooltip="Advanced editor for partial dates, notes, place details, and citations."
               isCollapsed={collapsedSections.lifeEvents}
               onToggleCollapsed={() => toggleSectionCollapsed("lifeEvents")}
             >
@@ -837,4 +893,5 @@ const PersonDetailPanelComponent = ({
   );
 };
 
+/** Memoized sidebar panel; see `PersonDetailPanelComponent` for the full prop contract. */
 export const PersonDetailPanel = memo(PersonDetailPanelComponent);

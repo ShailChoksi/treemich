@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ApiHttpError,
+  createResearchTask,
   createPersonLifeEvent,
+  getPlacesMap,
+  getPersonTimeline,
+  getResearchTasks,
   deleteRelationshipLifeEvent,
   getCurrentUser,
   getPersonLifeEventValidation,
@@ -256,5 +260,99 @@ describe("life-events API helpers", () => {
       statusCode: 409,
       message: "A BIRTH event already exists for this person"
     });
+  });
+});
+
+describe("phase-2 API helpers", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("loads person timeline", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ timeline: [{ id: "e1", dateSortKey: 19800101 }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const response = await getPersonTimeline("p1");
+    expect(response.timeline[0]?.id).toBe("e1");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/people/p1/timeline",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+
+  it("loads research tasks with optional person scope", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ tasks: [{ id: "rt1", title: "Task", status: "OPEN" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    const tasks = await getResearchTasks("p1");
+    expect(tasks).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/research/tasks?personId=p1",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+
+  it("creates research task with cookie credentials", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: "rt1", title: "Task", status: "OPEN" }), {
+        status: 201,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    await createResearchTask({ title: "Task", status: "OPEN", immichPersonId: null });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/research/tasks",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
+  });
+
+  it("loads geocoded places for map panel", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          mapUiEnabled: true,
+          places: [{ id: "pl1", name: "Paris", samplePersonIds: ["p1"] }]
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      )
+    );
+    const body = await getPlacesMap({ includeLiving: true });
+    expect(body.mapUiEnabled).toBe(true);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/places/map",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+
+  it("passes includeLiving=false query for map feed", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ mapUiEnabled: true, places: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    await getPlacesMap({ includeLiving: false });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/places/map?includeLiving=false",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
   });
 });

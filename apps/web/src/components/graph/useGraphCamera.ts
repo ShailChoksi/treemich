@@ -1,3 +1,7 @@
+/**
+ * @file Graph-related React hook: useGraphCamera.
+ */
+
 import { useEffect } from "react";
 
 type UseGraphCameraOptions = {

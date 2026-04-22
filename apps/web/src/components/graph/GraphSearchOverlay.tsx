@@ -1,3 +1,7 @@
+/**
+ * @file Natural-language people search overlay and result navigation on the graph.
+ */
+
 import { memo, useEffect, useId, useMemo, useState } from "react";
 
 type Props = {

@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import type { CreateLifeEventBody, PatchLifeEventBody, PlaceInput } from "@treemich/shared";
 import { prisma } from "../db/client.js";
+import { isProfilePlaceGeocodingEnabled } from "../config/env.js";
 import { HttpConflictError, HttpNotFoundError, HttpValidationError } from "./errors.js";
 import {
   parseIsoDateToParts,
@@ -37,6 +38,175 @@ export type LifeEventWithRelations = LifeEvent & {
 };
 
 export class LifeEventService {
+  private normalizeText(value: string | null | undefined): string | null {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  private buildBirthGeocodeQuery(city: string | null, country: string | null): string | null {
+    const parts = [city, country].filter((part): part is string => Boolean(part?.trim()));
+    if (parts.length === 0) {
+      return null;
+    }
+    return parts.join(", ");
+  }
+
+  private async geocodeBirthPlace(
+    city: string | null,
+    country: string | null
+  ): Promise<{ latitude: number; longitude: number } | null> {
+    const query = this.buildBirthGeocodeQuery(city, country);
+    if (!query) {
+      return null;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`,
+        {
+          headers: {
+            Accept: "application/json",
+            "User-Agent": "Treemich/1.0 (+https://github.com/treemich/treemich)"
+          },
+          signal: controller.signal
+        }
+      );
+      if (!response.ok) {
+        return null;
+      }
+      const body = (await response.json()) as Array<{ lat?: string; lon?: string }>;
+      const first = body[0];
+      if (!first) {
+        return null;
+      }
+      const latitude = Number(first.lat);
+      const longitude = Number(first.lon);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return null;
+      }
+      return { latitude, longitude };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private extractCityFromCommaName(name: string): string | null {
+    const trimmed = name?.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const idx = trimmed.indexOf(",");
+    if (idx >= 0) {
+      const left = trimmed.slice(0, idx).trim();
+      return left || null;
+    }
+    return trimmed;
+  }
+
+  private extractCountryFromCommaName(name: string, locality: string | null): string | null {
+    const trimmed = name?.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const loc = locality?.trim();
+    if (loc) {
+      const prefix = `${loc},`;
+      if (trimmed.toLowerCase().startsWith(prefix.toLowerCase())) {
+        const rest = trimmed.slice(prefix.length).trim();
+        return rest || null;
+      }
+    }
+    const idx = trimmed.indexOf(",");
+    if (idx >= 0) {
+      return trimmed.slice(idx + 1).trim() || null;
+    }
+    return null;
+  }
+
+  private placeHintsFromStoredBirthPlace(place: {
+    name: string;
+    locality: string | null;
+    countryCode: string | null;
+    adminArea: string | null;
+  }): { birthCity: string | null; birthCountry: string | null } {
+    const locality = this.normalizeText(place.locality);
+    const birthCity = locality ?? this.normalizeText(this.extractCityFromCommaName(place.name));
+    const birthCountry =
+      this.normalizeText(place.countryCode) ??
+      this.normalizeText(place.adminArea) ??
+      this.normalizeText(this.extractCountryFromCommaName(place.name, place.locality));
+    return { birthCity, birthCountry };
+  }
+
+  private async maybeBackfillBirthPlaceCoordinates(
+    userId: string,
+    profileId: string,
+    fields: { birthCity?: string | null; birthCountry?: string | null }
+  ): Promise<void> {
+    const birth = await prisma.lifeEvent.findFirst({
+      where: { userId, personProfileId: profileId, eventType: "BIRTH" },
+      include: { place: true }
+    });
+    const place = birth?.place;
+    if (!place) {
+      return;
+    }
+    if (place.latitude != null && place.longitude != null) {
+      return;
+    }
+
+    const hints = this.placeHintsFromStoredBirthPlace(place);
+    const city = this.normalizeText(
+      (fields.birthCity !== undefined ? fields.birthCity : undefined) ?? hints.birthCity ?? undefined
+    );
+    const country = this.normalizeText(
+      (fields.birthCountry !== undefined ? fields.birthCountry : undefined) ?? hints.birthCountry ?? undefined
+    );
+    if (!city && !country) {
+      return;
+    }
+
+    const countryCode = country && country.length === 2 ? country.toUpperCase() : null;
+    const existingPlace = await prisma.place.findFirst({
+      where: {
+        userId,
+        NOT: { id: place.id },
+        latitude: { not: null },
+        longitude: { not: null },
+        ...(city ? { locality: { equals: city, mode: "insensitive" } } : {}),
+        ...(countryCode ? { countryCode } : {})
+      }
+    });
+    if (existingPlace?.latitude != null && existingPlace.longitude != null) {
+      await prisma.place.update({
+        where: { id: place.id },
+        data: {
+          latitude: existingPlace.latitude,
+          longitude: existingPlace.longitude
+        }
+      });
+      return;
+    }
+
+    if (!isProfilePlaceGeocodingEnabled()) {
+      return;
+    }
+    const geocoded = await this.geocodeBirthPlace(city, country);
+    if (!geocoded) {
+      return;
+    }
+    await prisma.place.update({
+      where: { id: place.id },
+      data: {
+        latitude: geocoded.latitude,
+        longitude: geocoded.longitude
+      }
+    });
+  }
+
   async createPlace(userId: string, input: PlaceInput): Promise<Place> {
     return prisma.place.create({
       data: {
@@ -245,7 +415,9 @@ export class LifeEventService {
       },
       include: includeDefault
     });
-    return created as LifeEventWithRelations;
+    const createdRow = created as LifeEventWithRelations;
+    await this.maybeBackfillBirthPlaceCoordinates(userId, profile.id, {});
+    return createdRow;
   }
 
   async updatePersonLifeEvent(
@@ -323,7 +495,9 @@ export class LifeEventService {
       },
       include: includeDefault
     });
-    return updated as LifeEventWithRelations;
+    const updatedRow = updated as LifeEventWithRelations;
+    await this.maybeBackfillBirthPlaceCoordinates(userId, profile.id, {});
+    return updatedRow;
   }
 
   async deletePersonLifeEvent(userId: string, immichPersonId: string, eventId: string): Promise<void> {
@@ -573,6 +747,12 @@ export class LifeEventService {
         await this.syncDeathEventTx(tx, userId, profileId, { deathDate: fields.deathDate });
       }
     });
+    if (hasBirth) {
+      await this.maybeBackfillBirthPlaceCoordinates(userId, profileId, {
+        birthCity: fields.birthCity,
+        birthCountry: fields.birthCountry
+      });
+    }
   }
 
   private async syncBirthEventTx(
@@ -605,23 +785,40 @@ export class LifeEventService {
 
     let placeId: string | null = existing?.placeId ?? null;
     if (city !== undefined || country !== undefined) {
-      const name = [city ?? null, country ?? null].filter(Boolean).join(", ") || "Birth place";
+      const existingPlaceRow = placeId != null ? await tx.place.findUnique({ where: { id: placeId } }) : null;
+
+      const nextLocality =
+        city !== undefined ? (city?.trim() ? city.trim() : null) : (existingPlaceRow?.locality ?? null);
+
+      const nextCountryRaw =
+        country !== undefined
+          ? country?.trim()
+            ? country.trim()
+            : null
+          : existingPlaceRow?.countryCode?.trim() || existingPlaceRow?.adminArea?.trim() || null;
+
+      const name = [nextLocality, nextCountryRaw].filter(Boolean).join(", ") || "Birth place";
+      const countryCode = nextCountryRaw && nextCountryRaw.length === 2 ? nextCountryRaw.toUpperCase() : null;
+      const adminArea = nextCountryRaw && nextCountryRaw.length !== 2 ? nextCountryRaw : null;
+
       if (placeId) {
         await tx.place.update({
           where: { id: placeId },
           data: {
             name,
-            locality: city ?? null,
-            countryCode: country && country.length === 2 ? country : null
+            locality: nextLocality,
+            countryCode,
+            adminArea
           }
         });
-      } else if (city || country) {
+      } else if (nextLocality || nextCountryRaw) {
         const place = await tx.place.create({
           data: {
             userId,
             name,
-            locality: city ?? null,
-            countryCode: country && country.length === 2 ? country : null
+            locality: nextLocality,
+            countryCode,
+            adminArea
           }
         });
         placeId = place.id;

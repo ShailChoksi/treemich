@@ -1,5 +1,14 @@
+/**
+ * @packageDocumentation
+ * Date-only and profile-field bridging between Immich strings, `<input type="date">`, and Treemich life events.
+ */
+
 import type { LifeEventRecord } from "./api";
 
+/**
+ * Produces `YYYY-MM-DD` for an `<input type="date">` from an ISO-ish string, using the calendar date
+ * prefix when present to avoid local-timezone shifts.
+ */
 export const toDateInputValue = (value?: string | null) => {
   if (!value) {
     return "";
@@ -18,6 +27,7 @@ export const toDateInputValue = (value?: string | null) => {
   return parsed.toISOString().slice(0, 10);
 };
 
+/** Builds `YYYY-MM-DD` from structured year/month/day on a life event (or empty if incomplete). */
 export const toDateInputValueFromEvent = (
   event: Pick<LifeEventRecord, "year" | "month" | "day"> | null | undefined
 ) => {
@@ -29,6 +39,7 @@ export const toDateInputValueFromEvent = (
 
 type IsoDateParts = { year: number; month: number; day: number };
 
+/** Strict `YYYY-MM-DD` parse with UTC calendar validation (invalid days → `null`). */
 export const parseDateInputToParts = (value: string): IsoDateParts | null => {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -51,6 +62,9 @@ export const parseDateInputToParts = (value: string): IsoDateParts | null => {
   return { year, month, day };
 };
 
+/**
+ * Builds inline `place` payload for birth sync from quick-edit city/country (two-letter country → `countryCode`).
+ */
 export const buildBirthPlaceInput = (city: string | null, country: string | null) => {
   if (!city && !country) {
     return null;
@@ -58,12 +72,31 @@ export const buildBirthPlaceInput = (city: string | null, country: string | null
   const cityPart = city?.trim() ? city.trim() : null;
   const countryPart = country?.trim() ? country.trim() : null;
   const countryCode = countryPart && countryPart.length === 2 ? countryPart.toUpperCase() : null;
+  const adminArea = countryPart && countryPart.length !== 2 ? countryPart : null;
   const placeName = [cityPart, countryPart].filter((value): value is string => Boolean(value)).join(", ");
   return {
     name: placeName || cityPart || countryPart || "Birth place",
     locality: cityPart,
-    countryCode
+    countryCode,
+    adminArea
   };
+};
+
+/** Country string for profile quick-edit when only `place.name` has "City, Country" (legacy rows). */
+const birthCountryFromPlaceName = (place: { name: string; locality?: string | null }): string => {
+  const name = place.name.trim();
+  if (!name) {
+    return "";
+  }
+  const locality = place.locality?.trim();
+  if (locality) {
+    const prefix = `${locality},`;
+    if (name.toLowerCase().startsWith(prefix.toLowerCase())) {
+      return name.slice(prefix.length).trim();
+    }
+  }
+  const idx = name.indexOf(",");
+  return idx >= 0 ? name.slice(idx + 1).trim() : "";
 };
 
 const emptyProfileEventFields = (): {
@@ -94,7 +127,11 @@ export const deriveProfileDisplayValuesFromLifeEvents = (
     birthDate: birthEvent ? toDateInputValueFromEvent(birthEvent) : "",
     deathDate: deathEvent ? toDateInputValueFromEvent(deathEvent) : "",
     birthCity: birthEvent ? (birthEvent.place?.locality ?? "") : "",
-    birthCountry: birthEvent ? (birthEvent.place?.countryCode ?? "") : ""
+    birthCountry: birthEvent?.place
+      ? birthEvent.place.countryCode?.trim() ||
+        birthEvent.place.adminArea?.trim() ||
+        birthCountryFromPlaceName(birthEvent.place)
+      : ""
   };
 };
 

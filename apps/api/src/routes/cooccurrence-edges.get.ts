@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /people/cooccurrence/edges` — paginated co-occurrence edges for graph/insights.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";

@@ -1,3 +1,7 @@
+/**
+ * @file Layout thresholds, worker toggles, and cache size constants for the graph.
+ */
+
 import type { GraphLayoutMode } from "./layout/types";
 
 /** Large family graphs run layout off the main thread when Web Workers are available. */

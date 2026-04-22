@@ -7,6 +7,7 @@ import {
   getRelativeRelationshipLabel,
   indexRelationshipsByPersonId
 } from "./PersonDetailPanel";
+import { formatBirthDate } from "./personDetail/personDetailHelpers";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
@@ -322,7 +323,37 @@ describe("PersonDetailPanel", () => {
       }
     });
     expect(container.textContent).toContain("Life events (advanced)");
-    expect(container.textContent).toContain("Partial dates");
+    expect((container.textContent ?? "").includes("Partial dates")).toBe(false);
+
+    const lifeEventsToggle = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Life events (advanced)")
+    ) as HTMLButtonElement | undefined;
+    act(() => {
+      lifeEventsToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Filter list by type");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("keeps displayed Immich birth date consistent with date input value", () => {
+    const { container, root } = renderPanel({
+      person: {
+        ...person("me", "Me"),
+        birthDate: "1992-09-25"
+      },
+      panelProps: {
+        birthDateValue: "1992-09-25"
+      }
+    });
+
+    expect(container.textContent).toContain(`Immich birth date: ${formatBirthDate("1992-09-25")}`);
+    const profileContent = container.querySelector("#person-detail-section-content-profile");
+    const birthInput = profileContent?.querySelector('input[type="date"]') as HTMLInputElement | null;
+    expect(birthInput?.value).toBe("1992-09-25");
 
     act(() => {
       root.unmount();

@@ -1,3 +1,7 @@
+/**
+ * @file Alternate names CRUD and set-primary under `/people/:id/names`.
+ */
+
 import { createPersonNameBodySchema, patchPersonNameBodySchema } from "@treemich/shared";
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply } from "fastify";

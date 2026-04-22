@@ -2,29 +2,39 @@ import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
 import { filterGraphLayoutTopologyRelationships } from "@treemich/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  CreateResearchTaskBody,
   Gender,
   GraphLayoutResponse,
   ImmichPerson,
   LifeEventRecord,
+  PlacesMapPoint,
+  ResearchTaskRecord,
   RelationshipRecord,
+  TimelineEventRecord,
   RelationshipType,
   UserPreferences
 } from "../lib/api";
 import {
+  createResearchTask,
   createPersonLifeEvent,
   createRelationshipLifeEvent,
   computeGraphLayout,
   createRelationship,
+  deleteResearchTask,
   deletePersonLifeEvent,
   deleteRelationship,
   deleteRelationshipLifeEvent,
   getImmichPeople,
+  getPlacesMap,
   getPersonLifeEvents,
+  getPersonTimeline,
+  getResearchTasks,
   getRelationshipLifeEvents,
   getRelationships,
   getTreeValidation,
   getUserPreferences,
   updatePersonLifeEvent,
+  updateResearchTask,
   updateRelationshipLifeEvent,
   updatePersonProfile,
   updateUserPreferences
@@ -36,6 +46,7 @@ import {
 } from "../lib/lifeEventUi";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
+import { MapPlacesPanel } from "../components/MapPlacesPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
 
 const genders: Gender[] = ["MALE", "FEMALE", "OTHER", "UNKNOWN"];
@@ -172,6 +183,15 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [serverLayout, setServerLayout] = useState<GraphLayoutResponse | null>(null);
   const [treeValidationIssueCount, setTreeValidationIssueCount] = useState<number | null>(null);
   const [treeValidationEngineDisabled, setTreeValidationEngineDisabled] = useState(false);
+  const [personTimelineById, setPersonTimelineById] = useState<Record<string, TimelineEventRecord[]>>({});
+  const [researchTasksByPersonId, setResearchTasksByPersonId] = useState<
+    Record<string, ResearchTaskRecord[]>
+  >({});
+  const [mapPlaces, setMapPlaces] = useState<PlacesMapPoint[] | null>(null);
+  const [mapIncludeLiving, setMapIncludeLiving] = useState(true);
+  const [mapLoading, setMapLoading] = useState(false);
+  const [mapUiEnabled, setMapUiEnabled] = useState(true);
+  const [mapLoadError, setMapLoadError] = useState<string | null>(null);
   const selectedPersonIdRef = useRef<string | null>(null);
   const lastPersistedSelectionRef = useRef<string | null>(null);
   const layoutRequestIdRef = useRef(0);
@@ -202,6 +222,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setLifeEventsByPersonId({});
       setRelationshipLifeEventsById({});
       setProfileEventFieldsByPersonId({});
+      setPersonTimelineById({});
+      setResearchTasksByPersonId({});
       setGenderByPersonId(
         sortedPeople.reduce<Record<string, Gender>>((acc, person) => {
           acc[person.id] = person.profile?.gender ?? "UNKNOWN";
@@ -333,6 +355,70 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   }, [lifeEventsByPersonId, selectedPerson]);
 
   useEffect(() => {
+    if (!selectedPerson) {
+      return;
+    }
+    if (personTimelineById[selectedPerson.id] !== undefined) {
+      return;
+    }
+    let cancelled = false;
+    getPersonTimeline(selectedPerson.id)
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        setPersonTimelineById((current) => ({
+          ...current,
+          [selectedPerson.id]: response.timeline
+        }));
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        setPersonTimelineById((current) => ({
+          ...current,
+          [selectedPerson.id]: []
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [personTimelineById, selectedPerson]);
+
+  useEffect(() => {
+    if (!selectedPerson) {
+      return;
+    }
+    if (researchTasksByPersonId[selectedPerson.id] !== undefined) {
+      return;
+    }
+    let cancelled = false;
+    getResearchTasks(selectedPerson.id)
+      .then((tasks) => {
+        if (cancelled) {
+          return;
+        }
+        setResearchTasksByPersonId((current) => ({
+          ...current,
+          [selectedPerson.id]: tasks
+        }));
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        setResearchTasksByPersonId((current) => ({
+          ...current,
+          [selectedPerson.id]: []
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [researchTasksByPersonId, selectedPerson]);
+
+  useEffect(() => {
     if (!selectedPersonId) {
       return;
     }
@@ -431,6 +517,10 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     setGraphFocusPersonId(personId);
     setSelectedPersonId(personId);
   }, []);
+  const getPersonLabelForMap = useCallback(
+    (personId: string) => people.find((person) => person.id === personId)?.name ?? personId,
+    [people]
+  );
 
   const onProfileSave = useCallback(async () => {
     if (!selectedPerson) {
@@ -445,16 +535,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     const eventFormFields =
       profileEventFieldsByPersonId[pid] ??
       deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
-    const selectedBirthDate = eventFormFields.birthDate || null;
+    const rawBirthDate = (eventFormFields.birthDate ?? "").trim();
     const selectedGivenName = normalizeOptionalString(givenNameByPersonId[selectedPerson.id] ?? "");
     const selectedSurname = normalizeOptionalString(surnameByPersonId[selectedPerson.id] ?? "");
     const selectedNicknames = normalizeOptionalString(nicknamesByPersonId[selectedPerson.id] ?? "");
     const selectedDeathDate = eventFormFields.deathDate || null;
     const selectedBirthCity = normalizeOptionalString(eventFormFields.birthCity ?? "");
     const selectedBirthCountry = normalizeOptionalString(eventFormFields.birthCountry ?? "");
-    const birthParts = selectedBirthDate ? parseDateInputToParts(selectedBirthDate) : null;
+    const birthParts = rawBirthDate ? parseDateInputToParts(rawBirthDate) : null;
     const deathParts = selectedDeathDate ? parseDateInputToParts(selectedDeathDate) : null;
-    if (selectedBirthDate && !birthParts) {
+    if (rawBirthDate && !birthParts) {
       setStatus("Birth date must be a valid YYYY-MM-DD date.");
       return;
     }
@@ -492,12 +582,21 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         await deletePersonLifeEvent(selectedPerson.id, existingBirthEvent.id);
         removeEvent(existingBirthEvent.id);
       } else if (shouldPersistBirthEvent) {
+        const resolvedBirthParts =
+          birthParts ??
+          (existingBirthEvent
+            ? {
+                year: existingBirthEvent.year,
+                month: existingBirthEvent.month,
+                day: existingBirthEvent.day
+              }
+            : null);
         if (existingBirthEvent) {
           const updatedBirth = await updatePersonLifeEvent(selectedPerson.id, existingBirthEvent.id, {
             dateQualifier: "EXACT",
-            year: birthParts?.year ?? null,
-            month: birthParts?.month ?? null,
-            day: birthParts?.day ?? null,
+            year: resolvedBirthParts?.year ?? null,
+            month: resolvedBirthParts?.month ?? null,
+            day: resolvedBirthParts?.day ?? null,
             place: birthPlaceInput,
             placeId: birthPlaceInput ? undefined : null
           });
@@ -506,9 +605,9 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           const createdBirth = await createPersonLifeEvent(selectedPerson.id, {
             eventType: "BIRTH",
             dateQualifier: "EXACT",
-            year: birthParts?.year ?? null,
-            month: birthParts?.month ?? null,
-            day: birthParts?.day ?? null,
+            year: resolvedBirthParts?.year ?? null,
+            month: resolvedBirthParts?.month ?? null,
+            day: resolvedBirthParts?.day ?? null,
             place: birthPlaceInput
           });
           replaceEvent(createdBirth);
@@ -581,6 +680,15 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         ...current,
         [selectedPerson.id]: displayValues
       }));
+      void getPlacesMap({ includeLiving: mapIncludeLiving })
+        .then((response) => {
+          setMapUiEnabled(response.mapUiEnabled);
+          setMapPlaces(response.places);
+          setMapLoadError(null);
+        })
+        .catch((error: unknown) => {
+          setMapLoadError(getErrorMessage(error));
+        });
       setStatus("Profile saved");
     } catch (error: unknown) {
       setStatus(getErrorMessage(error));
@@ -591,6 +699,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     genderByPersonId,
     givenNameByPersonId,
     lifeEventsByPersonId,
+    mapIncludeLiving,
     nicknamesByPersonId,
     profileEventFieldsByPersonId,
     selectedPerson,
@@ -827,6 +936,56 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     [afterPersonLifeEventsUpdated, selectedPerson]
   );
 
+  const refreshResearchTasksForSelectedPerson = useCallback(async () => {
+    if (!selectedPerson) {
+      return;
+    }
+    const tasks = await getResearchTasks(selectedPerson.id);
+    setResearchTasksByPersonId((current) => ({
+      ...current,
+      [selectedPerson.id]: tasks
+    }));
+  }, [selectedPerson]);
+
+  const handleResearchTaskCreate = useCallback(
+    async (body: CreateResearchTaskBody) => {
+      try {
+        await createResearchTask(body);
+        await refreshResearchTasksForSelectedPerson();
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+      }
+    },
+    [refreshResearchTasksForSelectedPerson]
+  );
+
+  const handleResearchTaskUpdate = useCallback(
+    async (
+      taskId: string,
+      patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "immichPersonId">>
+    ) => {
+      try {
+        await updateResearchTask(taskId, patch);
+        await refreshResearchTasksForSelectedPerson();
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+      }
+    },
+    [refreshResearchTasksForSelectedPerson]
+  );
+
+  const handleResearchTaskDelete = useCallback(
+    async (taskId: string) => {
+      try {
+        await deleteResearchTask(taskId);
+        await refreshResearchTasksForSelectedPerson();
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+      }
+    },
+    [refreshResearchTasksForSelectedPerson]
+  );
+
   const handleRelationshipLifeEventCreate = useCallback(
     async (relationshipId: string, body: CreateLifeEventBody) => {
       try {
@@ -1037,6 +1196,35 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       });
   }, [isLoading, people, relationships]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setMapLoading(true);
+    setMapLoadError(null);
+    void getPlacesMap({ includeLiving: mapIncludeLiving })
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        setMapUiEnabled(response.mapUiEnabled);
+        setMapPlaces(response.places);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setMapLoadError(getErrorMessage(error));
+      })
+      .finally(() => {
+        if (cancelled) {
+          return;
+        }
+        setMapLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mapIncludeLiving]);
+
   const noRelationshipsDefaultsEnabled = !hasRelationships && !savedPreferences?.graphFilterVisibility;
 
   return (
@@ -1111,6 +1299,22 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onRelationshipLifeEventPatch={handleRelationshipLifeEventPatch}
           onRelationshipLifeEventDelete={handleRelationshipLifeEventDelete}
           onPersonNamesChanged={refreshPeopleOnly}
+          personTimeline={selectedPerson ? personTimelineById[selectedPerson.id] : undefined}
+          researchTasks={selectedPerson ? researchTasksByPersonId[selectedPerson.id] : undefined}
+          onResearchTaskCreate={handleResearchTaskCreate}
+          onResearchTaskUpdate={handleResearchTaskUpdate}
+          onResearchTaskDelete={handleResearchTaskDelete}
+        />
+        <MapPlacesPanel
+          mapUiEnabled={mapUiEnabled}
+          places={mapPlaces}
+          isLoading={mapLoading}
+          includeLiving={mapIncludeLiving}
+          onIncludeLivingChange={setMapIncludeLiving}
+          onFocusPerson={focusPersonInGraph}
+          getPersonLabel={getPersonLabelForMap}
+          selectedPersonId={selectedPersonId}
+          error={mapLoadError}
         />
       </aside>
     </main>

@@ -1,3 +1,7 @@
+/**
+ * @file Graph-related React hook: useThumbnailLoader.
+ */
+
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { SRGBColorSpace, Texture } from "three";
 import type { Vector3 } from "three";

@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /people` — Immich people merged with Treemich profiles and display names.
+ */
+
 import type { FastifyInstance } from "fastify";
 import type { PersonName } from "@prisma/client";
 import { getRequiredAuth } from "../auth/request.js";

@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: familyTreeSpouseBranches.
+ */
+
 import type { NodePosition } from "./types";
 import type { SpousePair } from "./familyTreeTypes";
 

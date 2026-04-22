@@ -1,3 +1,7 @@
+/**
+ * @file Helpers to build account export ZIP archives (`account.json` + manifest) for `export-account.get`.
+ */
+
 import AdmZip from "adm-zip";
 
 /** Primary snapshot inside the ZIP (UTF-8 JSON). */

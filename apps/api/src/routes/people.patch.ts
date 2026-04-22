@@ -1,3 +1,7 @@
+/**
+ * @file Registers `PATCH /people/:id` — Treemich profile fields and Immich person sync where applicable.
+ */
+
 import { Gender } from "@prisma/client";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";

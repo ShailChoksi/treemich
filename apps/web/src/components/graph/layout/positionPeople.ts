@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: positionPeople.
+ */
+
 import type { ImmichPerson, PhotoCluster, RelationshipRecord } from "../../../lib/api";
 import type { GraphLayoutMode, NodePosition } from "./types";
 import { buildParentChildIndex, getLastNameKey, hashToNumber } from "./graphPrimitives";

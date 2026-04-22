@@ -1,3 +1,7 @@
+/**
+ * @file Graph-related React hook: useGraphLayoutWorker.
+ */
+
 import { useEffect, useRef, useState } from "react";
 import type { NodePosition } from "./layout/types";
 import { requestPositionPeopleInWorker } from "./layoutWorkerClient";

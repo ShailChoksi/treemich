@@ -117,7 +117,8 @@ describe("buildBirthPlaceInput", () => {
     expect(buildBirthPlaceInput("Boston", "us")).toEqual({
       name: "Boston, us",
       locality: "Boston",
-      countryCode: "US"
+      countryCode: "US",
+      adminArea: null
     });
   });
 
@@ -125,7 +126,8 @@ describe("buildBirthPlaceInput", () => {
     expect(buildBirthPlaceInput("Boston", "USA")).toEqual({
       name: "Boston, USA",
       locality: "Boston",
-      countryCode: null
+      countryCode: null,
+      adminArea: "USA"
     });
   });
 });

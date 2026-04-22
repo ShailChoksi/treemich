@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /user/preferences` — persisted UI preferences with server defaults merged in.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { parseUserPreferences, withUserPreferenceDefaults } from "../preferences.js";
 import { getRequiredAuth } from "../auth/request.js";

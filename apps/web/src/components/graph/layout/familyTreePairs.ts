@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: familyTreePairs.
+ */
+
 import type { RelationshipRecord } from "../../../lib/api";
 import type { SpousePair } from "./familyTreeTypes";
 

@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /search` — natural-language relationship search using `RuleBasedInterpreter` and DB graph walk.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Gender, LifeEvent } from "@prisma/client";

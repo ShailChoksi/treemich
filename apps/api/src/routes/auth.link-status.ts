@@ -1,3 +1,7 @@
+/**
+ * @file Registers `GET /auth/link-status` — whether the Treemich user is linked to Immich.
+ */
+
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
 import type { AuthenticatedRequestContext, LinkedAuthenticatedRequestContext } from "../auth/service.js";

@@ -1,3 +1,7 @@
+/**
+ * @file Graph-related React hook: useGraphLayoutState.
+ */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildGraphLayoutRevision, filterGraphLayoutTopologyRelationships } from "@treemich/shared";
 import type { ImmichPerson, PhotoCluster, PhotoCooccurrenceEdge, RelationshipRecord } from "../../lib/api";

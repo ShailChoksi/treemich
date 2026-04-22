@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: familyTreeOverlap.
+ */
+
 import type { NodePosition } from "./types";
 
 type ComponentBounds = {

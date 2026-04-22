@@ -1,3 +1,7 @@
+/**
+ * @file Derive extended family and in-law candidates from the current graph topology.
+ */
+
 import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
 import { buildParentChildIndex } from "./layout";
 

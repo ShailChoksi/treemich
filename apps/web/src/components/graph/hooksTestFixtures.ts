@@ -1,3 +1,7 @@
+/**
+ * @file Shared fixtures for graph hook unit tests.
+ */
+
 import { useGraphLayoutState } from "./useGraphLayoutState";
 import { defaultGraphFilterVisibility } from "./relationshipStyles";
 

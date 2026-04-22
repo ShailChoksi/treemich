@@ -1,3 +1,7 @@
+/**
+ * @file Main-thread RPC to the graph layout Web Worker with revision caching.
+ */
+
 import type { LayoutWorkerPayload, LayoutWorkerPosition, LayoutWorkerResponse } from "./layoutWorkerTypes";
 
 const DEFAULT_TIMEOUT_MS = 12_000;

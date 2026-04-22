@@ -1,3 +1,7 @@
+/**
+ * @file Registers `POST /graph/layout` — server-side 3D layout with small in-memory revision cache.
+ */
+
 import {
   buildGraphLayoutRevision,
   type GraphLayoutPersonInput,

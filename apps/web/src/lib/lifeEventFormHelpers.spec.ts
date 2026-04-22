@@ -22,6 +22,12 @@ describe("optionalFloat", () => {
 
   it("parses floats", () => {
     expect(optionalFloat("-12.5")).toBe(-12.5);
+    expect(optionalFloat("−12.5")).toBe(-12.5);
+    expect(optionalFloat("12,5")).toBe(12.5);
+  });
+
+  it("rejects malformed numeric strings", () => {
+    expect(optionalFloat("12abc")).toBeNull();
   });
 });
 

@@ -1,3 +1,7 @@
+/**
+ * @file Popup flow to pick relative type and target when adding an edge from the graph.
+ */
+
 import { useEffect, useState } from "react";
 import type { RelationshipType } from "../../lib/api";
 import type { AddRelativeSlot } from "./NodeActionButtons";

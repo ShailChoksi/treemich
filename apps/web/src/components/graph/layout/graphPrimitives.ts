@@ -1,3 +1,7 @@
+/**
+ * @file Family-tree layout math: graphPrimitives.
+ */
+
 import { inverseRelationshipType as inverseRelationshipTypeShared } from "@treemich/shared";
 import type { RelationshipRecord, RelationshipType } from "../../../lib/api";
 import type { DirectionalNeighborBuckets, NodePosition } from "./types";
