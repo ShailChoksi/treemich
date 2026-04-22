@@ -21,15 +21,11 @@ const LOGIN_RATE_LIMIT = {
 export const registerAuthLoginRoute: FastifyPluginAsync = async (app) => {
   await app.register(async (loginScope) => {
     await loginScope.register(rateLimit, LOGIN_RATE_LIMIT);
-    loginScope.post(
-      "/auth/login",
-      { config: { rateLimit: LOGIN_RATE_LIMIT } },
-      async (request, reply) => {
-        const body = bodySchema.parse(request.body);
-        const result = await app.services.authService.loginWithImmich(body.email, body.password);
-        setSessionCookie(reply, result.sessionToken);
-        return reply.code(200).send(result.state);
-      }
-    );
+    loginScope.post("/auth/login", { config: { rateLimit: LOGIN_RATE_LIMIT } }, async (request, reply) => {
+      const body = bodySchema.parse(request.body);
+      const result = await app.services.authService.loginWithImmich(body.email, body.password);
+      setSessionCookie(reply, result.sessionToken);
+      return reply.code(200).send(result.state);
+    });
   });
 };
