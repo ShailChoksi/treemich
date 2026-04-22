@@ -3,6 +3,7 @@ import type {
   AuthUser,
   CreateLifeEventBody,
   CreatePersonNameBody,
+  CreateResearchTaskBody,
   GraphLayoutRequest,
   GraphLayoutResponse,
   GenderValue as Gender,
@@ -12,12 +13,14 @@ import type {
   LinkStatus,
   PatchLifeEventBody,
   PatchPersonNameBody,
+  PatchResearchTaskBody,
   PersonNameTypeValue,
   PhotoCluster,
   PhotoCooccurrenceEdge,
   RelationshipRecord,
   RelationshipType,
   SearchRelationshipsResponse,
+  ResearchTaskRecord,
   TreemichPersonProfile,
   UserPreferences
 } from "@treemich/shared";
@@ -26,6 +29,7 @@ export type {
   AuthUser,
   CreateLifeEventBody,
   CreatePersonNameBody,
+  CreateResearchTaskBody,
   GraphLayoutRequest,
   GraphLayoutResponse,
   Gender,
@@ -33,11 +37,13 @@ export type {
   LifeEventRecord,
   PatchLifeEventBody,
   PatchPersonNameBody,
+  PatchResearchTaskBody,
   PersonNameTypeValue,
   PhotoCluster,
   PhotoCooccurrenceEdge,
   RelationshipRecord,
   RelationshipType,
+  ResearchTaskRecord,
   SearchRelationshipsResponse,
   TreemichPersonProfile,
   UserPreferences
@@ -603,4 +609,92 @@ export const deleteRelationshipLifeEvent = async (relationshipId: string, eventI
     })
   );
   await ensureOk(response, "Failed to delete relationship life event");
+};
+
+export type TimelineEventRecord = LifeEventRecord & {
+  dateSortKey: number;
+};
+
+export type PersonTimelineResponse = {
+  timeline: TimelineEventRecord[];
+};
+
+export const getPersonTimeline = async (personId: string): Promise<PersonTimelineResponse> => {
+  const response = await fetchWithRetry(`${treemichApi}/people/${encodeURIComponent(personId)}/timeline`, {
+    cache: "no-store"
+  });
+  await ensureOk(response, "Failed to load person timeline");
+  return (await response.json()) as PersonTimelineResponse;
+};
+
+export type PlacesMapPoint = {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  eventCount: number;
+  personCount: number;
+  lastEventYear: number | null;
+  samplePersonIds: string[];
+};
+
+export type PlacesMapResponse = {
+  mapUiEnabled: boolean;
+  places: PlacesMapPoint[];
+};
+
+export const getPlacesMap = async (options?: { includeLiving?: boolean }): Promise<PlacesMapResponse> => {
+  const params = new URLSearchParams();
+  if (options?.includeLiving === false) {
+    params.set("includeLiving", "false");
+  }
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  const response = await fetchWithRetry(`${treemichApi}/places/map${suffix}`, { cache: "no-store" });
+  await ensureOk(response, "Failed to load map places");
+  return (await response.json()) as PlacesMapResponse;
+};
+
+export const getResearchTasks = async (personId?: string): Promise<ResearchTaskRecord[]> => {
+  const query = personId ? `?personId=${encodeURIComponent(personId)}` : "";
+  const response = await fetchWithRetry(`${treemichApi}/research/tasks${query}`, { cache: "no-store" });
+  await ensureOk(response, "Failed to load research tasks");
+  const body = (await response.json()) as { tasks: ResearchTaskRecord[] };
+  return body.tasks ?? [];
+};
+
+export const createResearchTask = async (body: CreateResearchTaskBody): Promise<ResearchTaskRecord> => {
+  const response = await fetch(
+    `${treemichApi}/research/tasks`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create research task");
+  return (await response.json()) as ResearchTaskRecord;
+};
+
+export const updateResearchTask = async (
+  taskId: string,
+  body: PatchResearchTaskBody
+): Promise<ResearchTaskRecord> => {
+  const response = await fetch(
+    `${treemichApi}/research/tasks/${encodeURIComponent(taskId)}`,
+    withSession({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to update research task");
+  return (await response.json()) as ResearchTaskRecord;
+};
+
+export const deleteResearchTask = async (taskId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/research/tasks/${encodeURIComponent(taskId)}`,
+    withSession({ method: "DELETE" })
+  );
+  await ensureOk(response, "Failed to delete research task");
 };

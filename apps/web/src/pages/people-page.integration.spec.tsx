@@ -9,6 +9,9 @@ reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("../components/PeopleGraph3D", () => ({
   PeopleGraph3D: () => null
 }));
+vi.mock("../components/MapPlacesPanel", () => ({
+  MapPlacesPanel: () => null
+}));
 
 const jsonResponse = (data: unknown, status = 200) =>
   Promise.resolve(

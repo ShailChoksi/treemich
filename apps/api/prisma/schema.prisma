@@ -64,6 +64,12 @@ enum PersonNameType {
   OTHER
 }
 
+enum ResearchTaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+}
+
 model TreemichUser {
   id                  String                @id @default(cuid())
   immichBaseUrl       String
@@ -83,6 +89,7 @@ model TreemichUser {
   cooccurrenceEdges   CooccurrenceEdge[]
   cooccurrenceSchedule CooccurrenceSchedule?
   personNames         PersonName[]
+  researchTasks       ResearchTask[]
 
   @@unique([immichBaseUrl, immichUserId])
   @@unique([immichBaseUrl, immichEmail])
@@ -161,6 +168,23 @@ model PersonName {
 
   @@index([userId, personProfileId])
   @@index([personProfileId])
+}
+
+model ResearchTask {
+  id             String             @id @default(cuid())
+  userId         String
+  immichPersonId String?
+  title          String
+  status         ResearchTaskStatus @default(OPEN)
+  dueDate        String?
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  user           TreemichUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, immichPersonId])
+  @@index([userId, status])
+  @@index([userId, createdAt])
 }
 
 model Relationship {

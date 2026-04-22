@@ -69,6 +69,7 @@ export type RelationshipRecord = {
 
 export * from "./lifeEvents.js";
 export * from "./personNames.js";
+export * from "./researchTasks.js";
 
 export type PhotoCooccurrenceEdge = {
   personAId: string;

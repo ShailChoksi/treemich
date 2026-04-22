@@ -82,6 +82,9 @@ body {
   position: sticky;
   top: 16px;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .card {
@@ -259,6 +262,105 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.person-timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.person-timeline-year-group {
+  list-style: none;
+}
+
+.person-timeline-year-heading {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.person-timeline-sublist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.person-timeline-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.person-timeline-summary {
+  color: #e2e8f0;
+}
+
+.research-task-create {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.research-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.research-task-item {
+  display: grid;
+  grid-template-columns: 128px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.map-places-panel {
+  margin-top: 0;
+}
+
+.map-places-canvas {
+  width: 100%;
+  height: 180px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #0b1220, #0f172a);
+}
+
+.map-places-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-places-canvas .leaflet-tile-pane {
+  filter: saturate(0.85) brightness(0.92);
+}
+
+.map-places-canvas .leaflet-control-zoom a {
+  color: #0f172a;
+}
+
+.map-places-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #cbd5e1;
+}
+
+.map-popup-focus-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
 }
 
 .person-names-row {

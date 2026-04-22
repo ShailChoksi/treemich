@@ -1,11 +1,21 @@
-import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
+import type { CreateLifeEventBody, CreateResearchTaskBody, PatchLifeEventBody } from "@treemich/shared";
 import { memo, useEffect, useMemo, useState } from "react";
-import type { Gender, ImmichPerson, LifeEventRecord, RelationshipRecord, RelationshipType } from "../lib/api";
+import type {
+  Gender,
+  ImmichPerson,
+  LifeEventRecord,
+  RelationshipRecord,
+  RelationshipType,
+  ResearchTaskRecord,
+  TimelineEventRecord
+} from "../lib/api";
 import { immichPersonUrl, personThumbnailUrl } from "../lib/api";
 import { deriveSpouseDatesFromRelationshipEvents } from "../lib/lifeEventUi";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { LifeEventsSection } from "./personDetail/LifeEventsSection";
 import { PersonNamesSection } from "./personDetail/PersonNamesSection";
+import { PersonTimelineSection } from "./personDetail/PersonTimelineSection";
+import { ResearchTasksSection } from "./personDetail/ResearchTasksSection";
 import { SpouseLifeEventsRichPane } from "./personDetail/SpouseLifeEventsRichPane";
 import { computeExtendedFamily, computeInLawFamily } from "./graph/extendedFamily";
 import { inverseRelationshipType } from "./graph/layout";
@@ -91,6 +101,14 @@ type Props = {
   ) => Promise<void>;
   onRelationshipLifeEventDelete?: (relationshipId: string, eventId: string) => Promise<void>;
   onPersonNamesChanged?: () => void;
+  personTimeline?: TimelineEventRecord[];
+  researchTasks?: ResearchTaskRecord[];
+  onResearchTaskCreate?: (body: CreateResearchTaskBody) => Promise<void>;
+  onResearchTaskUpdate?: (
+    taskId: string,
+    patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "immichPersonId">>
+  ) => Promise<void>;
+  onResearchTaskDelete?: (taskId: string) => Promise<void>;
 };
 
 const maxVisibleSuggestions = 5;
@@ -104,7 +122,9 @@ const DEFAULT_COLLAPSED_SECTIONS = {
   pets: false,
   editRelationship: false,
   removeRelationship: false,
-  lifeEvents: true
+  lifeEvents: true,
+  timeline: true,
+  researchTasks: true
 } as const;
 
 type SectionCollapseKey = keyof typeof DEFAULT_COLLAPSED_SECTIONS;
@@ -151,7 +171,12 @@ const PersonDetailPanelComponent = ({
   onRelationshipLifeEventCreate,
   onRelationshipLifeEventPatch,
   onRelationshipLifeEventDelete,
-  onPersonNamesChanged
+  onPersonNamesChanged,
+  personTimeline,
+  researchTasks,
+  onResearchTaskCreate,
+  onResearchTaskUpdate,
+  onResearchTaskDelete
 }: Props) => {
   const [editingRelationshipKey, setEditingRelationshipKey] = useState<string | null>(null);
   const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>("SIBLING_OF");
@@ -535,6 +560,35 @@ const PersonDetailPanelComponent = ({
                 personId={person.id}
                 onNamesChanged={onPersonNamesChanged}
                 disabled={isSavingProfile || isSavingRelationship}
+              />
+            </CollapsibleSection>
+          ) : null}
+          {person ? (
+            <CollapsibleSection
+              sectionKey="timeline"
+              title="Timeline"
+              subtitle="Chronological view of this person’s life events."
+              isCollapsed={collapsedSections.timeline}
+              onToggleCollapsed={() => toggleSectionCollapsed("timeline")}
+            >
+              <PersonTimelineSection timeline={personTimeline} />
+            </CollapsibleSection>
+          ) : null}
+          {person && onResearchTaskCreate && onResearchTaskUpdate && onResearchTaskDelete ? (
+            <CollapsibleSection
+              sectionKey="research-tasks"
+              title="Research tasks"
+              subtitle="Track unresolved questions and next research steps."
+              isCollapsed={collapsedSections.researchTasks}
+              onToggleCollapsed={() => toggleSectionCollapsed("researchTasks")}
+            >
+              <ResearchTasksSection
+                personId={person.id}
+                tasks={researchTasks}
+                disabled={isSavingProfile || isSavingRelationship}
+                onCreate={onResearchTaskCreate}
+                onUpdate={onResearchTaskUpdate}
+                onDelete={onResearchTaskDelete}
               />
             </CollapsibleSection>
           ) : null}

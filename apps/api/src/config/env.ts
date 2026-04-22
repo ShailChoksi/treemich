@@ -26,7 +26,9 @@ const envSchema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   RATE_LIMIT_TIME_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   /** When "false" / "0" / "no" / "off", `GET /tree/validation` returns empty `findings` (omitted in omitted env). */
-  TREEMICH_VALIDATION_ENGINE_ENABLED: z.string().optional()
+  TREEMICH_VALIDATION_ENGINE_ENABLED: z.string().optional(),
+  /** When "false" / "0" / "no" / "off", `GET /places/map` returns no place points for map UI. */
+  MAP_UI_ENABLED: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -35,6 +37,14 @@ export const env: AppEnv = envSchema.parse(process.env);
 
 export const isTreeValidationEngineEnabled = (): boolean => {
   const v = env.TREEMICH_VALIDATION_ENGINE_ENABLED;
+  if (v == null || v === "") {
+    return true;
+  }
+  return !["0", "false", "no", "off"].includes(v.toLowerCase());
+};
+
+export const isMapUiEnabled = (): boolean => {
+  const v = env.MAP_UI_ENABLED;
   if (v == null || v === "") {
     return true;
   }

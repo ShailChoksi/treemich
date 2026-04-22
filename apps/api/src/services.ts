@@ -11,6 +11,7 @@ import { CooccurrenceService } from "./cooccurrence/service.js";
 import { ImmichClientFactory } from "./integrations/immich/factory.js";
 import { LifeEventService } from "./lifeEvents/service.js";
 import { PersonNameService } from "./personNames/service.js";
+import { ResearchTaskService } from "./researchTasks/service.js";
 import { RelationshipService } from "./relationships/service.js";
 
 export type AppServices = {
@@ -20,6 +21,7 @@ export type AppServices = {
   relationshipService: RelationshipService;
   lifeEventService: LifeEventService;
   personNameService: PersonNameService;
+  researchTaskService: ResearchTaskService;
 };
 
 export const buildServices = (): AppServices => {
@@ -30,7 +32,8 @@ export const buildServices = (): AppServices => {
     immichClientFactory: new ImmichClientFactory(),
     relationshipService: new RelationshipService(lifeEventService),
     lifeEventService,
-    personNameService: new PersonNameService()
+    personNameService: new PersonNameService(),
+    researchTaskService: new ResearchTaskService()
   };
 };
 

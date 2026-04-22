@@ -1,0 +1,40 @@
+import { z } from "zod";
+
+export const researchTaskStatusValues = ["OPEN", "IN_PROGRESS", "DONE"] as const;
+export type ResearchTaskStatus = (typeof researchTaskStatusValues)[number];
+export const researchTaskStatusSchema = z.enum(researchTaskStatusValues);
+
+export const createResearchTaskBodySchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  status: researchTaskStatusSchema.optional().default("OPEN"),
+  immichPersonId: z.string().trim().min(1).nullable().optional(),
+  dueDate: z.string().trim().min(1).nullable().optional(),
+  notes: z.string().trim().min(1).max(5000).nullable().optional()
+});
+
+export const patchResearchTaskBodySchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  status: researchTaskStatusSchema.optional(),
+  immichPersonId: z.string().trim().min(1).nullable().optional(),
+  dueDate: z.string().trim().min(1).nullable().optional(),
+  notes: z.string().trim().min(1).max(5000).nullable().optional()
+});
+
+export const researchTaskQuerySchema = z.object({
+  personId: z.string().trim().min(1).optional()
+});
+
+export type CreateResearchTaskBody = z.infer<typeof createResearchTaskBodySchema>;
+export type PatchResearchTaskBody = z.infer<typeof patchResearchTaskBodySchema>;
+export type ResearchTaskQuery = z.infer<typeof researchTaskQuerySchema>;
+
+export type ResearchTaskRecord = {
+  id: string;
+  title: string;
+  status: ResearchTaskStatus;
+  immichPersonId: string | null;
+  dueDate: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};

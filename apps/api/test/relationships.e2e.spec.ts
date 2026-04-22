@@ -37,6 +37,7 @@ const relationshipFindManyForExportMock = vi.fn();
 const placeFindManyMock = vi.fn();
 const lifeEventFindManyForExportMock = vi.fn();
 const treemichSessionFindManyMock = vi.fn();
+const researchTaskFindManyMock = vi.fn();
 const linkedImmichAccountFindUniqueMock = vi.fn();
 const cooccurrenceJobFindManyMock = vi.fn();
 const cooccurrenceEdgeFindManyMock = vi.fn();
@@ -67,6 +68,12 @@ const personNameServiceMock = {
   delete: vi.fn(),
   setPrimary: vi.fn()
 };
+const researchTaskServiceMock = {
+  list: vi.fn().mockResolvedValue([]),
+  create: vi.fn(),
+  update: vi.fn(),
+  delete: vi.fn()
+};
 
 vi.mock("../src/db/client.js", () => ({
   prisma: {
@@ -81,6 +88,7 @@ vi.mock("../src/db/client.js", () => ({
     place: { findMany: placeFindManyMock },
     lifeEvent: { findMany: lifeEventFindManyForExportMock },
     personName: { findMany: personNameFindManyMock },
+    researchTask: { findMany: researchTaskFindManyMock },
     treemichSession: { findMany: treemichSessionFindManyMock },
     linkedImmichAccount: { findUnique: linkedImmichAccountFindUniqueMock },
     cooccurrenceJob: { findMany: cooccurrenceJobFindManyMock },
@@ -163,6 +171,7 @@ describe("Treemich API routes", () => {
     personNameServiceMock.listByImmichPersonId.mockResolvedValue([]);
     personNameServiceMock.getPrimaryMapForProfileIds.mockResolvedValue(new Map());
     personNameServiceMock.getAllFormattedForUser.mockResolvedValue(new Map());
+    researchTaskServiceMock.list.mockResolvedValue([]);
     process.env.NODE_ENV = "test";
     process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:54321/treemich_test";
     process.env.IMMICH_BASE_URL = "http://localhost:2283/api";
@@ -175,6 +184,7 @@ describe("Treemich API routes", () => {
     placeFindManyMock.mockResolvedValue([]);
     lifeEventFindManyForExportMock.mockResolvedValue([]);
     treemichSessionFindManyMock.mockResolvedValue([]);
+    researchTaskFindManyMock.mockResolvedValue([]);
     linkedImmichAccountFindUniqueMock.mockResolvedValue(null);
     cooccurrenceJobFindManyMock.mockResolvedValue([]);
     cooccurrenceEdgeFindManyMock.mockResolvedValue([]);
@@ -224,7 +234,8 @@ describe("Treemich API routes", () => {
         getPhotoCooccurrence: getPhotoCooccurrenceMock
       } as unknown as AppServices["relationshipService"],
       lifeEventService: lifeEventServiceMock as unknown as AppServices["lifeEventService"],
-      personNameService: personNameServiceMock as unknown as AppServices["personNameService"]
+      personNameService: personNameServiceMock as unknown as AppServices["personNameService"],
+      researchTaskService: researchTaskServiceMock as unknown as AppServices["researchTaskService"]
     };
 
     const { buildApp } = await import("../src/app.js");
@@ -1416,6 +1427,167 @@ describe("Treemich API routes", () => {
           display: "A B",
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    });
+  });
+
+  it("lists research tasks (person + global)", async () => {
+    researchTaskServiceMock.list.mockResolvedValueOnce([
+      {
+        id: "rt1",
+        title: "Find census record",
+        status: "OPEN",
+        immichPersonId: "p1",
+        dueDate: null,
+        notes: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      }
+    ]);
+    const response = await app.inject({
+      method: "GET",
+      url: "/research/tasks?personId=p1"
+    });
+    expect(response.statusCode).toBe(200);
+    expect(researchTaskServiceMock.list).toHaveBeenCalledWith("user-1", "p1");
+    expect(response.json()).toEqual({
+      tasks: [
+        {
+          id: "rt1",
+          title: "Find census record",
+          status: "OPEN",
+          immichPersonId: "p1",
+          dueDate: null,
+          notes: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    });
+  });
+
+  it("returns person timeline sorted by date key", async () => {
+    lifeEventServiceMock.listPersonLifeEvents.mockResolvedValueOnce([
+      {
+        id: "e1",
+        eventType: "DEATH",
+        dateQualifier: "EXACT",
+        year: 2020,
+        month: 1,
+        day: 1,
+        endYear: null,
+        endMonth: null,
+        endDay: null,
+        placeId: null,
+        notes: null,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        personProfileId: "pp1",
+        relationshipId: null,
+        place: null,
+        citations: []
+      },
+      {
+        id: "e0",
+        eventType: "BIRTH",
+        dateQualifier: "EXACT",
+        year: 1980,
+        month: 1,
+        day: 1,
+        endYear: null,
+        endMonth: null,
+        endDay: null,
+        placeId: null,
+        notes: null,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        personProfileId: "pp1",
+        relationshipId: null,
+        place: null,
+        citations: []
+      }
+    ]);
+    const response = await app.inject({
+      method: "GET",
+      url: "/people/p1/timeline"
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { timeline: Array<{ id: string; dateSortKey: number }> };
+    expect(body.timeline.map((event) => event.id)).toEqual(["e0", "e1"]);
+  });
+
+  it("returns map places feed with aggregate counts", async () => {
+    lifeEventFindManyForExportMock
+      .mockResolvedValueOnce([
+        {
+          year: 1950,
+          personProfile: { immichPersonId: "p1" },
+          place: { id: "pl1", name: "Paris", latitude: 48.8566, longitude: 2.3522 }
+        },
+        {
+          year: 1970,
+          personProfile: { immichPersonId: "p2" },
+          place: { id: "pl1", name: "Paris", latitude: 48.8566, longitude: 2.3522 }
+        }
+      ])
+      .mockResolvedValueOnce([]);
+    const response = await app.inject({
+      method: "GET",
+      url: "/places/map"
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      mapUiEnabled: true,
+      places: [
+        {
+          id: "pl1",
+          name: "Paris",
+          latitude: 48.8566,
+          longitude: 2.3522,
+          eventCount: 2,
+          personCount: 2,
+          lastEventYear: 1970,
+          samplePersonIds: ["p1", "p2"]
+        }
+      ]
+    });
+  });
+
+  it("filters map places for deceased-only mode when includeLiving=false", async () => {
+    lifeEventFindManyForExportMock
+      .mockResolvedValueOnce([
+        {
+          year: 1950,
+          personProfile: { immichPersonId: "p1" },
+          place: { id: "pl1", name: "Paris", latitude: 48.8566, longitude: 2.3522 }
+        },
+        {
+          year: 1970,
+          personProfile: { immichPersonId: "p2" },
+          place: { id: "pl1", name: "Paris", latitude: 48.8566, longitude: 2.3522 }
+        }
+      ])
+      .mockResolvedValueOnce([{ personProfileId: "pp2" }]);
+    personProfileFindManyMock.mockResolvedValueOnce([{ immichPersonId: "p2" }]);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/places/map?includeLiving=false"
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      mapUiEnabled: true,
+      places: [
+        {
+          id: "pl1",
+          name: "Paris",
+          latitude: 48.8566,
+          longitude: 2.3522,
+          eventCount: 1,
+          personCount: 1,
+          lastEventYear: 1970,
+          samplePersonIds: ["p2"]
         }
       ]
     });
