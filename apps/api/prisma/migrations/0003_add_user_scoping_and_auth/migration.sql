@@ -111,6 +111,12 @@ ALTER TABLE "PersonProfile" ALTER COLUMN "userId" SET NOT NULL;
 -- AlterTable
 ALTER TABLE "Relationship" ALTER COLUMN "userId" SET NOT NULL;
 
+-- Drop legacy Relationship FKs first: they target PersonProfile(immichPersonId), which keeps the unique index
+-- PersonProfile_immichPersonId_key; PostgreSQL will not drop that index until these constraints are removed.
+ALTER TABLE "Relationship" DROP CONSTRAINT "Relationship_fromPersonId_fkey";
+
+ALTER TABLE "Relationship" DROP CONSTRAINT "Relationship_toPersonId_fkey";
+
 -- DropIndex
 DROP INDEX "PersonProfile_immichPersonId_key";
 
