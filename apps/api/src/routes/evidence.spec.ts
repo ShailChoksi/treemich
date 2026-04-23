@@ -295,6 +295,17 @@ describe("evidence routes", () => {
     expect(mergeSourcesMock).toHaveBeenCalledWith("user-1", "s-a", "s-b");
   });
 
+  it("rejects merge when from and into are the same (schema)", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/evidence/sources/merge",
+      payload: { fromSourceId: "s1", intoSourceId: "s1" }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(mergeSourcesMock).not.toHaveBeenCalled();
+  });
+
   it("creates media and a link (201)", async () => {
     const media = {
       id: "m1",

@@ -11,10 +11,14 @@ import {
   getPersonLifeEventValidation,
   getPersonLifeEvents,
   immichPersonUrl,
+  createEvidenceMediaObject,
+  createEvidenceRepository,
+  listEvidenceMediaObjects,
   listEvidenceRepositories,
   listEvidenceSources,
   login,
-  logout
+  logout,
+  mergeEvidenceSources
 } from "./api";
 
 describe("session-auth API helpers", () => {
@@ -415,6 +419,105 @@ describe("evidence API helpers", () => {
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "/api/evidence/sources?q=census",
       expect.objectContaining({ cache: "no-store" })
+    );
+  });
+
+  it("posts merge sources with JSON body and session", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await mergeEvidenceSources({ fromSourceId: "s-from", intoSourceId: "s-into" });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/evidence/sources/merge",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ fromSourceId: "s-from", intoSourceId: "s-into" }),
+        credentials: "include"
+      })
+    );
+  });
+
+  it("creates a repository via POST", async () => {
+    const row = {
+      id: "r-new",
+      name: "Archive",
+      addressLine1: null,
+      url: null,
+      notes: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z"
+    };
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(row), { status: 201, headers: { "content-type": "application/json" } })
+    );
+
+    const out = await createEvidenceRepository({
+      name: "Archive",
+      addressLine1: null,
+      url: null,
+      notes: null
+    });
+
+    expect(out.id).toBe("r-new");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/evidence/repositories",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("lists media objects from GET /evidence/media", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          mediaObjects: [
+            {
+              id: "m1",
+              storageUrl: "https://example/doc.pdf",
+              mimeType: "application/pdf",
+              checksum: null,
+              immichAssetId: null,
+              title: "Will",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z"
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    const list = await listEvidenceMediaObjects();
+    expect(list).toHaveLength(1);
+    expect(list[0]?.storageUrl).toBe("https://example/doc.pdf");
+  });
+
+  it("creates a media object via POST /evidence/media", async () => {
+    const media = {
+      id: "m2",
+      storageUrl: "https://cdn/x.png",
+      mimeType: "image/png",
+      checksum: null,
+      immichAssetId: null,
+      title: "Photo",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    };
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(media), { status: 201, headers: { "content-type": "application/json" } })
+    );
+
+    const out = await createEvidenceMediaObject({
+      storageUrl: "https://cdn/x.png",
+      mimeType: "image/png",
+      checksum: null,
+      immichAssetId: null,
+      title: "Photo"
+    });
+
+    expect(out.id).toBe("m2");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/evidence/media",
+      expect.objectContaining({ method: "POST" })
     );
   });
 });

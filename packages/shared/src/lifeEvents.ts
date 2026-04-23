@@ -191,6 +191,17 @@ export const createLifeEventBodySchema = z
         });
       }
     }
+    if (body.eventType === "CUSTOM") {
+      const label =
+        body.customLabel === undefined || body.customLabel === null ? "" : body.customLabel.trim();
+      if (!label) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "CUSTOM events require a non-empty customLabel.",
+          path: ["customLabel"]
+        });
+      }
+    }
   });
 
 /** `PATCH` life-event body: all fields optional; same place rules as create. */
@@ -213,6 +224,18 @@ export const patchLifeEventBodySchema = z
   .superRefine((body, ctx) => {
     if (body.placeId && body.place) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Provide only one of placeId or place" });
+    }
+    if (
+      body.customLabel !== undefined &&
+      body.customLabel !== null &&
+      typeof body.customLabel === "string" &&
+      body.customLabel.trim() === ""
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "customLabel cannot be empty when provided.",
+        path: ["customLabel"]
+      });
     }
   });
 

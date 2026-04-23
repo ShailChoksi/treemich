@@ -70,4 +70,26 @@ describe("createLifeEventBodySchema citations", () => {
       })
     ).toThrow(/only one of placeId or place/);
   });
+
+  it("requires customLabel for CUSTOM events", () => {
+    expect(() =>
+      createLifeEventBodySchema.parse({
+        eventType: "CUSTOM",
+        year: 1900,
+        month: 1,
+        day: 1
+      })
+    ).toThrow(/customLabel/);
+  });
+
+  it("accepts CUSTOM with a non-empty customLabel", () => {
+    const body = createLifeEventBodySchema.parse({
+      eventType: "CUSTOM",
+      customLabel: "Muster roll",
+      year: 1900,
+      month: 1,
+      day: 1
+    });
+    expect(body.customLabel).toBe("Muster roll");
+  });
 });

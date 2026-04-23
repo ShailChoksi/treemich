@@ -92,4 +92,16 @@ describe("patchLifeEventBodySchema", () => {
       })
     ).toThrow(/only one of placeId or place/);
   });
+
+  it("rejects explicit empty-string customLabel on patch", () => {
+    expect(() =>
+      patchLifeEventBodySchema.parse({
+        customLabel: ""
+      })
+    ).toThrow(/customLabel cannot be empty/);
+  });
+
+  it("allows customLabel null on patch (omit vs clear handled server-side)", () => {
+    expect(patchLifeEventBodySchema.parse({ customLabel: null })).toEqual({ customLabel: null });
+  });
 });

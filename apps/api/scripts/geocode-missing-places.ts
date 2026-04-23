@@ -13,23 +13,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { geocodePlaceQuery } from "../src/places/nominatimGeocode.js";
+import { geocodeQueryStringFromPlaceParts } from "../src/places/geocodePlaceQueryString.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: join(__dirname, "../../../.env") });
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-const buildQuery = (row: {
-  name: string;
-  locality: string | null;
-  adminArea: string | null;
-  countryCode: string | null;
-}): string => {
-  const parts = [row.locality, row.adminArea, row.countryCode, row.name].filter((p): p is string =>
-    Boolean(p?.trim())
-  );
-  return [...new Set(parts.map((p) => p.trim()))].join(", ");
-};
 
 async function main() {
   const argv = process.argv.slice(2);
@@ -57,7 +46,7 @@ async function main() {
 
     for (let i = 0; i < rows.length; i += 1) {
       const row = rows[i]!;
-      const q = buildQuery(row);
+      const q = geocodeQueryStringFromPlaceParts(row);
       if (!q.trim()) {
         continue;
       }

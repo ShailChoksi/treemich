@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LifeEventRecord } from "../../lib/api";
+import * as api from "../../lib/api";
 import { LifeEventRichForm } from "./LifeEventRichForm";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
@@ -67,6 +68,7 @@ describe("LifeEventRichForm", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    vi.spyOn(api, "listEvidenceSources").mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -214,5 +216,109 @@ describe("LifeEventRichForm", () => {
 
     expect(onSubmitPatch.mock.calls.length).toBe(0);
     expect(container.textContent).toContain("Latitude must be between -90 and 90.");
+  });
+
+  it("blocks create when CUSTOM is selected but custom label is empty", async () => {
+    const onSubmitCreate = vi.fn().mockResolvedValue(undefined);
+
+    await act(async () => {
+      root.render(
+        <LifeEventRichForm
+          variant="create"
+          allowedCreateTypes={["CUSTOM"]}
+          onSubmitCreate={onSubmitCreate}
+          onSubmitPatch={() => Promise.resolve()}
+          onCancel={() => undefined}
+        />
+      );
+    });
+
+    const createButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Create event"
+    );
+    expect(createButton).toBeTruthy();
+
+    await act(async () => {
+      createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onSubmitCreate).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Custom events need a short display label.");
+  });
+
+  it("submits create with customLabel when type is CUSTOM", async () => {
+    const onSubmitCreate = vi.fn().mockResolvedValue(undefined);
+
+    await act(async () => {
+      root.render(
+        <LifeEventRichForm
+          variant="create"
+          allowedCreateTypes={["CUSTOM"]}
+          onSubmitCreate={onSubmitCreate}
+          onSubmitPatch={() => Promise.resolve()}
+          onCancel={() => undefined}
+        />
+      );
+    });
+
+    await setInputValue(findFieldInput(container, "Custom label"), "Muster roll");
+    await setInputValue(findFieldInput(container, "Year"), "1864");
+
+    const createButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Create event"
+    );
+    expect(createButton).toBeTruthy();
+
+    await act(async () => {
+      createButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onSubmitCreate).toHaveBeenCalledTimes(1);
+    expect(onSubmitCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "CUSTOM",
+        customLabel: "Muster roll",
+        year: 1864
+      })
+    );
+  });
+
+  it("blocks save on edit when CUSTOM label is cleared", async () => {
+    const onSubmitPatch = vi.fn().mockResolvedValue(undefined);
+    const customEvent: LifeEventRecord = {
+      ...baseEvent,
+      eventType: "CUSTOM",
+      customLabel: "Original",
+      year: 1900,
+      month: 1,
+      day: 1
+    };
+
+    await act(async () => {
+      root.render(
+        <LifeEventRichForm
+          variant="edit"
+          initialEvent={customEvent}
+          onSubmitCreate={() => Promise.resolve()}
+          onSubmitPatch={onSubmitPatch}
+          onCancel={() => undefined}
+        />
+      );
+    });
+
+    const labelInput = findFieldInput(container, "Custom label");
+    await setInputValue(labelInput, "");
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Save changes"
+    );
+    expect(saveButton).toBeTruthy();
+
+    await act(async () => {
+      saveButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onSubmitPatch).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Custom events need a short display label.");
   });
 });

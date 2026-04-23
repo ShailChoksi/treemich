@@ -86,6 +86,7 @@ const evidenceServiceMock = {
   listSources: vi.fn().mockResolvedValue([]),
   createSource: vi.fn(),
   updateSource: vi.fn(),
+  mergeSources: vi.fn(),
   deleteSource: vi.fn(),
   listMediaObjects: vi.fn().mockResolvedValue([]),
   createMediaObject: vi.fn(),
@@ -1651,12 +1652,44 @@ describe("Treemich API routes", () => {
       method: "POST",
       url: "/people/p1/life-events",
       payload: {
-        eventType: "CUSTOM",
+        eventType: "BIRTH",
+        year: 2000,
         day: 15
       }
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  it("returns 400 when CUSTOM life event omits customLabel (Zod)", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/people/p1/life-events",
+      payload: {
+        eventType: "CUSTOM",
+        year: 1900,
+        month: 1,
+        day: 1
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = response.json() as { issues?: { path: (string | number)[] }[] };
+    expect(body.issues?.some((i) => i.path.includes("customLabel"))).toBe(true);
+    expect(lifeEventServiceMock.createPersonLifeEvent).not.toHaveBeenCalled();
+  });
+
+  it("returns 204 when merging evidence sources", async () => {
+    evidenceServiceMock.mergeSources.mockResolvedValueOnce(undefined);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/evidence/sources/merge",
+      payload: { fromSourceId: "src-a", intoSourceId: "src-b" }
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(evidenceServiceMock.mergeSources).toHaveBeenCalledWith("user-1", "src-a", "src-b");
   });
 
   it("lists relationship life events with citations when include=citations (UI parity)", async () => {

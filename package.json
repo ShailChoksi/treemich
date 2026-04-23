@@ -15,7 +15,7 @@
     "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm run dev -w @treemich/api",
     "dev:web": "npm run dev -w @treemich/web",
-    "test": "npm run test -w @treemich/shared && npm run test -w @treemich/api && npm run test -w @treemich/web",
+    "test": "npm run build -w @treemich/shared && npm run test -w @treemich/shared && npm run test -w @treemich/api && npm run test -w @treemich/web",
     "lint": "npm run build -w @treemich/shared && eslint . --max-warnings=0 && prettier --check . && npm run lint -w @treemich/api && npm run lint -w @treemich/web && npm run lint -w @treemich/shared"
   },
   "engines": {

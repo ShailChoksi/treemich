@@ -164,6 +164,31 @@ describe("EvidenceService", () => {
     expect(rows[0]?.title).toBe("Census 1920");
   });
 
+  it("mergeSources rejects merging a source into itself", async () => {
+    const { EvidenceService } = await import("./service.js");
+    const svc = new EvidenceService();
+    await expect(svc.mergeSources("u1", "s1", "s1")).rejects.toMatchObject({ statusCode: 400 });
+    expect(sourceFindFirstMock).not.toHaveBeenCalled();
+  });
+
+  it("mergeSources returns 404 when the from source is missing", async () => {
+    sourceFindFirstMock.mockResolvedValueOnce(null);
+    const { EvidenceService } = await import("./service.js");
+    const svc = new EvidenceService();
+    await expect(svc.mergeSources("u1", "missing", "s2")).rejects.toMatchObject({ statusCode: 404 });
+    expect(prismaTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it("mergeSources returns 404 when the into source is missing", async () => {
+    sourceFindFirstMock
+      .mockResolvedValueOnce({ id: "from", userId: "u1", title: "A" })
+      .mockResolvedValueOnce(null);
+    const { EvidenceService } = await import("./service.js");
+    const svc = new EvidenceService();
+    await expect(svc.mergeSources("u1", "from", "missing")).rejects.toMatchObject({ statusCode: 404 });
+    expect(prismaTransactionMock).not.toHaveBeenCalled();
+  });
+
   it("mergeSources reassigns citations and deletes the duplicate source", async () => {
     sourceFindFirstMock
       .mockResolvedValueOnce({ id: "from", userId: "u1", title: "A" })

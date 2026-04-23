@@ -4,6 +4,7 @@ import {
   createMediaObjectBodySchema,
   createRepositoryBodySchema,
   createSourceBodySchema,
+  mergeSourcesBodySchema,
   sourceListQuerySchema
 } from "../src/evidence.js";
 
@@ -50,6 +51,25 @@ describe("evidence Zod schemas", () => {
         title: null
       })
     ).toMatchObject({ storageUrl: "https://cdn.example/file.pdf" });
+  });
+
+  it("mergeSourcesBodySchema requires two different source ids", () => {
+    expect(
+      mergeSourcesBodySchema.parse({
+        fromSourceId: "a",
+        intoSourceId: "b"
+      })
+    ).toEqual({ fromSourceId: "a", intoSourceId: "b" });
+
+    const same = mergeSourcesBodySchema.safeParse({
+      fromSourceId: "x",
+      intoSourceId: "x"
+    });
+    expect(same.success).toBe(false);
+    if (same.success) {
+      return;
+    }
+    expect(same.error.issues.some((i) => i.path.includes("intoSourceId"))).toBe(true);
   });
 
   it("createMediaLinkBodySchema restricts targetType", () => {
