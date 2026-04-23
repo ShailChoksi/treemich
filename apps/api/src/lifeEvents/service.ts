@@ -1124,9 +1124,7 @@ export function lifeEventToJson(event: LifeEventWithRelations) {
           id: s.id,
           title: s.title,
           repositoryId: s.repositoryId,
-          repository: s.repository
-            ? { id: s.repository.id, name: s.repository.name }
-            : null
+          repository: s.repository ? { id: s.repository.id, name: s.repository.name } : null
         }
       };
     }),

@@ -227,13 +227,7 @@ export const LifeEventRichForm = ({
         (row): row is NonNullable<typeof row> =>
           row != null &&
           Boolean(
-            row.sourceId ||
-              row.title ||
-              row.repository ||
-              row.url ||
-              row.page ||
-              row.notes ||
-              row.citedAt
+            row.sourceId || row.title || row.repository || row.url || row.page || row.notes || row.citedAt
           )
       );
     return rows.length ? rows : undefined;
@@ -246,13 +240,7 @@ export const LifeEventRichForm = ({
         (row): row is NonNullable<typeof row> =>
           row != null &&
           Boolean(
-            row.sourceId ||
-              row.title ||
-              row.repository ||
-              row.url ||
-              row.page ||
-              row.notes ||
-              row.citedAt
+            row.sourceId || row.title || row.repository || row.url || row.page || row.notes || row.citedAt
           )
       );
   };

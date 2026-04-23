@@ -43,7 +43,15 @@ const toSourceJson = (
     createdAt: Date;
     updatedAt: Date;
   },
-  repository?: { id: string; name: string; addressLine1: string | null; url: string | null; notes: string | null; createdAt: Date; updatedAt: Date } | null
+  repository?: {
+    id: string;
+    name: string;
+    addressLine1: string | null;
+    url: string | null;
+    notes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  } | null
 ): SourceRecord => ({
   id: row.id,
   repositoryId: row.repositoryId,
@@ -267,7 +275,11 @@ export class EvidenceService {
     return toMediaObjectJson(created);
   }
 
-  async updateMediaObject(userId: string, id: string, body: PatchMediaObjectBody): Promise<MediaObjectRecord> {
+  async updateMediaObject(
+    userId: string,
+    id: string,
+    body: PatchMediaObjectBody
+  ): Promise<MediaObjectRecord> {
     const existing = await prisma.mediaObject.findFirst({ where: { id, userId } });
     if (!existing) {
       const err = new Error("Media object not found");
@@ -278,8 +290,12 @@ export class EvidenceService {
       where: { id },
       data: {
         ...(body.storageUrl !== undefined ? { storageUrl: body.storageUrl.trim() } : {}),
-        ...(body.mimeType !== undefined ? { mimeType: body.mimeType?.trim() ? body.mimeType.trim() : null } : {}),
-        ...(body.checksum !== undefined ? { checksum: body.checksum?.trim() ? body.checksum.trim() : null } : {}),
+        ...(body.mimeType !== undefined
+          ? { mimeType: body.mimeType?.trim() ? body.mimeType.trim() : null }
+          : {}),
+        ...(body.checksum !== undefined
+          ? { checksum: body.checksum?.trim() ? body.checksum.trim() : null }
+          : {}),
         ...(body.immichAssetId !== undefined
           ? { immichAssetId: body.immichAssetId?.trim() ? body.immichAssetId.trim() : null }
           : {}),
@@ -312,7 +328,11 @@ export class EvidenceService {
     return rows.map(toMediaLinkJson);
   }
 
-  async createMediaLink(userId: string, mediaObjectId: string, body: CreateMediaLinkBody): Promise<MediaLinkRecord> {
+  async createMediaLink(
+    userId: string,
+    mediaObjectId: string,
+    body: CreateMediaLinkBody
+  ): Promise<MediaLinkRecord> {
     const parent = await prisma.mediaObject.findFirst({ where: { id: mediaObjectId, userId } });
     if (!parent) {
       const err = new Error("Media object not found");

@@ -37,7 +37,11 @@ export const EvidenceLibrariesSection = () => {
   }, [open, load]);
 
   return (
-    <details className="evidence-libraries-details" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details
+      className="evidence-libraries-details"
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
       <summary className="field-label" style={{ cursor: "pointer" }}>
         Sources &amp; repositories
       </summary>

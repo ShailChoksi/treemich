@@ -54,7 +54,9 @@ describe("createLifeEventBodySchema citations", () => {
     const body = createLifeEventBodySchema.parse({
       eventType: "BIRTH",
       year: 1900,
-      citations: [{ sourceId: "s1", title: null, repository: null, url: null, page: null, notes: null, citedAt: null }]
+      citations: [
+        { sourceId: "s1", title: null, repository: null, url: null, page: null, notes: null, citedAt: null }
+      ]
     });
     expect(body.citations).toHaveLength(1);
   });

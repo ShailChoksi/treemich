@@ -155,7 +155,8 @@ export const lifeEventCitationInputSchema = z
     if (!has) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Each citation needs sourceId or at least one of title, repository, url, page, notes, citedAt"
+        message:
+          "Each citation needs sourceId or at least one of title, repository, url, page, notes, citedAt"
       });
     }
   });
