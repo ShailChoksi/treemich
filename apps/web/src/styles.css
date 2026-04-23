@@ -115,16 +115,8 @@ body {
     linear-gradient(180deg, rgba(15, 23, 42, 0.25), rgba(15, 23, 42, 0.55));
 }
 
-@media (max-width: 768px) {
-  .app-shell {
-    padding: 12px;
-  }
-
-  .session-bar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
+/* Stack graph above profile (and sources/map) once the two-column + sticky sidebar layout gets cramped. */
+@media (max-width: 1024px) {
   .people-layout {
     grid-template-columns: 1fr;
   }
@@ -147,6 +139,23 @@ body {
   .graph-surface {
     height: min(62vh, 520px);
     flex: none;
+  }
+
+  .person-detail-panel {
+    height: auto;
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-shell {
+    padding: 12px;
+  }
+
+  .session-bar {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
