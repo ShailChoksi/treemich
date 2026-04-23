@@ -3,11 +3,12 @@ import {
   type LifeEventType,
   type Prisma,
   type Place,
-  type LifeEvent,
-  type LifeEventCitation
+  type LifeEvent
 } from "@prisma/client";
 import type { CreateLifeEventBody, PatchLifeEventBody, PlaceInput } from "@treemich/shared";
 import { prisma } from "../db/client.js";
+import { geocodePlaceQuery } from "../places/nominatimGeocode.js";
+import { replaceLifeEventCitations } from "./citationWrite.js";
 import { isProfilePlaceGeocodingEnabled } from "../config/env.js";
 import { HttpConflictError, HttpNotFoundError, HttpValidationError } from "./errors.js";
 import {
@@ -27,20 +28,36 @@ const isoFromLifeEventRow = (event: Pick<LifeEvent, "year" | "month" | "day">) =
 
 const relationshipScopedTypes: LifeEventType[] = ["MARRIAGE", "DIVORCE"];
 
-const includeDefault = {
+/** Default Prisma include for life-event API responses (nested source + repository for citations). */
+export const lifeEventQueryInclude = {
   place: true,
-  citations: true
-} satisfies Prisma.LifeEventInclude;
+  citations: { include: { source: { include: { repository: true } } } }
+} as const satisfies Prisma.LifeEventInclude;
 
-export type LifeEventWithRelations = LifeEvent & {
-  place: Place | null;
-  citations: LifeEventCitation[];
-};
+export type LifeEventWithRelations = Prisma.LifeEventGetPayload<{
+  include: typeof lifeEventQueryInclude;
+}>;
 
 export class LifeEventService {
   private normalizeText(value: string | null | undefined): string | null {
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
+  }
+
+  private resolveCustomLabelForWrite(
+    nextType: LifeEventType,
+    bodyLabel: string | null | undefined,
+    existingLabel: string | null | undefined
+  ): string | null {
+    if (nextType !== "CUSTOM") {
+      return null;
+    }
+    const fromBody = bodyLabel === undefined || bodyLabel === null ? undefined : bodyLabel.trim();
+    const resolved = fromBody !== undefined ? fromBody : (existingLabel?.trim() ?? "");
+    if (!resolved) {
+      throw new HttpValidationError("CUSTOM life events require a non-empty customLabel.");
+    }
+    return resolved;
   }
 
   private buildBirthGeocodeQuery(city: string | null, country: string | null): string | null {
@@ -59,38 +76,7 @@ export class LifeEventService {
     if (!query) {
       return null;
     }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`,
-        {
-          headers: {
-            Accept: "application/json",
-            "User-Agent": "Treemich/1.0 (+https://github.com/treemich/treemich)"
-          },
-          signal: controller.signal
-        }
-      );
-      if (!response.ok) {
-        return null;
-      }
-      const body = (await response.json()) as Array<{ lat?: string; lon?: string }>;
-      const first = body[0];
-      if (!first) {
-        return null;
-      }
-      const latitude = Number(first.lat);
-      const longitude = Number(first.lon);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        return null;
-      }
-      return { latitude, longitude };
-    } catch {
-      return null;
-    } finally {
-      clearTimeout(timeout);
-    }
+    return geocodePlaceQuery(query);
   }
 
   private extractCityFromCommaName(name: string): string | null {
@@ -369,7 +355,7 @@ export class LifeEventService {
       orderBy: [{ year: "asc" }, { month: "asc" }, { day: "asc" }, { id: "asc" }],
       include: {
         place: true,
-        ...(options?.includeCitations === false ? {} : { citations: true })
+        ...(options?.includeCitations === false ? {} : { citations: lifeEventQueryInclude.citations })
       }
     }) as Promise<LifeEventWithRelations[]>;
   }
@@ -390,32 +376,27 @@ export class LifeEventService {
 
     const placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
     const dateData = this.buildDateData(body);
+    const customLabel = this.resolveCustomLabelForWrite(body.eventType, body.customLabel, undefined);
 
-    const created = await prisma.lifeEvent.create({
-      data: {
-        userId,
-        eventType: body.eventType,
-        ...dateData,
-        personProfileId: profile.id,
-        relationshipId: null,
-        placeId,
-        notes: body.notes ?? null,
-        citations: body.citations?.length
-          ? {
-              create: body.citations.map((c) => ({
-                title: c.title ?? null,
-                repository: c.repository ?? null,
-                url: c.url ?? null,
-                page: c.page ?? null,
-                notes: c.notes ?? null,
-                citedAt: c.citedAt ?? null
-              }))
-            }
-          : undefined
-      },
-      include: includeDefault
-    });
-    const createdRow = created as LifeEventWithRelations;
+    const createdRow = (await prisma.$transaction(async (tx) => {
+      const row = await tx.lifeEvent.create({
+        data: {
+          userId,
+          eventType: body.eventType,
+          customLabel,
+          ...dateData,
+          personProfileId: profile.id,
+          relationshipId: null,
+          placeId,
+          notes: body.notes ?? null
+        }
+      });
+      await replaceLifeEventCitations(tx, userId, row.id, body.citations);
+      return tx.lifeEvent.findFirstOrThrow({
+        where: { id: row.id },
+        include: lifeEventQueryInclude
+      });
+    })) as LifeEventWithRelations;
     await this.maybeBackfillBirthPlaceCoordinates(userId, profile.id, {});
     return createdRow;
   }
@@ -470,32 +451,32 @@ export class LifeEventService {
           } as CreateLifeEventBody)
         : null;
 
-    const updated = await prisma.lifeEvent.update({
-      where: { id: eventId },
-      data: {
-        ...(body.eventType ? { eventType: body.eventType } : {}),
-        ...(dateData ? dateData : {}),
-        ...(body.notes !== undefined ? { notes: body.notes } : {}),
-        ...(placeId !== undefined ? { placeId } : {}),
-        ...(body.citations
-          ? {
-              citations: {
-                deleteMany: {},
-                create: body.citations.map((c) => ({
-                  title: c.title ?? null,
-                  repository: c.repository ?? null,
-                  url: c.url ?? null,
-                  page: c.page ?? null,
-                  notes: c.notes ?? null,
-                  citedAt: c.citedAt ?? null
-                }))
-              }
-            }
-          : {})
-      },
-      include: includeDefault
-    });
-    const updatedRow = updated as LifeEventWithRelations;
+    const shouldUpdateCustomLabel =
+      body.customLabel !== undefined ||
+      (body.eventType !== undefined && body.eventType !== existing.eventType);
+    const nextCustomLabel = shouldUpdateCustomLabel
+      ? this.resolveCustomLabelForWrite(nextType, body.customLabel, existing.customLabel)
+      : undefined;
+
+    const updatedRow = (await prisma.$transaction(async (tx) => {
+      await tx.lifeEvent.update({
+        where: { id: eventId },
+        data: {
+          ...(body.eventType ? { eventType: body.eventType } : {}),
+          ...(dateData ? dateData : {}),
+          ...(body.notes !== undefined ? { notes: body.notes } : {}),
+          ...(placeId !== undefined ? { placeId } : {}),
+          ...(nextCustomLabel !== undefined ? { customLabel: nextCustomLabel } : {})
+        }
+      });
+      if (body.citations !== undefined) {
+        await replaceLifeEventCitations(tx, userId, eventId, body.citations);
+      }
+      return tx.lifeEvent.findFirstOrThrow({
+        where: { id: eventId },
+        include: lifeEventQueryInclude
+      });
+    })) as LifeEventWithRelations;
     await this.maybeBackfillBirthPlaceCoordinates(userId, profile.id, {});
     return updatedRow;
   }
@@ -531,7 +512,7 @@ export class LifeEventService {
       orderBy: [{ year: "asc" }, { id: "asc" }],
       include: {
         place: true,
-        ...(options?.includeCitations === false ? {} : { citations: true })
+        ...(options?.includeCitations === false ? {} : { citations: lifeEventQueryInclude.citations })
       }
     }) as Promise<LifeEventWithRelations[]>;
   }
@@ -551,31 +532,27 @@ export class LifeEventService {
     await this.assertNoDuplicateRelationshipEvent(userId, relationshipId, body.eventType);
     const placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
     const dateData = this.buildDateData(body);
-    const created = await prisma.lifeEvent.create({
-      data: {
-        userId,
-        eventType: body.eventType,
-        ...dateData,
-        personProfileId: null,
-        relationshipId,
-        placeId,
-        notes: body.notes ?? null,
-        citations: body.citations?.length
-          ? {
-              create: body.citations.map((c) => ({
-                title: c.title ?? null,
-                repository: c.repository ?? null,
-                url: c.url ?? null,
-                page: c.page ?? null,
-                notes: c.notes ?? null,
-                citedAt: c.citedAt ?? null
-              }))
-            }
-          : undefined
-      },
-      include: includeDefault
-    });
-    return created as LifeEventWithRelations;
+    const customLabel = this.resolveCustomLabelForWrite(body.eventType, body.customLabel, undefined);
+    const created = (await prisma.$transaction(async (tx) => {
+      const row = await tx.lifeEvent.create({
+        data: {
+          userId,
+          eventType: body.eventType,
+          customLabel,
+          ...dateData,
+          personProfileId: null,
+          relationshipId,
+          placeId,
+          notes: body.notes ?? null
+        }
+      });
+      await replaceLifeEventCitations(tx, userId, row.id, body.citations);
+      return tx.lifeEvent.findFirstOrThrow({
+        where: { id: row.id },
+        include: lifeEventQueryInclude
+      });
+    })) as LifeEventWithRelations;
+    return created;
   }
 
   async updateRelationshipLifeEvent(
@@ -629,32 +606,33 @@ export class LifeEventService {
           } as CreateLifeEventBody)
         : null;
 
-    const updated = await prisma.lifeEvent.update({
-      where: { id: eventId },
-      data: {
-        ...(body.eventType ? { eventType: body.eventType } : {}),
-        ...(dateData ? dateData : {}),
-        ...(body.notes !== undefined ? { notes: body.notes } : {}),
-        ...(placeId !== undefined ? { placeId } : {}),
-        ...(body.citations
-          ? {
-              citations: {
-                deleteMany: {},
-                create: body.citations.map((c) => ({
-                  title: c.title ?? null,
-                  repository: c.repository ?? null,
-                  url: c.url ?? null,
-                  page: c.page ?? null,
-                  notes: c.notes ?? null,
-                  citedAt: c.citedAt ?? null
-                }))
-              }
-            }
-          : {})
-      },
-      include: includeDefault
-    });
-    return updated as LifeEventWithRelations;
+    const shouldUpdateCustomLabel =
+      body.customLabel !== undefined ||
+      (body.eventType !== undefined && body.eventType !== existing.eventType);
+    const nextCustomLabel = shouldUpdateCustomLabel
+      ? this.resolveCustomLabelForWrite(nextType, body.customLabel, existing.customLabel)
+      : undefined;
+
+    const updated = (await prisma.$transaction(async (tx) => {
+      await tx.lifeEvent.update({
+        where: { id: eventId },
+        data: {
+          ...(body.eventType ? { eventType: body.eventType } : {}),
+          ...(dateData ? dateData : {}),
+          ...(body.notes !== undefined ? { notes: body.notes } : {}),
+          ...(placeId !== undefined ? { placeId } : {}),
+          ...(nextCustomLabel !== undefined ? { customLabel: nextCustomLabel } : {})
+        }
+      });
+      if (body.citations !== undefined) {
+        await replaceLifeEventCitations(tx, userId, eventId, body.citations);
+      }
+      return tx.lifeEvent.findFirstOrThrow({
+        where: { id: eventId },
+        include: lifeEventQueryInclude
+      });
+    })) as LifeEventWithRelations;
+    return updated;
   }
 
   async deleteRelationshipLifeEvent(userId: string, relationshipId: string, eventId: string): Promise<void> {
@@ -838,6 +816,7 @@ export class LifeEventService {
         data: {
           userId,
           eventType: "BIRTH",
+          customLabel: null,
           dateQualifier: "EXACT",
           year: dateParts.year ?? null,
           month: dateParts.month ?? null,
@@ -893,6 +872,7 @@ export class LifeEventService {
         data: {
           userId,
           eventType: "DEATH",
+          customLabel: null,
           dateQualifier: "EXACT",
           year: dateParts.year ?? null,
           month: dateParts.month ?? null,
@@ -959,6 +939,7 @@ export class LifeEventService {
               data: {
                 userId,
                 eventType: "MARRIAGE",
+                customLabel: null,
                 dateQualifier: "EXACT",
                 year: parts.year ?? null,
                 month: parts.month ?? null,
@@ -1000,6 +981,7 @@ export class LifeEventService {
               data: {
                 userId,
                 eventType: "DIVORCE",
+                customLabel: null,
                 dateQualifier: "EXACT",
                 year: parts.year ?? null,
                 month: parts.month ?? null,
@@ -1115,6 +1097,7 @@ export function lifeEventToJson(event: LifeEventWithRelations) {
   return {
     id: event.id,
     eventType: event.eventType,
+    customLabel: event.customLabel ?? null,
     dateQualifier: event.dateQualifier,
     year: event.year,
     month: event.month,
@@ -1137,15 +1120,25 @@ export function lifeEventToJson(event: LifeEventWithRelations) {
           notes: event.place.notes
         }
       : null,
-    citations: (event.citations ?? []).map((c) => ({
-      id: c.id,
-      title: c.title,
-      repository: c.repository,
-      url: c.url,
-      page: c.page,
-      notes: c.notes,
-      citedAt: c.citedAt
-    })),
+    citations: (event.citations ?? []).map((c) => {
+      const s = c.source;
+      return {
+        id: c.id,
+        sourceId: c.sourceId,
+        title: s.title,
+        repository: s.repository?.name ?? null,
+        url: s.url,
+        page: c.page,
+        notes: c.notes,
+        citedAt: c.citedAt,
+        source: {
+          id: s.id,
+          title: s.title,
+          repositoryId: s.repositoryId,
+          repository: s.repository ? { id: s.repository.id, name: s.repository.name } : null
+        }
+      };
+    }),
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString()
   };

@@ -130,15 +130,36 @@ export const placeInputSchema = z.object({
   notes: z.string().optional().nullable()
 });
 
-/** Source citation attached to a life event. */
-export const lifeEventCitationInputSchema = z.object({
-  title: z.string().optional().nullable(),
-  repository: z.string().optional().nullable(),
-  url: z.string().optional().nullable(),
-  page: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
-  citedAt: z.string().optional().nullable()
-});
+/** Source citation attached to a life event (inline fields and/or existing shared `sourceId`). */
+export const lifeEventCitationInputSchema = z
+  .object({
+    sourceId: z.string().min(1).optional().nullable(),
+    title: z.string().optional().nullable(),
+    repository: z.string().optional().nullable(),
+    url: z.string().optional().nullable(),
+    page: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
+    citedAt: z.string().optional().nullable()
+  })
+  .superRefine((c, ctx) => {
+    if (c.sourceId?.trim()) {
+      return;
+    }
+    const has =
+      (c.title?.trim() ?? "") ||
+      (c.repository?.trim() ?? "") ||
+      (c.url?.trim() ?? "") ||
+      (c.page?.trim() ?? "") ||
+      (c.notes?.trim() ?? "") ||
+      (c.citedAt?.trim() ?? "");
+    if (!has) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Each citation needs sourceId or at least one of title, repository, url, page, notes, citedAt"
+      });
+    }
+  });
 
 /** `POST` life-event body: type, optional partial dates, place or placeId, notes, citations. */
 export const createLifeEventBodySchema = z
@@ -154,6 +175,7 @@ export const createLifeEventBodySchema = z
     placeId: z.string().min(1).optional().nullable(),
     place: placeInputSchema.optional().nullable(),
     notes: z.string().optional().nullable(),
+    customLabel: z.union([z.string().max(200), z.null()]).optional(),
     citations: z.array(lifeEventCitationInputSchema).optional()
   })
   .superRefine((body, ctx) => {
@@ -166,6 +188,17 @@ export const createLifeEventBodySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "BETWEEN qualifier requires endYear, endMonth, or endDay"
+        });
+      }
+    }
+    if (body.eventType === "CUSTOM") {
+      const label =
+        body.customLabel === undefined || body.customLabel === null ? "" : body.customLabel.trim();
+      if (!label) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "CUSTOM events require a non-empty customLabel.",
+          path: ["customLabel"]
         });
       }
     }
@@ -185,11 +218,24 @@ export const patchLifeEventBodySchema = z
     placeId: z.string().min(1).optional().nullable(),
     place: placeInputSchema.optional().nullable(),
     notes: z.string().optional().nullable(),
+    customLabel: z.union([z.string().max(200), z.null()]).optional(),
     citations: z.array(lifeEventCitationInputSchema).optional()
   })
   .superRefine((body, ctx) => {
     if (body.placeId && body.place) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Provide only one of placeId or place" });
+    }
+    if (
+      body.customLabel !== undefined &&
+      body.customLabel !== null &&
+      typeof body.customLabel === "string" &&
+      body.customLabel.trim() === ""
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "customLabel cannot be empty when provided.",
+        path: ["customLabel"]
+      });
     }
   });
 
@@ -202,15 +248,22 @@ export type LifeEventPlaceRecord = PlaceInput & {
   id: string;
 };
 
-/** Citation row as returned from the API (includes server id). */
+/** Citation row as returned from the API (flattened for editors; `source` when loaded). */
 export type LifeEventCitationRecord = z.infer<typeof lifeEventCitationInputSchema> & {
   id: string;
+  source?: {
+    id: string;
+    title: string;
+    repositoryId: string | null;
+    repository: { id: string; name: string } | null;
+  };
 };
 
 /** Full life-event row including place and citations. */
 export type LifeEventRecord = {
   id: string;
   eventType: LifeEventTypeValue;
+  customLabel: string | null;
   dateQualifier: DateQualifierValue;
   year: number | null;
   month: number | null;

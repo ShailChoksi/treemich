@@ -4,9 +4,32 @@ import { HttpConflictError } from "./errors.js";
 const relationshipFindFirstMock = vi.fn();
 const lifeEventFindFirstMock = vi.fn();
 const lifeEventCreateMock = vi.fn();
+const lifeEventFindFirstOrThrowMock = vi.fn();
+
+const transactionMock = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+  const tx = {
+    lifeEvent: {
+      create: lifeEventCreateMock,
+      findFirstOrThrow: lifeEventFindFirstOrThrowMock
+    },
+    citation: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      create: vi.fn().mockResolvedValue({})
+    },
+    repository: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({ id: "repo-1" })
+    },
+    source: {
+      create: vi.fn().mockResolvedValue({ id: "src-1" })
+    }
+  };
+  return fn(tx);
+});
 
 vi.mock("../db/client.js", () => ({
   prisma: {
+    $transaction: transactionMock,
     relationship: { findFirst: relationshipFindFirstMock },
     lifeEvent: {
       findFirst: lifeEventFindFirstMock,
@@ -20,7 +43,27 @@ describe("LifeEventService.createRelationshipLifeEvent duplicate guard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     relationshipFindFirstMock.mockResolvedValue({ id: "rel-1", userId: "user-1" });
-    lifeEventCreateMock.mockResolvedValue({});
+    lifeEventCreateMock.mockResolvedValue({ id: "new-event" });
+    lifeEventFindFirstOrThrowMock.mockResolvedValue({
+      id: "new-event",
+      userId: "user-1",
+      eventType: "MARRIAGE",
+      dateQualifier: "EXACT",
+      year: 2000,
+      month: 1,
+      day: 1,
+      endYear: null,
+      endMonth: null,
+      endDay: null,
+      personProfileId: null,
+      relationshipId: "rel-1",
+      placeId: null,
+      notes: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      place: null,
+      citations: []
+    });
   });
 
   it("throws HttpConflictError when a MARRIAGE already exists for the relationship", async () => {

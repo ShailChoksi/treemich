@@ -2,13 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { AppServices } from "../services.js";
 
-const triggerComputationMock = vi.fn();
-const getStatusMock = vi.fn();
-const queryEdgesMock = vi.fn();
-const getEdgeBetweenMock = vi.fn();
-const getPersistedPhotoCooccurrenceMock = vi.fn();
-const syncScheduleFromPreferencesMock = vi.fn();
-const getPhotoCooccurrenceMock = vi.fn();
+const listRepositoriesMock = vi.fn();
+const createRepositoryMock = vi.fn();
+const listSourcesMock = vi.fn();
+const createSourceMock = vi.fn();
+const deleteSourceMock = vi.fn();
+const createMediaObjectMock = vi.fn();
+const createMediaLinkMock = vi.fn();
+const mergeSourcesMock = vi.fn();
+
 const loginWithImmichMock = vi.fn();
 const getAuthStateMock = vi.fn();
 const requireSessionMock = vi.fn();
@@ -29,7 +31,7 @@ vi.mock("../db/client.js", () => ({
   }
 }));
 
-describe("cooccurrence routes", () => {
+describe("evidence routes", () => {
   let app: FastifyInstance;
 
   const authContext = {
@@ -90,10 +92,10 @@ describe("cooccurrence routes", () => {
         email: "mike@example.com",
         name: "Mike"
       },
-      linkStatus: {
-        linked: true
-      }
+      linkStatus: { linked: true }
     });
+    listRepositoriesMock.mockResolvedValue([]);
+    listSourcesMock.mockResolvedValue([]);
   });
 
   beforeEach(async () => {
@@ -106,18 +108,18 @@ describe("cooccurrence routes", () => {
         cleanupExpiredSessions: cleanupExpiredSessionsMock
       } as unknown as AppServices["authService"],
       cooccurrenceService: {
-        triggerComputation: triggerComputationMock,
-        getStatus: getStatusMock,
-        queryEdges: queryEdgesMock,
-        getEdgeBetween: getEdgeBetweenMock,
-        getPersistedPhotoCooccurrence: getPersistedPhotoCooccurrenceMock,
-        syncScheduleFromPreferences: syncScheduleFromPreferencesMock
+        triggerComputation: vi.fn(),
+        getStatus: vi.fn(),
+        queryEdges: vi.fn(),
+        getEdgeBetween: vi.fn(),
+        getPersistedPhotoCooccurrence: vi.fn(),
+        syncScheduleFromPreferences: vi.fn()
       } as unknown as AppServices["cooccurrenceService"],
       immichClientFactory: {
         getClient: getClientMock
       } as unknown as AppServices["immichClientFactory"],
       relationshipService: {
-        getPhotoCooccurrence: getPhotoCooccurrenceMock,
+        getPhotoCooccurrence: vi.fn(),
         getProfilesForPersonIds: vi.fn().mockResolvedValue(new Map()),
         getConnectedPersonIds: vi.fn().mockResolvedValue(new Set()),
         listRelationships: vi.fn().mockResolvedValue({ relationships: [], nextCursor: null }),
@@ -159,20 +161,21 @@ describe("cooccurrence routes", () => {
         delete: vi.fn()
       } as unknown as AppServices["researchTaskService"],
       evidenceService: {
-        listRepositories: vi.fn().mockResolvedValue([]),
-        createRepository: vi.fn(),
+        listRepositories: listRepositoriesMock,
+        createRepository: createRepositoryMock,
         updateRepository: vi.fn(),
         deleteRepository: vi.fn(),
-        listSources: vi.fn().mockResolvedValue([]),
-        createSource: vi.fn(),
+        listSources: listSourcesMock,
+        createSource: createSourceMock,
         updateSource: vi.fn(),
-        deleteSource: vi.fn(),
+        mergeSources: mergeSourcesMock,
+        deleteSource: deleteSourceMock,
         listMediaObjects: vi.fn().mockResolvedValue([]),
-        createMediaObject: vi.fn(),
+        createMediaObject: createMediaObjectMock,
         updateMediaObject: vi.fn(),
         deleteMediaObject: vi.fn(),
         listMediaLinksForObject: vi.fn().mockResolvedValue([]),
-        createMediaLink: vi.fn(),
+        createMediaLink: createMediaLinkMock,
         deleteMediaLink: vi.fn()
       } as unknown as AppServices["evidenceService"]
     };
@@ -187,169 +190,174 @@ describe("cooccurrence routes", () => {
     }
   });
 
-  it("triggers a background cooccurrence job", async () => {
-    triggerComputationMock.mockResolvedValue({
-      id: "job-1",
-      status: "PENDING"
+  it("lists repositories for the session user", async () => {
+    listRepositoriesMock.mockResolvedValueOnce([
+      {
+        id: "r1",
+        name: "Archive",
+        addressLine1: null,
+        url: null,
+        notes: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      }
+    ]);
+
+    const response = await app.inject({ method: "GET", url: "/evidence/repositories" });
+
+    expect(response.statusCode).toBe(200);
+    expect(listRepositoriesMock).toHaveBeenCalledWith("user-1");
+    expect(response.json()).toEqual({
+      repositories: [
+        {
+          id: "r1",
+          name: "Archive",
+          addressLine1: null,
+          url: null,
+          notes: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z"
+        }
+      ]
     });
+  });
+
+  it("creates a repository (201)", async () => {
+    const row = {
+      id: "r-new",
+      name: "Library",
+      addressLine1: null,
+      url: null,
+      notes: null,
+      createdAt: "2026-02-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z"
+    };
+    createRepositoryMock.mockResolvedValueOnce(row);
 
     const response = await app.inject({
       method: "POST",
-      url: "/people/cooccurrence/compute"
+      url: "/evidence/repositories",
+      payload: { name: "Library", addressLine1: null, url: null, notes: null }
     });
 
-    expect(response.statusCode).toBe(202);
-    expect(triggerComputationMock).toHaveBeenCalledWith("user-1", expect.any(Object));
-    expect(response.json()).toEqual({
-      jobId: "job-1",
-      status: "PENDING"
+    expect(response.statusCode).toBe(201);
+    expect(createRepositoryMock).toHaveBeenCalledWith("user-1", {
+      name: "Library",
+      addressLine1: null,
+      url: null,
+      notes: null
     });
+    expect(response.json()).toEqual(row);
   });
 
-  it("returns cooccurrence status and schedule info", async () => {
-    getStatusMock.mockResolvedValue({
-      job: {
-        id: "job-1",
-        status: "COMPLETED",
+  it("lists sources with optional query", async () => {
+    listSourcesMock.mockResolvedValueOnce([
+      {
+        id: "s1",
+        repositoryId: null,
+        title: "Census",
+        author: null,
+        publication: null,
+        url: null,
+        notes: null,
         createdAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z"
-      },
-      schedule: {
-        refreshEnabled: true,
-        refreshIntervalDays: 7,
-        nextRunAt: "2026-01-08T00:00:00.000Z",
-        lastRunAt: "2026-01-01T00:00:00.000Z"
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        repository: null
       }
-    });
+    ]);
 
-    const response = await app.inject({
-      method: "GET",
-      url: "/people/cooccurrence/status"
-    });
+    const response = await app.inject({ method: "GET", url: "/evidence/sources?q=census" });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().schedule.refreshIntervalDays).toBe(7);
+    expect(listSourcesMock).toHaveBeenCalledWith("user-1", "census");
+    expect(response.json().sources).toHaveLength(1);
   });
 
-  it("queries persisted cooccurrence edges with filters", async () => {
-    queryEdgesMock.mockResolvedValue({
-      edges: [],
-      nextCursor: null
-    });
+  it("deletes a source (204)", async () => {
+    deleteSourceMock.mockResolvedValueOnce(undefined);
 
-    const response = await app.inject({
-      method: "GET",
-      url: "/people/cooccurrence/edges?personId=p1&minSharedPhotos=3&minScore=0.5&limit=25"
-    });
+    const response = await app.inject({ method: "DELETE", url: "/evidence/sources/s1" });
 
-    expect(response.statusCode).toBe(200);
-    expect(queryEdgesMock).toHaveBeenCalledWith("user-1", {
-      cursor: undefined,
-      limit: 25,
-      minSharedPhotos: 3,
-      minScore: 0.5,
-      personId: "p1"
-    });
+    expect(response.statusCode).toBe(204);
+    expect(deleteSourceMock).toHaveBeenCalledWith("user-1", "s1");
   });
 
-  it("returns a single persisted edge by pair", async () => {
-    getEdgeBetweenMock.mockResolvedValue({
-      id: "edge-1",
-      personAId: "p1",
-      personBId: "p2",
-      sharedPhotos: 4,
-      score: 0.8,
-      personAPhotoCount: 5,
-      personBPhotoCount: 5,
-      computedAt: "2026-01-01T00:00:00.000Z"
-    });
+  it("merges sources (204)", async () => {
+    mergeSourcesMock.mockResolvedValueOnce(undefined);
 
     const response = await app.inject({
-      method: "GET",
-      url: "/people/cooccurrence/pair?personA=p2&personB=p1"
+      method: "POST",
+      url: "/evidence/sources/merge",
+      payload: { fromSourceId: "s-a", intoSourceId: "s-b" }
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(getEdgeBetweenMock).toHaveBeenCalledWith("user-1", "p2", "p1");
+    expect(response.statusCode).toBe(204);
+    expect(mergeSourcesMock).toHaveBeenCalledWith("user-1", "s-a", "s-b");
   });
 
-  it("prefers persisted cooccurrence data when available", async () => {
-    getPersistedPhotoCooccurrenceMock.mockResolvedValue({
-      clusters: [{ id: "cluster-p1", personIds: ["p1", "p2"], size: 2 }],
-      edges: [{ personAId: "p1", personBId: "p2", sharedPhotos: 3, score: 1 }],
-      computedAt: "2026-01-01T00:00:00.000Z",
-      sourcePhotoCount: 5
-    });
-
+  it("rejects merge when from and into are the same (schema)", async () => {
     const response = await app.inject({
-      method: "GET",
-      url: "/people/cooccurrence?minSharedPhotos=2&minScore=0"
+      method: "POST",
+      url: "/evidence/sources/merge",
+      payload: { fromSourceId: "s1", intoSourceId: "s1" }
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(getPersistedPhotoCooccurrenceMock).toHaveBeenCalledWith("user-1", {
-      minSharedPhotos: 2,
-      minScore: 0
-    });
-    expect(getPhotoCooccurrenceMock).toHaveBeenCalledTimes(0);
+    expect(response.statusCode).toBe(400);
+    expect(mergeSourcesMock).not.toHaveBeenCalled();
   });
 
-  it("falls back to the live cooccurrence computation when nothing is persisted yet", async () => {
-    getPersistedPhotoCooccurrenceMock.mockResolvedValue(null);
-    getPhotoCooccurrenceMock.mockResolvedValue({
-      clusters: [],
-      edges: [],
-      computedAt: "2026-01-01T00:00:00.000Z",
-      sourcePhotoCount: 0
-    });
+  it("creates media and a link (201)", async () => {
+    const media = {
+      id: "m1",
+      storageUrl: "https://x/doc.pdf",
+      mimeType: "application/pdf",
+      checksum: null,
+      immichAssetId: null,
+      title: "Will",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    };
+    createMediaObjectMock.mockResolvedValueOnce(media);
+    const link = {
+      id: "lnk1",
+      mediaObjectId: "m1",
+      targetType: "SOURCE" as const,
+      targetId: "s9",
+      notes: null,
+      createdAt: "2026-01-01T00:00:00.000Z"
+    };
+    createMediaLinkMock.mockResolvedValueOnce(link);
 
-    const response = await app.inject({
-      method: "GET",
-      url: "/people/cooccurrence"
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(getPhotoCooccurrenceMock).toHaveBeenCalledWith(
-      "user-1",
-      expect.any(Object),
-      expect.objectContaining({
-        minSharedPhotos: 2,
-        minScore: 0
-      })
-    );
-  });
-
-  it("syncs cooccurrence schedule settings when preferences are updated", async () => {
-    treemichUserFindUniqueOrThrowMock.mockResolvedValue({
-      preferences: {}
-    });
-    treemichUserUpdateMock.mockResolvedValue({
-      preferences: {
-        dismissedSuggestions: ["a"],
-        cooccurrence: {
-          refreshEnabled: false,
-          refreshIntervalDays: 14
-        }
-      }
-    });
-
-    const response = await app.inject({
-      method: "PATCH",
-      url: "/user/preferences",
+    const mediaRes = await app.inject({
+      method: "POST",
+      url: "/evidence/media",
       payload: {
-        dismissedSuggestions: ["a"],
-        cooccurrence: {
-          refreshEnabled: false,
-          refreshIntervalDays: 14
-        }
+        storageUrl: "https://x/doc.pdf",
+        mimeType: "application/pdf",
+        checksum: null,
+        immichAssetId: null,
+        title: "Will"
       }
     });
+    expect(mediaRes.statusCode).toBe(201);
+    expect(createMediaObjectMock).toHaveBeenCalledWith("user-1", {
+      storageUrl: "https://x/doc.pdf",
+      mimeType: "application/pdf",
+      checksum: null,
+      immichAssetId: null,
+      title: "Will"
+    });
 
-    expect(response.statusCode).toBe(200);
-    expect(syncScheduleFromPreferencesMock).toHaveBeenCalledWith("user-1");
-    expect(response.json().cooccurrence).toEqual({
-      refreshEnabled: false,
-      refreshIntervalDays: 14
+    const linkRes = await app.inject({
+      method: "POST",
+      url: "/evidence/media/m1/links",
+      payload: { targetType: "SOURCE", targetId: "s9", notes: null }
+    });
+    expect(linkRes.statusCode).toBe(201);
+    expect(createMediaLinkMock).toHaveBeenCalledWith("user-1", "m1", {
+      targetType: "SOURCE",
+      targetId: "s9",
+      notes: null
     });
   });
 });

@@ -2,7 +2,7 @@
  * @file Create/edit rich life event with partial dates, place, and citations.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createLifeEventBodySchema,
   dateQualifierValues,
@@ -15,7 +15,8 @@ import {
   type LifeEventTypeValue,
   type PatchLifeEventBody
 } from "@treemich/shared";
-import type { LifeEventRecord } from "../../lib/api";
+import type { LifeEventRecord, SourceRecord } from "../../lib/api";
+import { listEvidenceSources } from "../../lib/api";
 import { nullIfEmpty, optionalFloat, optionalInt } from "../../lib/lifeEventFormHelpers";
 
 type Props = {
@@ -30,6 +31,17 @@ type Props = {
   onDelete?: (eventId: string) => Promise<void>;
   onCancel: () => void;
   disabled?: boolean;
+};
+
+type CitationFormRow = {
+  citationMode: "inline" | "existing";
+  sourceId: string;
+  title: string;
+  repository: string;
+  url: string;
+  page: string;
+  notes: string;
+  citedAt: string;
 };
 
 const defaultCreateType = (allowed: LifeEventTypeValue[] | undefined): LifeEventTypeValue => {
@@ -65,6 +77,7 @@ export const LifeEventRichForm = ({
   );
   const [endDay, setEndDay] = useState(initialEvent?.endDay != null ? String(initialEvent.endDay) : "");
   const [notes, setNotes] = useState(initialEvent?.notes ?? "");
+  const [customLabel, setCustomLabel] = useState(initialEvent?.customLabel ?? "");
 
   const [placeName, setPlaceName] = useState(initialEvent?.place?.name ?? "");
   const [placeLocality, setPlaceLocality] = useState(initialEvent?.place?.locality ?? "");
@@ -80,18 +93,52 @@ export const LifeEventRichForm = ({
   );
   const [placeNotes, setPlaceNotes] = useState(initialEvent?.place?.notes ?? "");
 
-  const [citationRows, setCitationRows] = useState<
-    { title: string; repository: string; url: string; page: string; notes: string; citedAt: string }[]
-  >(() =>
-    (initialEvent?.citations ?? []).map((c) => ({
-      title: c.title ?? "",
-      repository: c.repository ?? "",
-      url: c.url ?? "",
-      page: c.page ?? "",
-      notes: c.notes ?? "",
-      citedAt: c.citedAt ?? ""
-    }))
+  const [sourceCatalog, setSourceCatalog] = useState<SourceRecord[]>([]);
+
+  const [citationRows, setCitationRows] = useState<CitationFormRow[]>(() =>
+    (initialEvent?.citations ?? []).map((c) => {
+      const sid = c.sourceId?.trim() || c.source?.id;
+      if (sid) {
+        return {
+          citationMode: "existing",
+          sourceId: sid,
+          title: c.title ?? "",
+          repository: c.repository ?? "",
+          url: c.url ?? "",
+          page: c.page ?? "",
+          notes: c.notes ?? "",
+          citedAt: c.citedAt ?? ""
+        };
+      }
+      return {
+        citationMode: "inline",
+        sourceId: "",
+        title: c.title ?? "",
+        repository: c.repository ?? "",
+        url: c.url ?? "",
+        page: c.page ?? "",
+        notes: c.notes ?? "",
+        citedAt: c.citedAt ?? ""
+      };
+    })
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await listEvidenceSources();
+        if (!cancelled) {
+          setSourceCatalog(list);
+        }
+      } catch {
+        /* catalog is optional for editing */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const typeOptions = useMemo(() => {
     if (fixedEventType) {
@@ -147,32 +194,56 @@ export const LifeEventRichForm = ({
     };
   };
 
-  const buildCitationsPayloadForCreate = () => {
-    const rows = citationRows
-      .map((row) => ({
-        title: nullIfEmpty(row.title),
-        repository: nullIfEmpty(row.repository),
-        url: nullIfEmpty(row.url),
+  const mapRowToPayload = (row: CitationFormRow) => {
+    if (row.citationMode === "existing") {
+      const sid = row.sourceId.trim();
+      if (!sid) {
+        return null;
+      }
+      return {
+        sourceId: sid,
+        title: null,
+        repository: null,
+        url: null,
         page: nullIfEmpty(row.page),
         notes: nullIfEmpty(row.notes),
         citedAt: nullIfEmpty(row.citedAt)
-      }))
-      .filter((row) => row.title || row.repository || row.url || row.page || row.notes || row.citedAt);
-    return rows.length ? rows : undefined;
-  };
-
-  const buildCitationsPayloadForPatch = () => {
-    const rows = citationRows.map((row) => ({
+      };
+    }
+    return {
+      sourceId: null,
       title: nullIfEmpty(row.title),
       repository: nullIfEmpty(row.repository),
       url: nullIfEmpty(row.url),
       page: nullIfEmpty(row.page),
       notes: nullIfEmpty(row.notes),
       citedAt: nullIfEmpty(row.citedAt)
-    }));
-    return rows.filter(
-      (row) => row.title || row.repository || row.url || row.page || row.notes || row.citedAt
-    );
+    };
+  };
+
+  const buildCitationsPayloadForCreate = () => {
+    const rows = citationRows
+      .map(mapRowToPayload)
+      .filter(
+        (row): row is NonNullable<typeof row> =>
+          row != null &&
+          Boolean(
+            row.sourceId || row.title || row.repository || row.url || row.page || row.notes || row.citedAt
+          )
+      );
+    return rows.length ? rows : undefined;
+  };
+
+  const buildCitationsPayloadForPatch = () => {
+    return citationRows
+      .map(mapRowToPayload)
+      .filter(
+        (row): row is NonNullable<typeof row> =>
+          row != null &&
+          Boolean(
+            row.sourceId || row.title || row.repository || row.url || row.page || row.notes || row.citedAt
+          )
+      );
   };
 
   const handleSubmit = async () => {
@@ -210,6 +281,21 @@ export const LifeEventRichForm = ({
     }
     const place = placeResult.value;
 
+    for (let i = 0; i < citationRows.length; i += 1) {
+      const row = citationRows[i]!;
+      if (row.citationMode === "existing" && !row.sourceId.trim()) {
+        setError(`Citation ${i + 1}: choose a source or switch to inline entry.`);
+        return;
+      }
+    }
+
+    const effectiveType =
+      variant === "create" ? (fixedEventType ?? eventType) : (initialEvent?.eventType ?? eventType);
+    if (effectiveType === "CUSTOM" && !nullIfEmpty(customLabel)) {
+      setError("Custom events need a short display label.");
+      return;
+    }
+
     if (variant === "create") {
       const body: CreateLifeEventBody = {
         eventType: fixedEventType ?? eventType,
@@ -223,6 +309,7 @@ export const LifeEventRichForm = ({
         place: place ?? undefined,
         placeId: undefined,
         notes: nullIfEmpty(notes),
+        ...(effectiveType === "CUSTOM" ? { customLabel: nullIfEmpty(customLabel) } : {}),
         citations: buildCitationsPayloadForCreate()
       };
       const parsed = createLifeEventBodySchema.safeParse(body);
@@ -247,6 +334,7 @@ export const LifeEventRichForm = ({
       endDay: ed,
       notes: nullIfEmpty(notes),
       citations: buildCitationsPayloadForPatch(),
+      ...(initialEvent.eventType === "CUSTOM" ? { customLabel: nullIfEmpty(customLabel) } : {}),
       ...(initialEvent.place && !place
         ? { placeId: null, place: null }
         : place
@@ -272,12 +360,35 @@ export const LifeEventRichForm = ({
   const addCitationRow = () => {
     setCitationRows((rows) => [
       ...rows,
-      { title: "", repository: "", url: "", page: "", notes: "", citedAt: "" }
+      {
+        citationMode: "inline",
+        sourceId: "",
+        title: "",
+        repository: "",
+        url: "",
+        page: "",
+        notes: "",
+        citedAt: ""
+      }
     ]);
   };
 
-  const updateCitation = (index: number, key: keyof (typeof citationRows)[0], value: string) => {
+  const updateCitation = (index: number, key: keyof CitationFormRow, value: string) => {
     setCitationRows((rows) => rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
+  };
+
+  const setCitationMode = (index: number, mode: "inline" | "existing") => {
+    setCitationRows((rows) =>
+      rows.map((row, i) =>
+        i === index
+          ? {
+              ...row,
+              citationMode: mode,
+              ...(mode === "inline" ? { sourceId: "" } : {})
+            }
+          : row
+      )
+    );
   };
 
   const removeCitation = (index: number) => {
@@ -325,6 +436,20 @@ export const LifeEventRichForm = ({
                   </option>
                 ))}
             </select>
+          </label>
+        ) : null}
+        {(variant === "create" && (fixedEventType ?? eventType) === "CUSTOM") ||
+        (variant === "edit" && initialEvent?.eventType === "CUSTOM") ? (
+          <label className="field-group">
+            <span className="field-label">Custom label</span>
+            <input
+              type="text"
+              value={customLabel}
+              onChange={(e) => setCustomLabel(e.target.value)}
+              placeholder="e.g. Military discharge"
+              maxLength={200}
+              disabled={disabled}
+            />
           </label>
         ) : null}
         <label className="field-group">
@@ -465,29 +590,62 @@ export const LifeEventRichForm = ({
             style={{ borderBottom: "1px solid rgba(0,0,0,0.08)", paddingBottom: "0.5rem" }}
           >
             <label className="field-group">
-              <span className="field-label">Title</span>
-              <input
-                value={row.title}
-                onChange={(e) => updateCitation(index, "title", e.target.value)}
+              <span className="field-label">Entry mode</span>
+              <select
+                value={row.citationMode}
+                onChange={(e) => setCitationMode(index, e.target.value as "inline" | "existing")}
                 disabled={disabled}
-              />
+              >
+                <option value="inline">Inline (new source)</option>
+                <option value="existing">Existing source</option>
+              </select>
             </label>
-            <label className="field-group">
-              <span className="field-label">Repository</span>
-              <input
-                value={row.repository}
-                onChange={(e) => updateCitation(index, "repository", e.target.value)}
-                disabled={disabled}
-              />
-            </label>
-            <label className="field-group">
-              <span className="field-label">URL</span>
-              <input
-                value={row.url}
-                onChange={(e) => updateCitation(index, "url", e.target.value)}
-                disabled={disabled}
-              />
-            </label>
+            {row.citationMode === "existing" ? (
+              <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+                <span className="field-label">Source</span>
+                <select
+                  value={row.sourceId}
+                  onChange={(e) => updateCitation(index, "sourceId", e.target.value)}
+                  disabled={disabled}
+                >
+                  <option value="">Select…</option>
+                  {sourceCatalog.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.title}
+                      {s.repository ? ` (${s.repository.name})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {row.citationMode === "inline" ? (
+              <>
+                <label className="field-group">
+                  <span className="field-label">Title</span>
+                  <input
+                    value={row.title}
+                    onChange={(e) => updateCitation(index, "title", e.target.value)}
+                    disabled={disabled}
+                  />
+                </label>
+                <label className="field-group">
+                  <span className="field-label">Repository</span>
+                  <input
+                    value={row.repository}
+                    onChange={(e) => updateCitation(index, "repository", e.target.value)}
+                    disabled={disabled}
+                  />
+                </label>
+                <label className="field-group">
+                  <span className="field-label">URL</span>
+                  <input
+                    value={row.url}
+                    onChange={(e) => updateCitation(index, "url", e.target.value)}
+                    disabled={disabled}
+                  />
+                </label>
+              </>
+            ) : null}
             <label className="field-group">
               <span className="field-label">Page</span>
               <input

@@ -13,7 +13,10 @@ import {
 describe("createLifeEventBodySchema UX-related rules", () => {
   it("rejects both placeId and inline place", () => {
     const result = createLifeEventBodySchema.safeParse({
-      eventType: "CUSTOM",
+      eventType: "BIRTH",
+      year: 1900,
+      month: 1,
+      day: 1,
       placeId: "pl-1",
       place: { name: "Somewhere" }
     });
@@ -29,6 +32,7 @@ describe("createLifeEventBodySchema UX-related rules", () => {
   it("rejects BETWEEN without any end date component", () => {
     const result = createLifeEventBodySchema.safeParse({
       eventType: "CUSTOM",
+      customLabel: "Military service",
       dateQualifier: "BETWEEN",
       year: 1900,
       month: 1,
@@ -44,6 +48,7 @@ describe("createLifeEventBodySchema UX-related rules", () => {
   it("accepts BETWEEN when an end year is provided", () => {
     const result = createLifeEventBodySchema.safeParse({
       eventType: "CUSTOM",
+      customLabel: "Military service",
       dateQualifier: "BETWEEN",
       year: 1900,
       month: 1,
@@ -53,6 +58,33 @@ describe("createLifeEventBodySchema UX-related rules", () => {
       endDay: null
     });
     expect(result.success).toBe(true);
+  });
+
+  it("rejects CUSTOM create without customLabel", () => {
+    const result = createLifeEventBodySchema.safeParse({
+      eventType: "CUSTOM",
+      year: 1900,
+      month: 1,
+      day: 1
+    });
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+    expect(result.error.issues.some((i) => i.path.includes("customLabel"))).toBe(true);
+  });
+
+  it("rejects CUSTOM create with blank or whitespace-only customLabel", () => {
+    for (const customLabel of ["", "   ", null] as const) {
+      const result = createLifeEventBodySchema.safeParse({
+        eventType: "CUSTOM",
+        customLabel,
+        year: 1900,
+        month: 1,
+        day: 1
+      });
+      expect(result.success).toBe(false);
+    }
   });
 
   it("accepts new Phase 1 person event types in the shared schema", () => {
