@@ -11,6 +11,8 @@ import {
   getPersonLifeEventValidation,
   getPersonLifeEvents,
   immichPersonUrl,
+  listEvidenceRepositories,
+  listEvidenceSources,
   login,
   logout
 } from "./api";
@@ -353,6 +355,66 @@ describe("phase-2 API helpers", () => {
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "/api/places/map?includeLiving=false",
       expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+});
+
+describe("evidence API helpers", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("loads evidence repositories", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          repositories: [
+            {
+              id: "r1",
+              name: "State Archive",
+              addressLine1: null,
+              url: null,
+              notes: null,
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z"
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    const rows = await listEvidenceRepositories();
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.name).toBe("State Archive");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/evidence/repositories",
+      expect.objectContaining({ cache: "no-store" })
+    );
+  });
+
+  it("loads evidence sources with optional title filter query", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ sources: [{ id: "s1", title: "Census", repositoryId: null }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const rows = await listEvidenceSources("  census ");
+
+    expect(rows).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/evidence/sources?q=census",
+      expect.objectContaining({ cache: "no-store" })
     );
   });
 });

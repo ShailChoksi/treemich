@@ -130,15 +130,35 @@ export const placeInputSchema = z.object({
   notes: z.string().optional().nullable()
 });
 
-/** Source citation attached to a life event. */
-export const lifeEventCitationInputSchema = z.object({
-  title: z.string().optional().nullable(),
-  repository: z.string().optional().nullable(),
-  url: z.string().optional().nullable(),
-  page: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
-  citedAt: z.string().optional().nullable()
-});
+/** Source citation attached to a life event (inline fields and/or existing shared `sourceId`). */
+export const lifeEventCitationInputSchema = z
+  .object({
+    sourceId: z.string().min(1).optional().nullable(),
+    title: z.string().optional().nullable(),
+    repository: z.string().optional().nullable(),
+    url: z.string().optional().nullable(),
+    page: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
+    citedAt: z.string().optional().nullable()
+  })
+  .superRefine((c, ctx) => {
+    if (c.sourceId?.trim()) {
+      return;
+    }
+    const has =
+      (c.title?.trim() ?? "") ||
+      (c.repository?.trim() ?? "") ||
+      (c.url?.trim() ?? "") ||
+      (c.page?.trim() ?? "") ||
+      (c.notes?.trim() ?? "") ||
+      (c.citedAt?.trim() ?? "");
+    if (!has) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Each citation needs sourceId or at least one of title, repository, url, page, notes, citedAt"
+      });
+    }
+  });
 
 /** `POST` life-event body: type, optional partial dates, place or placeId, notes, citations. */
 export const createLifeEventBodySchema = z
@@ -202,9 +222,15 @@ export type LifeEventPlaceRecord = PlaceInput & {
   id: string;
 };
 
-/** Citation row as returned from the API (includes server id). */
+/** Citation row as returned from the API (flattened for editors; `source` when loaded). */
 export type LifeEventCitationRecord = z.infer<typeof lifeEventCitationInputSchema> & {
   id: string;
+  source?: {
+    id: string;
+    title: string;
+    repositoryId: string | null;
+    repository: { id: string; name: string } | null;
+  };
 };
 
 /** Full life-event row including place and citations. */

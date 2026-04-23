@@ -3,11 +3,11 @@ import {
   type LifeEventType,
   type Prisma,
   type Place,
-  type LifeEvent,
-  type LifeEventCitation
+  type LifeEvent
 } from "@prisma/client";
 import type { CreateLifeEventBody, PatchLifeEventBody, PlaceInput } from "@treemich/shared";
 import { prisma } from "../db/client.js";
+import { replaceLifeEventCitations } from "./citationWrite.js";
 import { isProfilePlaceGeocodingEnabled } from "../config/env.js";
 import { HttpConflictError, HttpNotFoundError, HttpValidationError } from "./errors.js";
 import {
@@ -27,15 +27,15 @@ const isoFromLifeEventRow = (event: Pick<LifeEvent, "year" | "month" | "day">) =
 
 const relationshipScopedTypes: LifeEventType[] = ["MARRIAGE", "DIVORCE"];
 
-const includeDefault = {
+/** Default Prisma include for life-event API responses (nested source + repository for citations). */
+export const lifeEventQueryInclude = {
   place: true,
-  citations: true
-} satisfies Prisma.LifeEventInclude;
+  citations: { include: { source: { include: { repository: true } } } }
+} as const satisfies Prisma.LifeEventInclude;
 
-export type LifeEventWithRelations = LifeEvent & {
-  place: Place | null;
-  citations: LifeEventCitation[];
-};
+export type LifeEventWithRelations = Prisma.LifeEventGetPayload<{
+  include: typeof lifeEventQueryInclude;
+}>;
 
 export class LifeEventService {
   private normalizeText(value: string | null | undefined): string | null {
@@ -369,7 +369,7 @@ export class LifeEventService {
       orderBy: [{ year: "asc" }, { month: "asc" }, { day: "asc" }, { id: "asc" }],
       include: {
         place: true,
-        ...(options?.includeCitations === false ? {} : { citations: true })
+        ...(options?.includeCitations === false ? {} : { citations: lifeEventQueryInclude.citations })
       }
     }) as Promise<LifeEventWithRelations[]>;
   }
@@ -391,31 +391,24 @@ export class LifeEventService {
     const placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
     const dateData = this.buildDateData(body);
 
-    const created = await prisma.lifeEvent.create({
-      data: {
-        userId,
-        eventType: body.eventType,
-        ...dateData,
-        personProfileId: profile.id,
-        relationshipId: null,
-        placeId,
-        notes: body.notes ?? null,
-        citations: body.citations?.length
-          ? {
-              create: body.citations.map((c) => ({
-                title: c.title ?? null,
-                repository: c.repository ?? null,
-                url: c.url ?? null,
-                page: c.page ?? null,
-                notes: c.notes ?? null,
-                citedAt: c.citedAt ?? null
-              }))
-            }
-          : undefined
-      },
-      include: includeDefault
-    });
-    const createdRow = created as LifeEventWithRelations;
+    const createdRow = (await prisma.$transaction(async (tx) => {
+      const row = await tx.lifeEvent.create({
+        data: {
+          userId,
+          eventType: body.eventType,
+          ...dateData,
+          personProfileId: profile.id,
+          relationshipId: null,
+          placeId,
+          notes: body.notes ?? null
+        }
+      });
+      await replaceLifeEventCitations(tx, userId, row.id, body.citations);
+      return tx.lifeEvent.findFirstOrThrow({
+        where: { id: row.id },
+        include: lifeEventQueryInclude
+      });
+    })) as LifeEventWithRelations;
     await this.maybeBackfillBirthPlaceCoordinates(userId, profile.id, {});
     return createdRow;
   }
@@ -470,32 +463,24 @@ export class LifeEventService {
           } as CreateLifeEventBody)
         : null;
 
-    const updated = await prisma.lifeEvent.update({
-      where: { id: eventId },
-      data: {
-        ...(body.eventType ? { eventType: body.eventType } : {}),
-        ...(dateData ? dateData : {}),
-        ...(body.notes !== undefined ? { notes: body.notes } : {}),
-        ...(placeId !== undefined ? { placeId } : {}),
-        ...(body.citations
-          ? {
-              citations: {
-                deleteMany: {},
-                create: body.citations.map((c) => ({
-                  title: c.title ?? null,
-                  repository: c.repository ?? null,
-                  url: c.url ?? null,
-                  page: c.page ?? null,
-                  notes: c.notes ?? null,
-                  citedAt: c.citedAt ?? null
-                }))
-              }
-            }
-          : {})
-      },
-      include: includeDefault
-    });
-    const updatedRow = updated as LifeEventWithRelations;
+    const updatedRow = (await prisma.$transaction(async (tx) => {
+      await tx.lifeEvent.update({
+        where: { id: eventId },
+        data: {
+          ...(body.eventType ? { eventType: body.eventType } : {}),
+          ...(dateData ? dateData : {}),
+          ...(body.notes !== undefined ? { notes: body.notes } : {}),
+          ...(placeId !== undefined ? { placeId } : {})
+        }
+      });
+      if (body.citations !== undefined) {
+        await replaceLifeEventCitations(tx, userId, eventId, body.citations);
+      }
+      return tx.lifeEvent.findFirstOrThrow({
+        where: { id: eventId },
+        include: lifeEventQueryInclude
+      });
+    })) as LifeEventWithRelations;
     await this.maybeBackfillBirthPlaceCoordinates(userId, profile.id, {});
     return updatedRow;
   }
@@ -531,7 +516,7 @@ export class LifeEventService {
       orderBy: [{ year: "asc" }, { id: "asc" }],
       include: {
         place: true,
-        ...(options?.includeCitations === false ? {} : { citations: true })
+        ...(options?.includeCitations === false ? {} : { citations: lifeEventQueryInclude.citations })
       }
     }) as Promise<LifeEventWithRelations[]>;
   }
@@ -551,31 +536,25 @@ export class LifeEventService {
     await this.assertNoDuplicateRelationshipEvent(userId, relationshipId, body.eventType);
     const placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
     const dateData = this.buildDateData(body);
-    const created = await prisma.lifeEvent.create({
-      data: {
-        userId,
-        eventType: body.eventType,
-        ...dateData,
-        personProfileId: null,
-        relationshipId,
-        placeId,
-        notes: body.notes ?? null,
-        citations: body.citations?.length
-          ? {
-              create: body.citations.map((c) => ({
-                title: c.title ?? null,
-                repository: c.repository ?? null,
-                url: c.url ?? null,
-                page: c.page ?? null,
-                notes: c.notes ?? null,
-                citedAt: c.citedAt ?? null
-              }))
-            }
-          : undefined
-      },
-      include: includeDefault
-    });
-    return created as LifeEventWithRelations;
+    const created = (await prisma.$transaction(async (tx) => {
+      const row = await tx.lifeEvent.create({
+        data: {
+          userId,
+          eventType: body.eventType,
+          ...dateData,
+          personProfileId: null,
+          relationshipId,
+          placeId,
+          notes: body.notes ?? null
+        }
+      });
+      await replaceLifeEventCitations(tx, userId, row.id, body.citations);
+      return tx.lifeEvent.findFirstOrThrow({
+        where: { id: row.id },
+        include: lifeEventQueryInclude
+      });
+    })) as LifeEventWithRelations;
+    return created;
   }
 
   async updateRelationshipLifeEvent(
@@ -629,32 +608,25 @@ export class LifeEventService {
           } as CreateLifeEventBody)
         : null;
 
-    const updated = await prisma.lifeEvent.update({
-      where: { id: eventId },
-      data: {
-        ...(body.eventType ? { eventType: body.eventType } : {}),
-        ...(dateData ? dateData : {}),
-        ...(body.notes !== undefined ? { notes: body.notes } : {}),
-        ...(placeId !== undefined ? { placeId } : {}),
-        ...(body.citations
-          ? {
-              citations: {
-                deleteMany: {},
-                create: body.citations.map((c) => ({
-                  title: c.title ?? null,
-                  repository: c.repository ?? null,
-                  url: c.url ?? null,
-                  page: c.page ?? null,
-                  notes: c.notes ?? null,
-                  citedAt: c.citedAt ?? null
-                }))
-              }
-            }
-          : {})
-      },
-      include: includeDefault
-    });
-    return updated as LifeEventWithRelations;
+    const updated = (await prisma.$transaction(async (tx) => {
+      await tx.lifeEvent.update({
+        where: { id: eventId },
+        data: {
+          ...(body.eventType ? { eventType: body.eventType } : {}),
+          ...(dateData ? dateData : {}),
+          ...(body.notes !== undefined ? { notes: body.notes } : {}),
+          ...(placeId !== undefined ? { placeId } : {})
+        }
+      });
+      if (body.citations !== undefined) {
+        await replaceLifeEventCitations(tx, userId, eventId, body.citations);
+      }
+      return tx.lifeEvent.findFirstOrThrow({
+        where: { id: eventId },
+        include: lifeEventQueryInclude
+      });
+    })) as LifeEventWithRelations;
+    return updated;
   }
 
   async deleteRelationshipLifeEvent(userId: string, relationshipId: string, eventId: string): Promise<void> {
@@ -1137,15 +1109,27 @@ export function lifeEventToJson(event: LifeEventWithRelations) {
           notes: event.place.notes
         }
       : null,
-    citations: (event.citations ?? []).map((c) => ({
-      id: c.id,
-      title: c.title,
-      repository: c.repository,
-      url: c.url,
-      page: c.page,
-      notes: c.notes,
-      citedAt: c.citedAt
-    })),
+    citations: (event.citations ?? []).map((c) => {
+      const s = c.source;
+      return {
+        id: c.id,
+        sourceId: c.sourceId,
+        title: s.title,
+        repository: s.repository?.name ?? null,
+        url: s.url,
+        page: c.page,
+        notes: c.notes,
+        citedAt: c.citedAt,
+        source: {
+          id: s.id,
+          title: s.title,
+          repositoryId: s.repositoryId,
+          repository: s.repository
+            ? { id: s.repository.id, name: s.repository.name }
+            : null
+        }
+      };
+    }),
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString()
   };

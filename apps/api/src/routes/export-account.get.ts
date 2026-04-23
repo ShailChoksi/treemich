@@ -5,7 +5,7 @@
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";
-import { lifeEventToJson } from "../lifeEvents/service.js";
+import { lifeEventQueryInclude, lifeEventToJson } from "../lifeEvents/service.js";
 import { buildAccountExportManifestV1, zipAccountExport } from "./export-account.zip.js";
 
 const serializeForExport = (value: unknown) =>
@@ -35,6 +35,10 @@ export type AccountExportPayloadV1 = {
   lifeEvents: unknown[];
   personNames: unknown[];
   researchTasks: unknown[];
+  repositories: unknown[];
+  sources: unknown[];
+  mediaObjects: unknown[];
+  mediaLinks: unknown[];
   treemichSessions: unknown[];
   cooccurrenceJobs: unknown[];
   cooccurrenceEdges: unknown[];
@@ -65,6 +69,10 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
       lifeEvents,
       personNames,
       researchTasks,
+      repositories,
+      sources,
+      mediaObjects,
+      mediaLinks,
       sessions,
       linkedAccount,
       cooccurrenceJobs,
@@ -89,10 +97,14 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
       prisma.place.findMany({ where: { userId } }),
       prisma.lifeEvent.findMany({
         where: { userId },
-        include: { place: true, citations: true }
+        include: lifeEventQueryInclude
       }),
       prisma.personName.findMany({ where: { userId } }),
       prisma.researchTask.findMany({ where: { userId } }),
+      prisma.repository.findMany({ where: { userId } }),
+      prisma.source.findMany({ where: { userId }, include: { repository: true } }),
+      prisma.mediaObject.findMany({ where: { userId } }),
+      prisma.mediaLink.findMany({ where: { userId } }),
       prisma.treemichSession.findMany({
         where: { userId },
         select: {
@@ -136,6 +148,10 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
       lifeEvents: lifeEvents.map((row) => lifeEventToJson(row)),
       personNames,
       researchTasks,
+      repositories,
+      sources,
+      mediaObjects,
+      mediaLinks,
       treemichSessions: sessions,
       cooccurrenceJobs,
       cooccurrenceEdges,

@@ -1361,3 +1361,12 @@ textarea:disabled {
     flex-direction: column;
   }
 }
+
+.evidence-libraries-details {
+  margin: 0.75rem 0;
+}
+
+.evidence-list {
+  margin: 0.35rem 0 0.5rem;
+  padding-left: 1.25rem;
+}

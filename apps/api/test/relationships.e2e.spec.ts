@@ -43,6 +43,10 @@ const cooccurrenceJobFindManyMock = vi.fn();
 const cooccurrenceEdgeFindManyMock = vi.fn();
 const cooccurrenceScheduleFindUniqueMock = vi.fn();
 const personNameFindManyMock = vi.fn();
+const repositoryFindManyMock = vi.fn();
+const sourceFindManyMock = vi.fn();
+const mediaObjectFindManyMock = vi.fn();
+const mediaLinkFindManyMock = vi.fn();
 const lifeEventServiceMock = {
   getSpouseMarriageDivorceIsoForPairs: vi.fn().mockResolvedValue(new Map()),
   getBirthDeathByPersonProfileIds: vi.fn().mockResolvedValue(new Map()),
@@ -74,6 +78,23 @@ const researchTaskServiceMock = {
   update: vi.fn(),
   delete: vi.fn()
 };
+const evidenceServiceMock = {
+  listRepositories: vi.fn().mockResolvedValue([]),
+  createRepository: vi.fn(),
+  updateRepository: vi.fn(),
+  deleteRepository: vi.fn(),
+  listSources: vi.fn().mockResolvedValue([]),
+  createSource: vi.fn(),
+  updateSource: vi.fn(),
+  deleteSource: vi.fn(),
+  listMediaObjects: vi.fn().mockResolvedValue([]),
+  createMediaObject: vi.fn(),
+  updateMediaObject: vi.fn(),
+  deleteMediaObject: vi.fn(),
+  listMediaLinksForObject: vi.fn().mockResolvedValue([]),
+  createMediaLink: vi.fn(),
+  deleteMediaLink: vi.fn()
+};
 
 vi.mock("../src/db/client.js", () => ({
   prisma: {
@@ -89,6 +110,10 @@ vi.mock("../src/db/client.js", () => ({
     lifeEvent: { findMany: lifeEventFindManyForExportMock },
     personName: { findMany: personNameFindManyMock },
     researchTask: { findMany: researchTaskFindManyMock },
+    repository: { findMany: repositoryFindManyMock },
+    source: { findMany: sourceFindManyMock },
+    mediaObject: { findMany: mediaObjectFindManyMock },
+    mediaLink: { findMany: mediaLinkFindManyMock },
     treemichSession: { findMany: treemichSessionFindManyMock },
     linkedImmichAccount: { findUnique: linkedImmichAccountFindUniqueMock },
     cooccurrenceJob: { findMany: cooccurrenceJobFindManyMock },
@@ -185,6 +210,10 @@ describe("Treemich API routes", () => {
     lifeEventFindManyForExportMock.mockResolvedValue([]);
     treemichSessionFindManyMock.mockResolvedValue([]);
     researchTaskFindManyMock.mockResolvedValue([]);
+    repositoryFindManyMock.mockResolvedValue([]);
+    sourceFindManyMock.mockResolvedValue([]);
+    mediaObjectFindManyMock.mockResolvedValue([]);
+    mediaLinkFindManyMock.mockResolvedValue([]);
     linkedImmichAccountFindUniqueMock.mockResolvedValue(null);
     cooccurrenceJobFindManyMock.mockResolvedValue([]);
     cooccurrenceEdgeFindManyMock.mockResolvedValue([]);
@@ -235,7 +264,8 @@ describe("Treemich API routes", () => {
       } as unknown as AppServices["relationshipService"],
       lifeEventService: lifeEventServiceMock as unknown as AppServices["lifeEventService"],
       personNameService: personNameServiceMock as unknown as AppServices["personNameService"],
-      researchTaskService: researchTaskServiceMock as unknown as AppServices["researchTaskService"]
+      researchTaskService: researchTaskServiceMock as unknown as AppServices["researchTaskService"],
+      evidenceService: evidenceServiceMock as unknown as AppServices["evidenceService"]
     };
 
     const { buildApp } = await import("../src/app.js");

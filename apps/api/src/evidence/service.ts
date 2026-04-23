@@ -1,0 +1,342 @@
+import type {
+  CreateMediaLinkBody,
+  CreateMediaObjectBody,
+  CreateRepositoryBody,
+  CreateSourceBody,
+  MediaLinkRecord,
+  MediaObjectRecord,
+  PatchMediaObjectBody,
+  PatchRepositoryBody,
+  PatchSourceBody,
+  RepositoryRecord,
+  SourceRecord
+} from "@treemich/shared";
+import { prisma } from "../db/client.js";
+
+const toRepositoryJson = (row: {
+  id: string;
+  name: string;
+  addressLine1: string | null;
+  url: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): RepositoryRecord => ({
+  id: row.id,
+  name: row.name,
+  addressLine1: row.addressLine1,
+  url: row.url,
+  notes: row.notes,
+  createdAt: row.createdAt.toISOString(),
+  updatedAt: row.updatedAt.toISOString()
+});
+
+const toSourceJson = (
+  row: {
+    id: string;
+    repositoryId: string | null;
+    title: string;
+    author: string | null;
+    publication: string | null;
+    url: string | null;
+    notes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+  repository?: { id: string; name: string; addressLine1: string | null; url: string | null; notes: string | null; createdAt: Date; updatedAt: Date } | null
+): SourceRecord => ({
+  id: row.id,
+  repositoryId: row.repositoryId,
+  title: row.title,
+  author: row.author,
+  publication: row.publication,
+  url: row.url,
+  notes: row.notes,
+  createdAt: row.createdAt.toISOString(),
+  updatedAt: row.updatedAt.toISOString(),
+  repository: repository ? toRepositoryJson(repository) : repository === null ? null : undefined
+});
+
+const toMediaObjectJson = (row: {
+  id: string;
+  storageUrl: string;
+  mimeType: string | null;
+  checksum: string | null;
+  immichAssetId: string | null;
+  title: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): MediaObjectRecord => ({
+  id: row.id,
+  storageUrl: row.storageUrl,
+  mimeType: row.mimeType,
+  checksum: row.checksum,
+  immichAssetId: row.immichAssetId,
+  title: row.title,
+  createdAt: row.createdAt.toISOString(),
+  updatedAt: row.updatedAt.toISOString()
+});
+
+const toMediaLinkJson = (row: {
+  id: string;
+  mediaObjectId: string;
+  targetType: "PERSON_PROFILE" | "LIFE_EVENT" | "SOURCE";
+  targetId: string;
+  notes: string | null;
+  createdAt: Date;
+}): MediaLinkRecord => ({
+  id: row.id,
+  mediaObjectId: row.mediaObjectId,
+  targetType: row.targetType,
+  targetId: row.targetId,
+  notes: row.notes,
+  createdAt: row.createdAt.toISOString()
+});
+
+export class EvidenceService {
+  async listRepositories(userId: string): Promise<RepositoryRecord[]> {
+    const rows = await prisma.repository.findMany({
+      where: { userId },
+      orderBy: { name: "asc" }
+    });
+    return rows.map(toRepositoryJson);
+  }
+
+  async createRepository(userId: string, body: CreateRepositoryBody): Promise<RepositoryRecord> {
+    const created = await prisma.repository.create({
+      data: {
+        userId,
+        name: body.name.trim(),
+        addressLine1: body.addressLine1?.trim() ? body.addressLine1.trim() : null,
+        url: body.url?.trim() ? body.url.trim() : null,
+        notes: body.notes?.trim() ? body.notes.trim() : null
+      }
+    });
+    return toRepositoryJson(created);
+  }
+
+  async updateRepository(userId: string, id: string, body: PatchRepositoryBody): Promise<RepositoryRecord> {
+    const existing = await prisma.repository.findFirst({ where: { id, userId } });
+    if (!existing) {
+      const err = new Error("Repository not found");
+      (err as Error & { statusCode: number }).statusCode = 404;
+      throw err;
+    }
+    const updated = await prisma.repository.update({
+      where: { id },
+      data: {
+        ...(body.name !== undefined ? { name: body.name.trim() } : {}),
+        ...(body.addressLine1 !== undefined
+          ? { addressLine1: body.addressLine1?.trim() ? body.addressLine1.trim() : null }
+          : {}),
+        ...(body.url !== undefined ? { url: body.url?.trim() ? body.url.trim() : null } : {}),
+        ...(body.notes !== undefined ? { notes: body.notes?.trim() ? body.notes.trim() : null } : {})
+      }
+    });
+    return toRepositoryJson(updated);
+  }
+
+  async deleteRepository(userId: string, id: string): Promise<void> {
+    const deleted = await prisma.repository.deleteMany({ where: { id, userId } });
+    if (deleted.count === 0) {
+      const err = new Error("Repository not found");
+      (err as Error & { statusCode: number }).statusCode = 404;
+      throw err;
+    }
+  }
+
+  async listSources(userId: string, q?: string): Promise<SourceRecord[]> {
+    const rows = await prisma.source.findMany({
+      where: {
+        userId,
+        ...(q?.trim()
+          ? {
+              title: { contains: q.trim(), mode: "insensitive" as const }
+            }
+          : {})
+      },
+      orderBy: [{ title: "asc" }, { id: "asc" }],
+      include: { repository: true },
+      take: 200
+    });
+    return rows.map((r) => toSourceJson(r, r.repository));
+  }
+
+  async createSource(userId: string, body: CreateSourceBody): Promise<SourceRecord> {
+    if (body.repositoryId) {
+      const repo = await prisma.repository.findFirst({
+        where: { id: body.repositoryId, userId }
+      });
+      if (!repo) {
+        const err = new Error("Repository not found");
+        (err as Error & { statusCode: number }).statusCode = 404;
+        throw err;
+      }
+    }
+    const created = await prisma.source.create({
+      data: {
+        userId,
+        repositoryId: body.repositoryId?.trim() ? body.repositoryId.trim() : null,
+        title: body.title.trim(),
+        author: body.author?.trim() ? body.author.trim() : null,
+        publication: body.publication?.trim() ? body.publication.trim() : null,
+        url: body.url?.trim() ? body.url.trim() : null,
+        notes: body.notes?.trim() ? body.notes.trim() : null
+      },
+      include: { repository: true }
+    });
+    return toSourceJson(created, created.repository);
+  }
+
+  async updateSource(userId: string, id: string, body: PatchSourceBody): Promise<SourceRecord> {
+    const existing = await prisma.source.findFirst({ where: { id, userId } });
+    if (!existing) {
+      const err = new Error("Source not found");
+      (err as Error & { statusCode: number }).statusCode = 404;
+      throw err;
+    }
+    if (body.repositoryId !== undefined && body.repositoryId) {
+      const repo = await prisma.repository.findFirst({
+        where: { id: body.repositoryId, userId }
+      });
+      if (!repo) {
+        const err = new Error("Repository not found");
+        (err as Error & { statusCode: number }).statusCode = 404;
+        throw err;
+      }
+    }
+    const updated = await prisma.source.update({
+      where: { id },
+      data: {
+        ...(body.repositoryId !== undefined
+          ? { repositoryId: body.repositoryId?.trim() ? body.repositoryId.trim() : null }
+          : {}),
+        ...(body.title !== undefined ? { title: body.title.trim() } : {}),
+        ...(body.author !== undefined ? { author: body.author?.trim() ? body.author.trim() : null } : {}),
+        ...(body.publication !== undefined
+          ? { publication: body.publication?.trim() ? body.publication.trim() : null }
+          : {}),
+        ...(body.url !== undefined ? { url: body.url?.trim() ? body.url.trim() : null } : {}),
+        ...(body.notes !== undefined ? { notes: body.notes?.trim() ? body.notes.trim() : null } : {})
+      },
+      include: { repository: true }
+    });
+    return toSourceJson(updated, updated.repository);
+  }
+
+  async deleteSource(userId: string, id: string): Promise<void> {
+    const existing = await prisma.source.findFirst({ where: { id, userId } });
+    if (!existing) {
+      const err = new Error("Source not found");
+      (err as Error & { statusCode: number }).statusCode = 404;
+      throw err;
+    }
+    try {
+      await prisma.source.delete({ where: { id } });
+    } catch (e: unknown) {
+      const code = typeof e === "object" && e && "code" in e ? (e as { code: string }).code : "";
+      if (code === "P2003") {
+        const err = new Error("Source is still cited by one or more life events");
+        (err as Error & { statusCode: number }).statusCode = 409;
+        throw err;
+      }
+      throw e;
+    }
+  }
+
+  async listMediaObjects(userId: string): Promise<MediaObjectRecord[]> {
+    const rows = await prisma.mediaObject.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 500
+    });
+    return rows.map(toMediaObjectJson);
+  }
+
+  async createMediaObject(userId: string, body: CreateMediaObjectBody): Promise<MediaObjectRecord> {
+    const created = await prisma.mediaObject.create({
+      data: {
+        userId,
+        storageUrl: body.storageUrl.trim(),
+        mimeType: body.mimeType?.trim() ? body.mimeType.trim() : null,
+        checksum: body.checksum?.trim() ? body.checksum.trim() : null,
+        immichAssetId: body.immichAssetId?.trim() ? body.immichAssetId.trim() : null,
+        title: body.title?.trim() ? body.title.trim() : null
+      }
+    });
+    return toMediaObjectJson(created);
+  }
+
+  async updateMediaObject(userId: string, id: string, body: PatchMediaObjectBody): Promise<MediaObjectRecord> {
+    const existing = await prisma.mediaObject.findFirst({ where: { id, userId } });
+    if (!existing) {
+      const err = new Error("Media object not found");
+      (err as Error & { statusCode: number }).statusCode = 404;
+      throw err;
+    }
+    const updated = await prisma.mediaObject.update({
+      where: { id },
+      data: {
+        ...(body.storageUrl !== undefined ? { storageUrl: body.storageUrl.trim() } : {}),
+        ...(body.mimeType !== undefined ? { mimeType: body.mimeType?.trim() ? body.mimeType.trim() : null } : {}),
+        ...(body.checksum !== undefined ? { checksum: body.checksum?.trim() ? body.checksum.trim() : null } : {}),
+        ...(body.immichAssetId !== undefined
+          ? { immichAssetId: body.immichAssetId?.trim() ? body.immichAssetId.trim() : null }
+          : {}),
+        ...(body.title !== undefined ? { title: body.title?.trim() ? body.title.trim() : null } : {})
+      }
+    });
+    return toMediaObjectJson(updated);
+  }
+
+  async deleteMediaObject(userId: string, id: string): Promise<void> {
+    const deleted = await prisma.mediaObject.deleteMany({ where: { id, userId } });
+    if (deleted.count === 0) {
+      const err = new Error("Media object not found");
+      (err as Error & { statusCode: number }).statusCode = 404;
+      throw err;
+    }
+  }
+
+  async listMediaLinksForObject(userId: string, mediaObjectId: string): Promise<MediaLinkRecord[]> {
+    const parent = await prisma.mediaObject.findFirst({ where: { id: mediaObjectId, userId } });
+    if (!parent) {
+      const err = new Error("Media object not found");
+      (err as Error & { statusCode: number }).statusCode = 404;
+      throw err;
+    }
+    const rows = await prisma.mediaLink.findMany({
+      where: { userId, mediaObjectId },
+      orderBy: { createdAt: "desc" }
+    });
+    return rows.map(toMediaLinkJson);
+  }
+
+  async createMediaLink(userId: string, mediaObjectId: string, body: CreateMediaLinkBody): Promise<MediaLinkRecord> {
+    const parent = await prisma.mediaObject.findFirst({ where: { id: mediaObjectId, userId } });
+    if (!parent) {
+      const err = new Error("Media object not found");
+      (err as Error & { statusCode: number }).statusCode = 404;
+      throw err;
+    }
+    const created = await prisma.mediaLink.create({
+      data: {
+        userId,
+        mediaObjectId,
+        targetType: body.targetType,
+        targetId: body.targetId.trim(),
+        notes: body.notes?.trim() ? body.notes.trim() : null
+      }
+    });
+    return toMediaLinkJson(created);
+  }
+
+  async deleteMediaLink(userId: string, linkId: string): Promise<void> {
+    const deleted = await prisma.mediaLink.deleteMany({ where: { id: linkId, userId } });
+    if (deleted.count === 0) {
+      const err = new Error("Media link not found");
+      (err as Error & { statusCode: number }).statusCode = 404;
+      throw err;
+    }
+  }
+}

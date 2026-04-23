@@ -25,8 +25,10 @@ import type {
   PhotoCooccurrenceEdge,
   RelationshipRecord,
   RelationshipType,
+  RepositoryRecord,
   SearchRelationshipsResponse,
   ResearchTaskRecord,
+  SourceRecord,
   TreemichPersonProfile,
   UserPreferences
 } from "@treemich/shared";
@@ -51,8 +53,10 @@ export type {
   PhotoCooccurrenceEdge,
   RelationshipRecord,
   RelationshipType,
+  RepositoryRecord,
   ResearchTaskRecord,
   SearchRelationshipsResponse,
+  SourceRecord,
   TreemichPersonProfile,
   UserPreferences
 };
@@ -753,4 +757,21 @@ export const deleteResearchTask = async (taskId: string): Promise<void> => {
     withSession({ method: "DELETE" })
   );
   await ensureOk(response, "Failed to delete research task");
+};
+
+/** `GET /evidence/repositories` — archives / libraries for grouping sources. */
+export const listEvidenceRepositories = async (): Promise<RepositoryRecord[]> => {
+  const response = await fetchWithRetry(`${treemichApi}/evidence/repositories`, { cache: "no-store" });
+  await ensureOk(response, "Failed to load repositories");
+  const body = (await response.json()) as { repositories: RepositoryRecord[] };
+  return body.repositories ?? [];
+};
+
+/** `GET /evidence/sources` — shared bibliography entries (optional `q` filters title). */
+export const listEvidenceSources = async (q?: string): Promise<SourceRecord[]> => {
+  const query = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+  const response = await fetchWithRetry(`${treemichApi}/evidence/sources${query}`, { cache: "no-store" });
+  await ensureOk(response, "Failed to load sources");
+  const body = (await response.json()) as { sources: SourceRecord[] };
+  return body.sources ?? [];
 };

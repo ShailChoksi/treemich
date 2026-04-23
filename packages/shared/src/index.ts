@@ -89,6 +89,7 @@ export type RelationshipRecord = {
 export * from "./lifeEvents.js";
 export * from "./personNames.js";
 export * from "./researchTasks.js";
+export * from "./evidence.js";
 
 /** Weighted edge between two people derived from shared photo appearances. */
 export type PhotoCooccurrenceEdge = {

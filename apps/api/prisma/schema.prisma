@@ -70,6 +70,12 @@ enum ResearchTaskStatus {
   DONE
 }
 
+enum MediaLinkTargetType {
+  PERSON_PROFILE
+  LIFE_EVENT
+  SOURCE
+}
+
 model TreemichUser {
   id                  String                @id @default(cuid())
   immichBaseUrl       String
@@ -90,6 +96,11 @@ model TreemichUser {
   cooccurrenceSchedule CooccurrenceSchedule?
   personNames         PersonName[]
   researchTasks       ResearchTask[]
+  repositories        Repository[]
+  sources             Source[]
+  citations           Citation[]
+  mediaObjects        MediaObject[]
+  mediaLinks          MediaLink[]
 
   @@unique([immichBaseUrl, immichUserId])
   @@unique([immichBaseUrl, immichEmail])
@@ -248,27 +259,96 @@ model LifeEvent {
   personProfile    PersonProfile? @relation(fields: [personProfileId], references: [id], onDelete: Cascade)
   relationship     Relationship?  @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
   place            Place?         @relation(fields: [placeId], references: [id], onDelete: SetNull)
-  citations        LifeEventCitation[]
+  citations        Citation[]
 
   @@index([userId, personProfileId])
   @@index([userId, relationshipId])
   @@index([placeId])
 }
 
-model LifeEventCitation {
+model Repository {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  addressLine1   String?
+  url            String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources        Source[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model Source {
+  id             String       @id @default(cuid())
+  userId         String
+  repositoryId   String?
+  title          String
+  author         String?
+  publication    String?
+  url            String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  user           TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository     Repository?  @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  citations      Citation[]
+
+  @@index([userId])
+  @@index([userId, repositoryId])
+}
+
+model Citation {
   id          String    @id @default(cuid())
+  userId      String
+  sourceId    String
   lifeEventId String
-  title       String?
-  repository  String?
-  url         String?
   page        String?
   notes       String?
   citedAt     String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  lifeEvent   LifeEvent @relation(fields: [lifeEventId], references: [id], onDelete: Cascade)
+  user        TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source      Source       @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  lifeEvent   LifeEvent    @relation(fields: [lifeEventId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@index([lifeEventId])
+  @@index([sourceId])
+}
+
+model MediaObject {
+  id            String       @id @default(cuid())
+  userId        String
+  storageUrl    String
+  mimeType      String?
+  checksum      String?
+  immichAssetId String?
+  title         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  user          TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links         MediaLink[]
+
+  @@index([userId])
+}
+
+model MediaLink {
+  id            String              @id @default(cuid())
+  userId        String
+  mediaObjectId String
+  targetType    MediaLinkTargetType
+  targetId      String
+  notes         String?
+  createdAt     DateTime            @default(now())
+  user          TreemichUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaObject   MediaObject         @relation(fields: [mediaObjectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, targetType, targetId])
+  @@index([mediaObjectId])
 }
 
 model CooccurrenceSchedule {

@@ -157,7 +157,24 @@ describe("cooccurrence routes", () => {
         create: vi.fn(),
         update: vi.fn(),
         delete: vi.fn()
-      } as unknown as AppServices["researchTaskService"]
+      } as unknown as AppServices["researchTaskService"],
+      evidenceService: {
+        listRepositories: vi.fn().mockResolvedValue([]),
+        createRepository: vi.fn(),
+        updateRepository: vi.fn(),
+        deleteRepository: vi.fn(),
+        listSources: vi.fn().mockResolvedValue([]),
+        createSource: vi.fn(),
+        updateSource: vi.fn(),
+        deleteSource: vi.fn(),
+        listMediaObjects: vi.fn().mockResolvedValue([]),
+        createMediaObject: vi.fn(),
+        updateMediaObject: vi.fn(),
+        deleteMediaObject: vi.fn(),
+        listMediaLinksForObject: vi.fn().mockResolvedValue([]),
+        createMediaLink: vi.fn(),
+        deleteMediaLink: vi.fn()
+      } as unknown as AppServices["evidenceService"]
     };
 
     const { buildApp } = await import("../app.js");
