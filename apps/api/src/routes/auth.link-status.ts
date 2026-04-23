@@ -4,15 +4,15 @@
 
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
-import type { AuthenticatedRequestContext, LinkedAuthenticatedRequestContext } from "../auth/service.js";
-
-const hasLinkedAccount = (auth: AuthenticatedRequestContext): auth is LinkedAuthenticatedRequestContext =>
-  "linkedAccount" in auth && auth.linkedAccount != null;
+import { prisma } from "../db/client.js";
 
 export const registerAuthLinkStatusRoute = (app: FastifyInstance) => {
   app.get("/auth/link-status", async (request) => {
     const auth = getRequiredAuth(request);
-    if (!hasLinkedAccount(auth)) {
+    const linked = await prisma.linkedImmichAccount.findUnique({
+      where: { userId: auth.user.id }
+    });
+    if (!linked) {
       return {
         linked: false
       };
@@ -20,9 +20,9 @@ export const registerAuthLinkStatusRoute = (app: FastifyInstance) => {
 
     return {
       linked: true,
-      immichBaseUrl: auth.linkedAccount.immichBaseUrl,
-      immichEmail: auth.linkedAccount.immichEmail,
-      immichName: auth.linkedAccount.immichName
+      immichBaseUrl: linked.immichBaseUrl,
+      immichEmail: linked.immichEmail,
+      immichName: linked.immichName
     };
   });
 };
