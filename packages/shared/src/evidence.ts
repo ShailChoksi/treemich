@@ -36,6 +36,17 @@ export const sourceListQuerySchema = z.object({
   q: z.string().optional()
 });
 
+/** Merge duplicate bibliography rows: reassigns all citations from `fromSourceId` to `intoSourceId`, then deletes the former. */
+export const mergeSourcesBodySchema = z
+  .object({
+    fromSourceId: z.string().min(1),
+    intoSourceId: z.string().min(1)
+  })
+  .refine((b) => b.fromSourceId !== b.intoSourceId, {
+    message: "fromSourceId and intoSourceId must differ",
+    path: ["intoSourceId"]
+  });
+
 export const createMediaObjectBodySchema = z.object({
   storageUrl: z.string().min(1),
   mimeType: z.string().optional().nullable(),
@@ -65,6 +76,7 @@ export type PatchRepositoryBody = z.infer<typeof patchRepositoryBodySchema>;
 export type CreateSourceBody = z.infer<typeof createSourceBodySchema>;
 export type PatchSourceBody = z.infer<typeof patchSourceBodySchema>;
 export type SourceListQuery = z.infer<typeof sourceListQuerySchema>;
+export type MergeSourcesBody = z.infer<typeof mergeSourcesBodySchema>;
 export type CreateMediaObjectBody = z.infer<typeof createMediaObjectBodySchema>;
 export type PatchMediaObjectBody = z.infer<typeof patchMediaObjectBodySchema>;
 export type CreateMediaLinkBody = z.infer<typeof createMediaLinkBodySchema>;

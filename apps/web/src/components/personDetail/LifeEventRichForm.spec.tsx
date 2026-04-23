@@ -10,6 +10,7 @@ reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 const baseEvent: LifeEventRecord = {
   id: "event-1",
   eventType: "RESIDENCE",
+  customLabel: null,
   dateQualifier: "EXACT",
   year: 1995,
   month: 2,

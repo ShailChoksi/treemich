@@ -12,6 +12,7 @@ const noop = () => Promise.resolve();
 const sampleEvent: api.LifeEventRecord = {
   id: "lev-1",
   eventType: "BIRTH",
+  customLabel: null,
   dateQualifier: "EXACT",
   year: 1990,
   month: 1,

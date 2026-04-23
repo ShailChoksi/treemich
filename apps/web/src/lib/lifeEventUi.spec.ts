@@ -8,6 +8,7 @@ import {
 const marriageEvent = (y: number, m: number, d: number): LifeEventRecord => ({
   id: "ev-m",
   eventType: "MARRIAGE",
+  customLabel: null,
   dateQualifier: "EXACT",
   year: y,
   month: m,
@@ -25,6 +26,7 @@ const marriageEvent = (y: number, m: number, d: number): LifeEventRecord => ({
 const divorceEvent = (y: number, m: number, d: number): LifeEventRecord => ({
   id: "ev-d",
   eventType: "DIVORCE",
+  customLabel: null,
   dateQualifier: "EXACT",
   year: y,
   month: m,
@@ -88,6 +90,7 @@ describe("deriveProfileDisplayValuesFromLifeEvents", () => {
       {
         id: "ev-birth",
         eventType: "BIRTH",
+        customLabel: null,
         dateQualifier: "EXACT",
         year: 1991,
         month: 5,
@@ -115,6 +118,7 @@ describe("deriveProfileDisplayValuesFromLifeEvents", () => {
       {
         id: "ev-death",
         eventType: "DEATH",
+        customLabel: null,
         dateQualifier: "EXACT",
         year: 2021,
         month: 7,
@@ -143,6 +147,7 @@ describe("deriveProfileDisplayValuesFromLifeEvents", () => {
       {
         id: "ev-birth",
         eventType: "BIRTH",
+        customLabel: null,
         dateQualifier: "EXACT",
         year: 1991,
         month: null,
@@ -171,6 +176,7 @@ describe("deriveProfileDisplayValuesFromLifeEvents", () => {
       {
         id: "ev-birth",
         eventType: "BIRTH",
+        customLabel: null,
         dateQualifier: "EXACT",
         year: 1991,
         month: 5,
@@ -205,6 +211,7 @@ describe("deriveProfileDisplayValuesFromLifeEvents", () => {
       {
         id: "ev-birth",
         eventType: "BIRTH",
+        customLabel: null,
         dateQualifier: "EXACT",
         year: null,
         month: null,

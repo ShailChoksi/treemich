@@ -46,6 +46,7 @@ import {
 } from "../lib/lifeEventUi";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { EvidenceLibrariesSection } from "../components/EvidenceLibrariesSection";
+import { EvidenceMediaSection } from "../components/EvidenceMediaSection";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
 import { MapPlacesPanel } from "../components/MapPlacesPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
@@ -1306,7 +1307,12 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onResearchTaskUpdate={handleResearchTaskUpdate}
           onResearchTaskDelete={handleResearchTaskDelete}
         />
-        <EvidenceLibrariesSection />
+        {import.meta.env.VITE_EVIDENCE_MANAGEMENT_UI !== "false" ? (
+          <>
+            <EvidenceLibrariesSection />
+            <EvidenceMediaSection />
+          </>
+        ) : null}
         <MapPlacesPanel
           mapUiEnabled={mapUiEnabled}
           places={mapPlaces}

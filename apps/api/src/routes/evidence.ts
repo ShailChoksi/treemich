@@ -7,6 +7,7 @@ import {
   createMediaObjectBodySchema,
   createRepositoryBodySchema,
   createSourceBodySchema,
+  mergeSourcesBodySchema,
   patchMediaObjectBodySchema,
   patchRepositoryBodySchema,
   patchSourceBodySchema,
@@ -60,6 +61,13 @@ export const registerEvidenceRoutes = (app: FastifyInstance) => {
     const body = createSourceBodySchema.parse(request.body);
     const row = await app.services.evidenceService.createSource(auth.user.id, body);
     return reply.code(201).send(row);
+  });
+
+  app.post("/evidence/sources/merge", async (request, reply) => {
+    const auth = getRequiredAuth(request);
+    const body = mergeSourcesBodySchema.parse(request.body);
+    await app.services.evidenceService.mergeSources(auth.user.id, body.fromSourceId, body.intoSourceId);
+    return reply.code(204).send();
   });
 
   app.patch("/evidence/sources/:id", async (request) => {

@@ -7,6 +7,7 @@ import {
 } from "@prisma/client";
 import type { CreateLifeEventBody, PatchLifeEventBody, PlaceInput } from "@treemich/shared";
 import { prisma } from "../db/client.js";
+import { geocodePlaceQuery } from "../places/nominatimGeocode.js";
 import { replaceLifeEventCitations } from "./citationWrite.js";
 import { isProfilePlaceGeocodingEnabled } from "../config/env.js";
 import { HttpConflictError, HttpNotFoundError, HttpValidationError } from "./errors.js";
@@ -43,6 +44,22 @@ export class LifeEventService {
     return trimmed ? trimmed : null;
   }
 
+  private resolveCustomLabelForWrite(
+    nextType: LifeEventType,
+    bodyLabel: string | null | undefined,
+    existingLabel: string | null | undefined
+  ): string | null {
+    if (nextType !== "CUSTOM") {
+      return null;
+    }
+    const fromBody = bodyLabel === undefined || bodyLabel === null ? undefined : bodyLabel.trim();
+    const resolved = fromBody !== undefined ? fromBody : (existingLabel?.trim() ?? "");
+    if (!resolved) {
+      throw new HttpValidationError("CUSTOM life events require a non-empty customLabel.");
+    }
+    return resolved;
+  }
+
   private buildBirthGeocodeQuery(city: string | null, country: string | null): string | null {
     const parts = [city, country].filter((part): part is string => Boolean(part?.trim()));
     if (parts.length === 0) {
@@ -59,38 +76,7 @@ export class LifeEventService {
     if (!query) {
       return null;
     }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`,
-        {
-          headers: {
-            Accept: "application/json",
-            "User-Agent": "Treemich/1.0 (+https://github.com/treemich/treemich)"
-          },
-          signal: controller.signal
-        }
-      );
-      if (!response.ok) {
-        return null;
-      }
-      const body = (await response.json()) as Array<{ lat?: string; lon?: string }>;
-      const first = body[0];
-      if (!first) {
-        return null;
-      }
-      const latitude = Number(first.lat);
-      const longitude = Number(first.lon);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        return null;
-      }
-      return { latitude, longitude };
-    } catch {
-      return null;
-    } finally {
-      clearTimeout(timeout);
-    }
+    return geocodePlaceQuery(query);
   }
 
   private extractCityFromCommaName(name: string): string | null {
@@ -390,12 +376,14 @@ export class LifeEventService {
 
     const placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
     const dateData = this.buildDateData(body);
+    const customLabel = this.resolveCustomLabelForWrite(body.eventType, body.customLabel, undefined);
 
     const createdRow = (await prisma.$transaction(async (tx) => {
       const row = await tx.lifeEvent.create({
         data: {
           userId,
           eventType: body.eventType,
+          customLabel,
           ...dateData,
           personProfileId: profile.id,
           relationshipId: null,
@@ -463,6 +451,13 @@ export class LifeEventService {
           } as CreateLifeEventBody)
         : null;
 
+    const shouldUpdateCustomLabel =
+      body.customLabel !== undefined ||
+      (body.eventType !== undefined && body.eventType !== existing.eventType);
+    const nextCustomLabel = shouldUpdateCustomLabel
+      ? this.resolveCustomLabelForWrite(nextType, body.customLabel, existing.customLabel)
+      : undefined;
+
     const updatedRow = (await prisma.$transaction(async (tx) => {
       await tx.lifeEvent.update({
         where: { id: eventId },
@@ -470,7 +465,8 @@ export class LifeEventService {
           ...(body.eventType ? { eventType: body.eventType } : {}),
           ...(dateData ? dateData : {}),
           ...(body.notes !== undefined ? { notes: body.notes } : {}),
-          ...(placeId !== undefined ? { placeId } : {})
+          ...(placeId !== undefined ? { placeId } : {}),
+          ...(nextCustomLabel !== undefined ? { customLabel: nextCustomLabel } : {})
         }
       });
       if (body.citations !== undefined) {
@@ -536,11 +532,13 @@ export class LifeEventService {
     await this.assertNoDuplicateRelationshipEvent(userId, relationshipId, body.eventType);
     const placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
     const dateData = this.buildDateData(body);
+    const customLabel = this.resolveCustomLabelForWrite(body.eventType, body.customLabel, undefined);
     const created = (await prisma.$transaction(async (tx) => {
       const row = await tx.lifeEvent.create({
         data: {
           userId,
           eventType: body.eventType,
+          customLabel,
           ...dateData,
           personProfileId: null,
           relationshipId,
@@ -608,6 +606,13 @@ export class LifeEventService {
           } as CreateLifeEventBody)
         : null;
 
+    const shouldUpdateCustomLabel =
+      body.customLabel !== undefined ||
+      (body.eventType !== undefined && body.eventType !== existing.eventType);
+    const nextCustomLabel = shouldUpdateCustomLabel
+      ? this.resolveCustomLabelForWrite(nextType, body.customLabel, existing.customLabel)
+      : undefined;
+
     const updated = (await prisma.$transaction(async (tx) => {
       await tx.lifeEvent.update({
         where: { id: eventId },
@@ -615,7 +620,8 @@ export class LifeEventService {
           ...(body.eventType ? { eventType: body.eventType } : {}),
           ...(dateData ? dateData : {}),
           ...(body.notes !== undefined ? { notes: body.notes } : {}),
-          ...(placeId !== undefined ? { placeId } : {})
+          ...(placeId !== undefined ? { placeId } : {}),
+          ...(nextCustomLabel !== undefined ? { customLabel: nextCustomLabel } : {})
         }
       });
       if (body.citations !== undefined) {
@@ -810,6 +816,7 @@ export class LifeEventService {
         data: {
           userId,
           eventType: "BIRTH",
+          customLabel: null,
           dateQualifier: "EXACT",
           year: dateParts.year ?? null,
           month: dateParts.month ?? null,
@@ -865,6 +872,7 @@ export class LifeEventService {
         data: {
           userId,
           eventType: "DEATH",
+          customLabel: null,
           dateQualifier: "EXACT",
           year: dateParts.year ?? null,
           month: dateParts.month ?? null,
@@ -931,6 +939,7 @@ export class LifeEventService {
               data: {
                 userId,
                 eventType: "MARRIAGE",
+                customLabel: null,
                 dateQualifier: "EXACT",
                 year: parts.year ?? null,
                 month: parts.month ?? null,
@@ -972,6 +981,7 @@ export class LifeEventService {
               data: {
                 userId,
                 eventType: "DIVORCE",
+                customLabel: null,
                 dateQualifier: "EXACT",
                 year: parts.year ?? null,
                 month: parts.month ?? null,
@@ -1087,6 +1097,7 @@ export function lifeEventToJson(event: LifeEventWithRelations) {
   return {
     id: event.id,
     eventType: event.eventType,
+    customLabel: event.customLabel ?? null,
     dateQualifier: event.dateQualifier,
     year: event.year,
     month: event.month,

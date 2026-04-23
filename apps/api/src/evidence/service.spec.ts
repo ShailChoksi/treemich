@@ -18,6 +18,8 @@ const mediaObjectDeleteManyMock = vi.fn();
 const mediaLinkFindManyMock = vi.fn();
 const mediaLinkCreateMock = vi.fn();
 const mediaLinkDeleteManyMock = vi.fn();
+const citationUpdateManyMock = vi.fn();
+const prismaTransactionMock = vi.fn();
 
 vi.mock("../db/client.js", () => ({
   prisma: {
@@ -46,13 +48,23 @@ vi.mock("../db/client.js", () => ({
       findMany: mediaLinkFindManyMock,
       create: mediaLinkCreateMock,
       deleteMany: mediaLinkDeleteManyMock
-    }
+    },
+    citation: {
+      updateMany: citationUpdateManyMock
+    },
+    $transaction: prismaTransactionMock
   }
 }));
 
 describe("EvidenceService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaTransactionMock.mockImplementation(async (fn: (tx: unknown) => Promise<void>) => {
+      await fn({
+        citation: { updateMany: citationUpdateManyMock },
+        source: { delete: sourceDeleteMock }
+      });
+    });
   });
 
   it("lists repositories ordered by name", async () => {
@@ -150,6 +162,24 @@ describe("EvidenceService", () => {
       take: 200
     });
     expect(rows[0]?.title).toBe("Census 1920");
+  });
+
+  it("mergeSources reassigns citations and deletes the duplicate source", async () => {
+    sourceFindFirstMock
+      .mockResolvedValueOnce({ id: "from", userId: "u1", title: "A" })
+      .mockResolvedValueOnce({ id: "into", userId: "u1", title: "B" });
+    citationUpdateManyMock.mockResolvedValueOnce({ count: 2 });
+    sourceDeleteMock.mockResolvedValueOnce({ id: "from" });
+
+    const { EvidenceService } = await import("./service.js");
+    const svc = new EvidenceService();
+    await svc.mergeSources("u1", "from", "into");
+
+    expect(citationUpdateManyMock).toHaveBeenCalledWith({
+      where: { userId: "u1", sourceId: "from" },
+      data: { sourceId: "into" }
+    });
+    expect(sourceDeleteMock).toHaveBeenCalledWith({ where: { id: "from" } });
   });
 
   it("rejects createSource when repositoryId does not belong to user", async () => {

@@ -9,6 +9,7 @@ describe("lifeEventToJson", () => {
       id: "le-1",
       userId: "u1",
       eventType: "BIRTH",
+      customLabel: null,
       dateQualifier: "EXACT",
       year: 1920,
       month: null,
@@ -84,6 +85,7 @@ describe("lifeEventToJson", () => {
       id: "le-2",
       userId: "u1",
       eventType: "DEATH",
+      customLabel: null,
       dateQualifier: "EXACT",
       year: 2000,
       month: null,
@@ -127,5 +129,32 @@ describe("lifeEventToJson", () => {
     const json = lifeEventToJson(event);
     expect(json.citations[0]?.repository).toBeNull();
     expect(json.citations[0]?.source.repository).toBeNull();
+  });
+
+  it("includes customLabel for CUSTOM events", () => {
+    const event = {
+      id: "le-3",
+      userId: "u1",
+      eventType: "CUSTOM",
+      customLabel: "Discharge",
+      dateQualifier: "EXACT",
+      year: 1945,
+      month: 5,
+      day: 1,
+      endYear: null,
+      endMonth: null,
+      endDay: null,
+      personProfileId: "pp1",
+      relationshipId: null,
+      placeId: null,
+      notes: null,
+      createdAt: ts,
+      updatedAt: ts,
+      place: null,
+      citations: []
+    } as unknown as LifeEventWithRelations;
+
+    const json = lifeEventToJson(event);
+    expect(json.customLabel).toBe("Discharge");
   });
 });

@@ -175,6 +175,7 @@ export const createLifeEventBodySchema = z
     placeId: z.string().min(1).optional().nullable(),
     place: placeInputSchema.optional().nullable(),
     notes: z.string().optional().nullable(),
+    customLabel: z.union([z.string().max(200), z.null()]).optional(),
     citations: z.array(lifeEventCitationInputSchema).optional()
   })
   .superRefine((body, ctx) => {
@@ -206,6 +207,7 @@ export const patchLifeEventBodySchema = z
     placeId: z.string().min(1).optional().nullable(),
     place: placeInputSchema.optional().nullable(),
     notes: z.string().optional().nullable(),
+    customLabel: z.union([z.string().max(200), z.null()]).optional(),
     citations: z.array(lifeEventCitationInputSchema).optional()
   })
   .superRefine((body, ctx) => {
@@ -238,6 +240,7 @@ export type LifeEventCitationRecord = z.infer<typeof lifeEventCitationInputSchem
 export type LifeEventRecord = {
   id: string;
   eventType: LifeEventTypeValue;
+  customLabel: string | null;
   dateQualifier: DateQualifierValue;
   year: number | null;
   month: number | null;

@@ -40,6 +40,7 @@ type PanelProps = ComponentProps<typeof PersonDetailPanel>;
 const marriageEv = (y: number, m: number, d: number): LifeEventRecord => ({
   id: "ev-m",
   eventType: "MARRIAGE",
+  customLabel: null,
   dateQualifier: "EXACT",
   year: y,
   month: m,
@@ -57,6 +58,7 @@ const marriageEv = (y: number, m: number, d: number): LifeEventRecord => ({
 const divorceEv = (y: number, m: number, d: number): LifeEventRecord => ({
   id: "ev-d",
   eventType: "DIVORCE",
+  customLabel: null,
   dateQualifier: "EXACT",
   year: y,
   month: m,

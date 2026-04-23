@@ -46,6 +46,7 @@ describe("summarizeLifeEvent", () => {
   const base = (): LifeEventRecord => ({
     id: "e1",
     eventType: "BIRTH",
+    customLabel: null,
     dateQualifier: "EXACT",
     year: 1991,
     month: 5,
@@ -67,5 +68,18 @@ describe("summarizeLifeEvent", () => {
 
   it("shows qualifier when not EXACT", () => {
     expect(summarizeLifeEvent({ ...base(), dateQualifier: "ABOUT" })).toContain("(ABOUT)");
+  });
+
+  it("shows custom label for CUSTOM events", () => {
+    const s = summarizeLifeEvent({
+      ...base(),
+      eventType: "CUSTOM",
+      customLabel: "Muster roll",
+      year: 1864,
+      month: 7,
+      day: 1
+    });
+    expect(s).toContain("Custom (Muster roll)");
+    expect(s).toContain("1864-07-01");
   });
 });

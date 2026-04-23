@@ -9,6 +9,7 @@ const createSourceMock = vi.fn();
 const deleteSourceMock = vi.fn();
 const createMediaObjectMock = vi.fn();
 const createMediaLinkMock = vi.fn();
+const mergeSourcesMock = vi.fn();
 
 const loginWithImmichMock = vi.fn();
 const getAuthStateMock = vi.fn();
@@ -167,6 +168,7 @@ describe("evidence routes", () => {
         listSources: listSourcesMock,
         createSource: createSourceMock,
         updateSource: vi.fn(),
+        mergeSources: mergeSourcesMock,
         deleteSource: deleteSourceMock,
         listMediaObjects: vi.fn().mockResolvedValue([]),
         createMediaObject: createMediaObjectMock,
@@ -278,6 +280,19 @@ describe("evidence routes", () => {
 
     expect(response.statusCode).toBe(204);
     expect(deleteSourceMock).toHaveBeenCalledWith("user-1", "s1");
+  });
+
+  it("merges sources (204)", async () => {
+    mergeSourcesMock.mockResolvedValueOnce(undefined);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/evidence/sources/merge",
+      payload: { fromSourceId: "s-a", intoSourceId: "s-b" }
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(mergeSourcesMock).toHaveBeenCalledWith("user-1", "s-a", "s-b");
   });
 
   it("creates media and a link (201)", async () => {

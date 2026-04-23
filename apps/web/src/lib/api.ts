@@ -8,8 +8,11 @@ import type {
   AuthState,
   AuthUser,
   CreateLifeEventBody,
+  CreateMediaObjectBody,
   CreatePersonNameBody,
+  CreateRepositoryBody,
   CreateResearchTaskBody,
+  CreateSourceBody,
   GraphLayoutRequest,
   GraphLayoutResponse,
   GenderValue as Gender,
@@ -17,6 +20,8 @@ import type {
   LifeEventListResponse,
   LifeEventRecord,
   LinkStatus,
+  MediaObjectRecord,
+  MergeSourcesBody,
   PatchLifeEventBody,
   PatchPersonNameBody,
   PatchResearchTaskBody,
@@ -38,13 +43,18 @@ export type {
   AuthState,
   AuthUser,
   CreateLifeEventBody,
+  CreateMediaObjectBody,
   CreatePersonNameBody,
+  CreateRepositoryBody,
   CreateResearchTaskBody,
+  CreateSourceBody,
   GraphLayoutRequest,
   GraphLayoutResponse,
   Gender,
   LinkStatus,
   LifeEventRecord,
+  MediaObjectRecord,
+  MergeSourcesBody,
   PatchLifeEventBody,
   PatchPersonNameBody,
   PatchResearchTaskBody,
@@ -774,4 +784,67 @@ export const listEvidenceSources = async (q?: string): Promise<SourceRecord[]> =
   await ensureOk(response, "Failed to load sources");
   const body = (await response.json()) as { sources: SourceRecord[] };
   return body.sources ?? [];
+};
+
+/** `POST /evidence/repositories`. */
+export const createEvidenceRepository = async (body: CreateRepositoryBody): Promise<RepositoryRecord> => {
+  const response = await fetch(
+    `${treemichApi}/evidence/repositories`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create repository");
+  return (await response.json()) as RepositoryRecord;
+};
+
+/** `POST /evidence/sources`. */
+export const createEvidenceSource = async (body: CreateSourceBody): Promise<SourceRecord> => {
+  const response = await fetch(
+    `${treemichApi}/evidence/sources`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create source");
+  return (await response.json()) as SourceRecord;
+};
+
+/** `POST /evidence/sources/merge` — reassigns citations then deletes the duplicate source. */
+export const mergeEvidenceSources = async (body: MergeSourcesBody): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/evidence/sources/merge`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to merge sources");
+};
+
+/** `GET /evidence/media` — registered media objects (URLs, checksums, optional Immich link). */
+export const listEvidenceMediaObjects = async (): Promise<MediaObjectRecord[]> => {
+  const response = await fetchWithRetry(`${treemichApi}/evidence/media`, { cache: "no-store" });
+  await ensureOk(response, "Failed to load media objects");
+  const body = (await response.json()) as { mediaObjects: MediaObjectRecord[] };
+  return body.mediaObjects ?? [];
+};
+
+/** `POST /evidence/media`. */
+export const createEvidenceMediaObject = async (body: CreateMediaObjectBody): Promise<MediaObjectRecord> => {
+  const response = await fetch(
+    `${treemichApi}/evidence/media`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create media object");
+  return (await response.json()) as MediaObjectRecord;
 };

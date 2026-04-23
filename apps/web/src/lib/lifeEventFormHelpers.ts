@@ -38,7 +38,11 @@ export const nullIfEmpty = (raw: string): string | null => {
 
 /** One-line summary for pickers and lists (type label + Y-M-D + qualifier when not exact). */
 export const summarizeLifeEvent = (event: LifeEventRecord): string => {
-  const parts: string[] = [lifeEventTypeLabels[event.eventType] ?? event.eventType];
+  const typeLabel =
+    event.eventType === "CUSTOM" && event.customLabel?.trim()
+      ? `Custom (${event.customLabel.trim()})`
+      : (lifeEventTypeLabels[event.eventType] ?? event.eventType);
+  const parts: string[] = [typeLabel];
   const y = event.year != null ? String(event.year) : "?";
   const m = event.month != null ? String(event.month).padStart(2, "0") : "?";
   const d = event.day != null ? String(event.day).padStart(2, "0") : "?";

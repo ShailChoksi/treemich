@@ -242,6 +242,8 @@ model LifeEvent {
   id               String         @id @default(cuid())
   userId           String
   eventType        LifeEventType
+  /** Non-null display label when `eventType` is CUSTOM (required by API for CUSTOM). */
+  customLabel      String?
   dateQualifier    DateQualifier  @default(EXACT)
   year             Int?
   month            Int?

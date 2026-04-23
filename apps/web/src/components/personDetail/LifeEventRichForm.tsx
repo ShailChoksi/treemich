@@ -77,6 +77,7 @@ export const LifeEventRichForm = ({
   );
   const [endDay, setEndDay] = useState(initialEvent?.endDay != null ? String(initialEvent.endDay) : "");
   const [notes, setNotes] = useState(initialEvent?.notes ?? "");
+  const [customLabel, setCustomLabel] = useState(initialEvent?.customLabel ?? "");
 
   const [placeName, setPlaceName] = useState(initialEvent?.place?.name ?? "");
   const [placeLocality, setPlaceLocality] = useState(initialEvent?.place?.locality ?? "");
@@ -288,6 +289,13 @@ export const LifeEventRichForm = ({
       }
     }
 
+    const effectiveType =
+      variant === "create" ? (fixedEventType ?? eventType) : (initialEvent?.eventType ?? eventType);
+    if (effectiveType === "CUSTOM" && !nullIfEmpty(customLabel)) {
+      setError("Custom events need a short display label.");
+      return;
+    }
+
     if (variant === "create") {
       const body: CreateLifeEventBody = {
         eventType: fixedEventType ?? eventType,
@@ -301,6 +309,7 @@ export const LifeEventRichForm = ({
         place: place ?? undefined,
         placeId: undefined,
         notes: nullIfEmpty(notes),
+        ...(effectiveType === "CUSTOM" ? { customLabel: nullIfEmpty(customLabel) } : {}),
         citations: buildCitationsPayloadForCreate()
       };
       const parsed = createLifeEventBodySchema.safeParse(body);
@@ -325,6 +334,7 @@ export const LifeEventRichForm = ({
       endDay: ed,
       notes: nullIfEmpty(notes),
       citations: buildCitationsPayloadForPatch(),
+      ...(initialEvent.eventType === "CUSTOM" ? { customLabel: nullIfEmpty(customLabel) } : {}),
       ...(initialEvent.place && !place
         ? { placeId: null, place: null }
         : place
@@ -426,6 +436,20 @@ export const LifeEventRichForm = ({
                   </option>
                 ))}
             </select>
+          </label>
+        ) : null}
+        {(variant === "create" && (fixedEventType ?? eventType) === "CUSTOM") ||
+        (variant === "edit" && initialEvent?.eventType === "CUSTOM") ? (
+          <label className="field-group">
+            <span className="field-label">Custom label</span>
+            <input
+              type="text"
+              value={customLabel}
+              onChange={(e) => setCustomLabel(e.target.value)}
+              placeholder="e.g. Military discharge"
+              maxLength={200}
+              disabled={disabled}
+            />
           </label>
         ) : null}
         <label className="field-group">

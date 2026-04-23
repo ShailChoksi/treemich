@@ -232,6 +232,31 @@ export class EvidenceService {
     return toSourceJson(updated, updated.repository);
   }
 
+  /**
+   * Point all citations at `intoSourceId`, then delete `fromSourceId`. Both sources must belong to the user.
+   */
+  async mergeSources(userId: string, fromSourceId: string, intoSourceId: string): Promise<void> {
+    if (fromSourceId === intoSourceId) {
+      const err = new Error("Cannot merge a source into itself");
+      (err as Error & { statusCode: number }).statusCode = 400;
+      throw err;
+    }
+    const from = await prisma.source.findFirst({ where: { id: fromSourceId, userId } });
+    const into = await prisma.source.findFirst({ where: { id: intoSourceId, userId } });
+    if (!from || !into) {
+      const err = new Error("Source not found");
+      (err as Error & { statusCode: number }).statusCode = 404;
+      throw err;
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.citation.updateMany({
+        where: { userId, sourceId: fromSourceId },
+        data: { sourceId: intoSourceId }
+      });
+      await tx.source.delete({ where: { id: fromSourceId } });
+    });
+  }
+
   async deleteSource(userId: string, id: string): Promise<void> {
     const existing = await prisma.source.findFirst({ where: { id, userId } });
     if (!existing) {
