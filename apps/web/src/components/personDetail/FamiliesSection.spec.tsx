@@ -44,7 +44,7 @@ const baseFamily = (overrides: Partial<FamilyRecord> = {}): FamilyRecord => ({
     {
       id: "fc-1",
       childImmichPersonId: "self-1",
-      pedigree: "BIRTH",
+      pedigree: "BIOLOGICAL",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
     }
@@ -171,7 +171,7 @@ describe("FamiliesSection", () => {
       deleteBtn!.click();
     });
 
-    expect(onDeleteFamily).not.toHaveBeenCalled();
+    expect(onDeleteFamily).toHaveBeenCalledTimes(0);
 
     act(() => {
       root.unmount();
