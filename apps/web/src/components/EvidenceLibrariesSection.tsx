@@ -131,18 +131,12 @@ export const EvidenceLibrariesSection = () => {
       open={open}
       onToggle={(e) => setOpen(e.currentTarget.open)}
     >
-      <summary className="field-label" style={{ cursor: "pointer" }}>
-        Sources &amp; repositories
-      </summary>
-      {error ? (
-        <p className="hint" style={{ color: "var(--danger, #c62828)" }}>
-          {error}
-        </p>
-      ) : null}
+      <summary className="field-label person-detail-details-summary">Sources &amp; repositories</summary>
+      {error ? <p className="hint hint--danger">{error}</p> : null}
       {open && loading ? <p className="hint">Loading…</p> : null}
       {open && !loading ? (
-        <div className="stack" style={{ marginTop: "0.5rem" }}>
-          <div className="person-detail-form-grid" style={{ maxWidth: "40rem" }}>
+        <div className="stack evidence-panel-stack">
+          <div className="person-detail-form-grid person-detail-form-grid--limit">
             <label className="field-group">
               <span className="field-label">New repository name</span>
               <input
@@ -152,7 +146,7 @@ export const EvidenceLibrariesSection = () => {
                 disabled={repoSaving}
               />
             </label>
-            <div className="field-group" style={{ alignSelf: "end" }}>
+            <div className="field-group evidence-field-align-end">
               <button
                 type="button"
                 className="secondary-button"
@@ -186,7 +180,7 @@ export const EvidenceLibrariesSection = () => {
                 ))}
               </select>
             </label>
-            <div className="field-group" style={{ gridColumn: "1 / -1" }}>
+            <div className="field-group evidence-grid-full-width">
               <button
                 type="button"
                 className="secondary-button"
@@ -198,20 +192,13 @@ export const EvidenceLibrariesSection = () => {
             </div>
           </div>
 
-          <div
-            className="stack"
-            style={{
-              marginTop: "0.75rem",
-              paddingTop: "0.75rem",
-              borderTop: "1px solid var(--border-subtle, rgba(0,0,0,0.08))"
-            }}
-          >
+          <div className="stack evidence-panel-divider">
             <div className="field-label">Merge duplicate sources</div>
-            <p className="hint" style={{ marginBottom: "0.5rem" }}>
+            <p className="hint hint--tight-below">
               Moves all citations from the first source onto the second, then deletes the first. Use when you
               created the same work twice.
             </p>
-            <div className="person-detail-form-grid" style={{ maxWidth: "40rem" }}>
+            <div className="person-detail-form-grid person-detail-form-grid--limit">
               <label className="field-group">
                 <span className="field-label">Merge from (will be removed)</span>
                 <select
@@ -242,10 +229,10 @@ export const EvidenceLibrariesSection = () => {
                   ))}
                 </select>
               </label>
-              <div className="field-group" style={{ gridColumn: "1 / -1" }}>
+              <div className="field-group evidence-grid-full-width">
                 <button
                   type="button"
-                  className="primary-button"
+                  className="secondary-button"
                   onClick={() => void onMergeSources()}
                   disabled={mergeSaving}
                 >
@@ -256,9 +243,7 @@ export const EvidenceLibrariesSection = () => {
           </div>
 
           <div>
-            <div className="field-label" style={{ marginBottom: "0.25rem" }}>
-              Repositories
-            </div>
+            <div className="field-label field-label--spaced">Repositories</div>
             {repositories.length === 0 ? (
               <p className="hint">
                 No repositories yet. Add one above or cite an archive name on a life event.
@@ -282,9 +267,7 @@ export const EvidenceLibrariesSection = () => {
             )}
           </div>
           <div>
-            <div className="field-label" style={{ marginBottom: "0.25rem" }}>
-              Shared sources
-            </div>
+            <div className="field-label field-label--spaced">Shared sources</div>
             {sources.length === 0 ? (
               <p className="hint">
                 No sources yet. Add one above, or add citations on life events (inline or existing source).

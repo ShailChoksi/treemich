@@ -8,6 +8,8 @@ type Props = {
   person: ImmichPerson;
   people: ImmichPerson[];
   families: FamilyRecord[];
+  /** True when the person already has parent/child/spouse/sibling edges — family units are still a separate layer. */
+  graphHasFamilyRelatives?: boolean;
   onPatchFamily?: (familyId: string, body: PatchFamilyBody) => Promise<void>;
   onDeleteFamily?: (familyId: string) => Promise<void>;
   savingFamilyId?: string | null;
@@ -29,6 +31,7 @@ export const FamiliesSection = ({
   person,
   people,
   families,
+  graphHasFamilyRelatives = false,
   onPatchFamily,
   onDeleteFamily,
   savingFamilyId,
@@ -85,54 +88,77 @@ export const FamiliesSection = ({
 
   if (families.length === 0) {
     return (
-      <p className="hint">
-        No family units yet. Create one with <code>POST /families</code> (parents + children + pedigree); the
-        graph updates from derived relationships.
-      </p>
+      <div className="stack family-units-empty">
+        <p className="hint">
+          No <strong>family units</strong> yet. These are explicit GEDCOM-style unions (two parent slots +
+          children + pedigree), used for household life events and export — they are{" "}
+          <strong>not created automatically</strong> from the spouse/parent edges in{" "}
+          <strong>Relatives</strong>.
+        </p>
+        {graphHasFamilyRelatives ? (
+          <p className="hint">
+            You already have family-type relationships in the graph. After upgrading the API and running{" "}
+            <code>prisma migrate deploy</code>, Treemich normally infers families <strong>once</strong> on the
+            first process start (see server logs). To run manually instead, on the server with{" "}
+            <code>DATABASE_URL</code> set:{" "}
+            <code>npm run phase4:backfill-families --workspace @treemich/api -- --dry-run</code> then without{" "}
+            <code>--dry-run</code>, or create unions via <code>POST /families</code>. Disable auto-run with{" "}
+            <code>TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL=0</code>. Refresh this page after families exist.
+          </p>
+        ) : (
+          <p className="hint">
+            Create one with <code>POST /families</code> (parents + children + pedigree); parent/child lines on
+            the graph are then derived from those rows where applicable.
+          </p>
+        )}
+      </div>
     );
   }
 
   return (
     <>
-      {errorMessage ? (
-        <p className="hint" style={{ color: "var(--danger, #c62828)", marginBottom: "0.5rem" }}>
-          {errorMessage}
-        </p>
-      ) : null}
-      <p className="hint" style={{ marginBottom: "0.75rem" }}>
-        FAM-style unions involving {getPersonDisplayLabel(person)}. Notes can be edited here; changing members
-        still uses the API.
+      {errorMessage ? <p className="hint hint--danger">{errorMessage}</p> : null}
+      <p className="hint family-units-intro">
+        Unions involving {getPersonDisplayLabel(person)}. Notes can be edited here; changing parents or
+        children still uses the API.
       </p>
-      <ul className="stack" style={{ listStyle: "none", padding: 0, margin: 0, gap: "0.75rem" }}>
-        {families.map((family) => {
+      <ul className="family-units-list">
+        {families.map((family, index) => {
           const busy = savingFamilyId === family.id;
           const editing = editingFamilyId === family.id;
           return (
-            <li key={family.id} className="card" style={{ padding: "0.75rem" }}>
-              <div className="stack" style={{ gap: "0.35rem" }}>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
-                  <span className="hint">Family id</span>
-                  <code style={{ fontSize: "0.85rem" }}>{family.id}</code>
+            <li key={family.id} className="family-unit-block">
+              <div className="stack">
+                <div className="family-unit-toolbar">
+                  {families.length > 1 ? (
+                    <span className="field-label family-unit-toolbar-title">Union {index + 1}</span>
+                  ) : (
+                    <span className="family-unit-toolbar-spacer" aria-hidden="true" />
+                  )}
                   {onDeleteFamily ? (
                     <button
                       type="button"
-                      className="button button-small"
+                      className="secondary-button danger-button"
                       disabled={busy}
                       onClick={() => removeFamily(family.id)}
                     >
-                      Delete
+                      Delete family
                     </button>
                   ) : null}
                 </div>
-                <div>
-                  <span className="hint">Parents: </span>
-                  {labelFor(people, family.parent1ImmichPersonId)}
-                  {" · "}
-                  {labelFor(people, family.parent2ImmichPersonId)}
+
+                <div className="field-group">
+                  <span className="field-label">Parents</span>
+                  <span className="family-unit-readonly">
+                    {labelFor(people, family.parent1ImmichPersonId)}
+                    {" · "}
+                    {labelFor(people, family.parent2ImmichPersonId)}
+                  </span>
                 </div>
+
                 {editing ? (
-                  <div className="stack" style={{ gap: "0.35rem" }}>
-                    <label className="hint" htmlFor={`family-notes-${family.id}`}>
+                  <div className="field-group">
+                    <label className="field-label" htmlFor={`family-notes-${family.id}`}>
                       Notes
                     </label>
                     <textarea
@@ -143,40 +169,33 @@ export const FamiliesSection = ({
                       onChange={(e) => setNotesDraft(e.target.value)}
                       disabled={busy}
                     />
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <div className="family-unit-actions-inline">
                       <button
                         type="button"
-                        className="button button-primary button-small"
+                        className="secondary-button"
                         disabled={busy}
                         onClick={() => saveNotes(family.id)}
                       >
                         Save
                       </button>
-                      <button
-                        type="button"
-                        className="button button-small"
-                        disabled={busy}
-                        onClick={cancelEdit}
-                      >
+                      <button type="button" className="text-link-button" disabled={busy} onClick={cancelEdit}>
                         Cancel
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div>
+                  <div className="field-group">
+                    <span className="field-label">Notes</span>
                     {family.notes ? (
-                      <div>
-                        <span className="hint">Notes: </span>
-                        {family.notes}
-                      </div>
+                      <span className="family-unit-readonly">{family.notes}</span>
                     ) : (
-                      <span className="hint">No notes</span>
+                      <span className="hint">No notes yet.</span>
                     )}
                     {onPatchFamily ? (
-                      <div style={{ marginTop: "0.35rem" }}>
+                      <div className="family-unit-actions-inline">
                         <button
                           type="button"
-                          className="button button-small"
+                          className="secondary-button"
                           disabled={busy}
                           onClick={() => beginEditNotes(family)}
                         >
@@ -186,17 +205,19 @@ export const FamiliesSection = ({
                     ) : null}
                   </div>
                 )}
-                <div>
-                  <span className="hint">Children ({family.children.length})</span>
-                  <ul style={{ margin: "0.25rem 0 0 1rem" }}>
+
+                <div className="field-group">
+                  <span className="field-label">Children ({family.children.length})</span>
+                  <ul className="family-unit-children">
                     {family.children.map((child) => (
                       <li key={child.id}>
                         {labelFor(people, child.childImmichPersonId)}
-                        <span className="hint"> — {child.pedigree}</span>
+                        <span className="family-unit-pedigree"> — {child.pedigree}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
+
                 {onFamilyLifeEventCreate && onFamilyLifeEventPatch && onFamilyLifeEventDelete ? (
                   <FamilyLifeEventsBlock
                     familyId={family.id}

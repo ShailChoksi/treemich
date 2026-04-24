@@ -5,6 +5,9 @@
  * From repo root (`DATABASE_URL` in `.env`):
  *   npm run phase4:backfill-families --workspace @treemich/api
  *   npm run phase4:backfill-families --workspace @treemich/api -- --dry-run
+ *
+ * Note: On normal API startup, the same live backfill runs **once per database** automatically unless
+ * `TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL` is disabled — see `maybeRunAutomaticPhase4FamilyBackfillOnBoot`.
  */
 
 import { config } from "dotenv";
@@ -12,6 +15,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { buildServices } from "../src/services.js";
+import {
+  runPhase4FamilyBackfillForUser,
+  PHASE4_FAMILY_BACKFILL_CHECKPOINT_ID
+} from "../src/families/phase4BackfillFromParentEdges.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: join(__dirname, "../../../.env") });
@@ -79,111 +86,61 @@ function analyzeUntaggedParentEdges(edges: { fromPersonId: string; toPersonId: s
   return { childToParents, pairToChildren, loneParentToChildren, edgeCount: edges.length };
 }
 
-async function backfillUser(userId: string) {
-  if (dryRun) {
-    const edges = await prisma.relationship.findMany({
-      where: { userId, type: "PARENT_OF", familyId: null },
-      select: { fromPersonId: true, toPersonId: true }
-    });
-    if (edges.length === 0) {
-      return 0;
-    }
-    const { pairToChildren, loneParentToChildren } = analyzeUntaggedParentEdges(edges, userId);
-    let n = 0;
-    for (const [pk, children] of pairToChildren) {
-      if (children.size === 0) {
-        continue;
-      }
-      const [lo, hi] = pk.split("|");
-      if (!lo || !hi) {
-        continue;
-      }
-      const childList = [...children];
-      console.log(
-        `[dry-run] would create two-parent family user=${userId} parents=${lo},${hi} children=${childList.join(",")}`
-      );
-      n += 1;
-    }
-    for (const [parentId, children] of loneParentToChildren) {
-      const childList = [...children];
-      console.log(
-        `[dry-run] would create single-parent family user=${userId} parent=${parentId} children=${childList.join(",")}`
-      );
-      n += 1;
-    }
-    console.warn(
-      `[user ${userId}] dry-run is a single snapshot; live run processes two-parent groups first in a loop, so counts may differ slightly.`
-    );
-    return n;
+async function backfillUserDryRun(userId: string) {
+  const edges = await prisma.relationship.findMany({
+    where: { userId, type: "PARENT_OF", familyId: null },
+    select: { fromPersonId: true, toPersonId: true }
+  });
+  if (edges.length === 0) {
+    return 0;
   }
-
-  let iterations = 0;
-  let totalCreated = 0;
-
-  while (iterations < 10_000) {
-    iterations += 1;
-    const edges = await prisma.relationship.findMany({
-      where: { userId, type: "PARENT_OF", familyId: null },
-      select: { fromPersonId: true, toPersonId: true }
-    });
-    if (edges.length === 0) {
-      break;
-    }
-
-    const { pairToChildren, loneParentToChildren } = analyzeUntaggedParentEdges(edges, userId);
-
-    let createdThisPass = false;
-
-    for (const [pk, children] of pairToChildren) {
-      if (children.size === 0) {
-        continue;
-      }
-      const [lo, hi] = pk.split("|");
-      if (!lo || !hi) {
-        continue;
-      }
-      const childList = [...children];
-      await familyService.createFamily(userId, {
-        parent1ImmichPersonId: lo,
-        parent2ImmichPersonId: hi,
-        notes: "Backfilled from legacy PARENT_OF edges (phase4-backfill-families)",
-        children: childList.map((childImmichPersonId) => ({ childImmichPersonId }))
-      });
-      totalCreated += 1;
-      createdThisPass = true;
-    }
-
-    if (createdThisPass) {
+  const { pairToChildren, loneParentToChildren } = analyzeUntaggedParentEdges(edges, userId);
+  let n = 0;
+  for (const [pk, children] of pairToChildren) {
+    if (children.size === 0) {
       continue;
     }
-
-    if (loneParentToChildren.size === 0) {
-      console.error(
-        `[user ${userId}] stopped with ${edges.length} untagged PARENT_OF edges (ambiguous graph — resolve manually).`
-      );
-      break;
+    const [lo, hi] = pk.split("|");
+    if (!lo || !hi) {
+      continue;
     }
-
-    for (const [parentId, children] of loneParentToChildren) {
-      const childList = [...children];
-      await familyService.createFamily(userId, {
-        parent1ImmichPersonId: parentId,
-        parent2ImmichPersonId: null,
-        notes: "Backfilled from legacy PARENT_OF edges (phase4-backfill-families)",
-        children: childList.map((childImmichPersonId) => ({ childImmichPersonId }))
-      });
-      totalCreated += 1;
-    }
+    const childList = [...children];
+    console.log(
+      `[dry-run] would create two-parent family user=${userId} parents=${lo},${hi} children=${childList.join(",")}`
+    );
+    n += 1;
   }
-
-  return totalCreated;
+  for (const [parentId, children] of loneParentToChildren) {
+    const childList = [...children];
+    console.log(
+      `[dry-run] would create single-parent family user=${userId} parent=${parentId} children=${childList.join(",")}`
+    );
+    n += 1;
+  }
+  console.warn(
+    `[user ${userId}] dry-run is a single snapshot; live run processes two-parent groups first in a loop, so counts may differ slightly.`
+  );
+  return n;
 }
 
 async function main() {
+  if (!dryRun) {
+    const checkpoint = await prisma.dataMigrationCheckpoint.findUnique({
+      where: { id: PHASE4_FAMILY_BACKFILL_CHECKPOINT_ID }
+    });
+    if (checkpoint) {
+      console.warn(
+        `Automatic backfill checkpoint ${PHASE4_FAMILY_BACKFILL_CHECKPOINT_ID} exists — manual script may have nothing left to do. Delete that row to force re-run, or rely on API auto-backfill only once.`
+      );
+    }
+  }
+
   const users = await prisma.treemichUser.findMany({ select: { id: true } });
   let grand = 0;
   for (const user of users) {
-    const n = await backfillUser(user.id);
+    const n = dryRun
+      ? await backfillUserDryRun(user.id)
+      : await runPhase4FamilyBackfillForUser(prisma, familyService, user.id);
     grand += n;
     if (n > 0) {
       console.log(`[user ${user.id}] ${dryRun ? "planned" : "created"} ${n} family record(s).`);

@@ -68,6 +68,22 @@ describe("FamiliesSection", () => {
     root = createRoot(container);
   });
 
+  it("empty state mentions backfill when graph already has family relatives", () => {
+    act(() => {
+      root.render(
+        <FamiliesSection person={person} people={[person, parent1]} families={[]} graphHasFamilyRelatives />
+      );
+    });
+
+    expect(container.textContent).toContain("phase4:backfill-families");
+    expect(container.textContent).toContain("not created automatically");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it("saves notes via onPatchFamily after editing", async () => {
     const onPatchFamily = vi.fn().mockResolvedValue(undefined);
     const family = baseFamily();
@@ -130,7 +146,7 @@ describe("FamiliesSection", () => {
     });
 
     const deleteBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent === "Delete"
+      (b) => b.textContent === "Delete family"
     );
     expect(deleteBtn).toBeTruthy();
     await act(async () => {
@@ -165,7 +181,7 @@ describe("FamiliesSection", () => {
     });
 
     const deleteBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent === "Delete"
+      (b) => b.textContent === "Delete family"
     );
     await act(async () => {
       deleteBtn!.click();

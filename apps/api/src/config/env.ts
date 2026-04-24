@@ -40,7 +40,13 @@ const envSchema = z.object({
    * When "false" / "0" / "no" / "off", disables Phase 4 family HTTP routes (`/families`, `/people/:id/families`,
    * `/families/:id/life-events`). Default when unset: enabled.
    */
-  TREEMICH_FAMILY_MODEL_ENABLED: z.string().optional()
+  TREEMICH_FAMILY_MODEL_ENABLED: z.string().optional(),
+  /**
+   * When "false" / "0" / "no" / "off", skips the **one-time** automatic Phase 4 family backfill on API boot
+   * (infer `Family` rows from untagged `PARENT_OF` edges). Default when unset: **enabled** so upgrades
+   * populate family units without a manual script.
+   */
+  TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -78,6 +84,15 @@ export const isProfilePlaceGeocodingEnabled = (): boolean => {
 /** Feature flag: Phase 4 family model HTTP surface. */
 export const isFamilyModelEnabled = (): boolean => {
   const v = env.TREEMICH_FAMILY_MODEL_ENABLED;
+  if (v == null || v === "") {
+    return true;
+  }
+  return !["0", "false", "no", "off"].includes(v.toLowerCase());
+};
+
+/** One-shot automatic family backfill after DB upgrade (see `maybeRunAutomaticPhase4FamilyBackfillOnBoot`). */
+export const isAutoPhase4FamilyBackfillEnabled = (): boolean => {
+  const v = env.TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL;
   if (v == null || v === "") {
     return true;
   }

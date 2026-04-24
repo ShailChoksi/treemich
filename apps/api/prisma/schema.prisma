@@ -455,3 +455,9 @@ model CooccurrenceEdge {
   @@index([userId, score])
   @@index([userId, computedAt])
 }
+
+/// Records idempotent data migrations applied at runtime (e.g. automatic family backfill after upgrade).
+model DataMigrationCheckpoint {
+  id        String   @id
+  appliedAt DateTime @default(now())
+}

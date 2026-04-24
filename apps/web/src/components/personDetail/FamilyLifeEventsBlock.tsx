@@ -45,16 +45,14 @@ export const FamilyLifeEventsBlock = ({ familyId, events, onCreate, onPatch, onD
   }
 
   return (
-    <div className="life-events-section stack" style={{ marginTop: "0.5rem" }} data-family-id={familyId}>
-      <span className="field-label">Household events</span>
-      {localError ? (
-        <p className="hint" style={{ color: "var(--danger, #c62828)" }}>
-          {localError}
+    <div className="life-events-section stack family-household-events" data-family-id={familyId}>
+      <div className="field-group">
+        <span className="field-label">Household events</span>
+        <p className="hint family-household-events__lede">
+          Residence, census, or custom facts for this family unit (shared household sheet).
         </p>
-      ) : null}
-      <p className="hint" style={{ margin: 0 }}>
-        Residence, census, or custom facts for this family unit (shared household sheet).
-      </p>
+      </div>
+      {localError ? <p className="hint hint--danger">{localError}</p> : null}
       {!creating && !editingId ? (
         <button
           type="button"

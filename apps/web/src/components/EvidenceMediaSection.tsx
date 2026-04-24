@@ -65,22 +65,16 @@ export const EvidenceMediaSection = () => {
 
   return (
     <details className="evidence-media-details" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary className="field-label" style={{ cursor: "pointer" }}>
-        Evidence media
-      </summary>
-      {error ? (
-        <p className="hint" style={{ color: "var(--danger, #c62828)" }}>
-          {error}
-        </p>
-      ) : null}
+      <summary className="field-label person-detail-details-summary">Evidence media</summary>
+      {error ? <p className="hint hint--danger">{error}</p> : null}
       {open && loading ? <p className="hint">Loading…</p> : null}
       {open && !loading ? (
-        <div className="stack" style={{ marginTop: "0.5rem" }}>
-          <p className="hint" style={{ marginBottom: "0.5rem" }}>
+        <div className="stack evidence-panel-stack">
+          <p className="hint hint--tight-below">
             Register a stable URL (e.g. PDF or image in your archive). Open links in a new tab to verify
             access.
           </p>
-          <div className="person-detail-form-grid" style={{ maxWidth: "36rem" }}>
+          <div className="person-detail-form-grid person-detail-form-grid--limit-sm">
             <label className="field-group">
               <span className="field-label">Storage URL</span>
               <input
@@ -102,13 +96,11 @@ export const EvidenceMediaSection = () => {
               />
             </label>
           </div>
-          <button type="button" className="primary-button" onClick={() => void onAdd()} disabled={saving}>
+          <button type="button" className="secondary-button" onClick={() => void onAdd()} disabled={saving}>
             {saving ? "Saving…" : "Add media URL"}
           </button>
-          <div style={{ marginTop: "0.75rem" }}>
-            <div className="field-label" style={{ marginBottom: "0.25rem" }}>
-              Registered media
-            </div>
+          <div className="evidence-panel-divider">
+            <div className="field-label field-label--spaced">Registered media</div>
             {items.length === 0 ? (
               <p className="hint">No media objects yet.</p>
             ) : (

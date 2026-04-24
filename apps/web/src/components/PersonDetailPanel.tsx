@@ -536,16 +536,6 @@ const PersonDetailPanelComponent = ({
                 />
               </label>
             </div>
-            {immichPersonPageUrl ? (
-              <a
-                className="text-link-button person-detail-immich-link"
-                href={immichPersonPageUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open this person in Immich
-              </a>
-            ) : null}
             {person && primaryFamilyOptions.length > 0 ? (
               <label className="field-group">
                 <span className="field-label">Show in family</span>
@@ -628,6 +618,7 @@ const PersonDetailPanelComponent = ({
                 person={person}
                 people={people}
                 families={families}
+                graphHasFamilyRelatives={familyRelatives.length > 0}
                 onPatchFamily={onFamilyPatch}
                 onDeleteFamily={onFamilyDelete}
                 savingFamilyId={savingFamilyId}
