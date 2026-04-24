@@ -5,7 +5,12 @@ import {
   type Place,
   type LifeEvent
 } from "@prisma/client";
-import type { CreateLifeEventBody, PatchLifeEventBody, PlaceInput } from "@treemich/shared";
+import type {
+  CreateFamilyLifeEventBody,
+  CreateLifeEventBody,
+  PatchLifeEventBody,
+  PlaceInput
+} from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import { geocodePlaceQuery } from "../places/nominatimGeocode.js";
 import { replaceLifeEventCitations } from "./citationWrite.js";
@@ -387,6 +392,7 @@ export class LifeEventService {
           ...dateData,
           personProfileId: profile.id,
           relationshipId: null,
+          familyId: null,
           placeId,
           notes: body.notes ?? null
         }
@@ -542,6 +548,7 @@ export class LifeEventService {
           ...dateData,
           personProfileId: null,
           relationshipId,
+          familyId: null,
           placeId,
           notes: body.notes ?? null
         }
@@ -553,6 +560,163 @@ export class LifeEventService {
       });
     })) as LifeEventWithRelations;
     return created;
+  }
+
+  private assertFamilyEventAllowed(eventType: LifeEventType) {
+    const allowed = new Set<string>(["RESIDENCE", "CENSUS", "CUSTOM"]);
+    if (!allowed.has(eventType)) {
+      throw new HttpConflictError("Only RESIDENCE, CENSUS, and CUSTOM events can be attached to a family");
+    }
+  }
+
+  async listFamilyLifeEvents(
+    userId: string,
+    familyId: string,
+    options?: { includeCitations?: boolean }
+  ): Promise<LifeEventWithRelations[]> {
+    const fam = await prisma.family.findFirst({
+      where: { id: familyId, userId }
+    });
+    if (!fam) {
+      throw new HttpNotFoundError("Family not found");
+    }
+    return prisma.lifeEvent.findMany({
+      where: { userId, familyId },
+      orderBy: [{ year: "asc" }, { id: "asc" }],
+      include: {
+        place: true,
+        ...(options?.includeCitations === false ? {} : { citations: lifeEventQueryInclude.citations })
+      }
+    }) as Promise<LifeEventWithRelations[]>;
+  }
+
+  async createFamilyLifeEvent(
+    userId: string,
+    familyId: string,
+    body: CreateFamilyLifeEventBody
+  ): Promise<LifeEventWithRelations> {
+    this.assertFamilyEventAllowed(body.eventType);
+    const fam = await prisma.family.findFirst({
+      where: { id: familyId, userId }
+    });
+    if (!fam) {
+      throw new HttpNotFoundError("Family not found");
+    }
+    const placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
+    const dateData = this.buildDateData(body);
+    const customLabel = this.resolveCustomLabelForWrite(body.eventType, body.customLabel, undefined);
+
+    const createdRow = (await prisma.$transaction(async (tx) => {
+      const row = await tx.lifeEvent.create({
+        data: {
+          userId,
+          eventType: body.eventType,
+          customLabel,
+          ...dateData,
+          personProfileId: null,
+          relationshipId: null,
+          familyId,
+          placeId,
+          notes: body.notes ?? null
+        }
+      });
+      await replaceLifeEventCitations(tx, userId, row.id, body.citations);
+      return tx.lifeEvent.findFirstOrThrow({
+        where: { id: row.id },
+        include: lifeEventQueryInclude
+      });
+    })) as LifeEventWithRelations;
+    return createdRow;
+  }
+
+  async updateFamilyLifeEvent(
+    userId: string,
+    familyId: string,
+    eventId: string,
+    body: PatchLifeEventBody
+  ): Promise<LifeEventWithRelations> {
+    const fam = await prisma.family.findFirst({
+      where: { id: familyId, userId }
+    });
+    if (!fam) {
+      throw new HttpNotFoundError("Family not found");
+    }
+    const existing = await prisma.lifeEvent.findFirst({
+      where: { id: eventId, userId, familyId }
+    });
+    if (!existing) {
+      throw new HttpNotFoundError("Life event not found");
+    }
+    const nextType = body.eventType ?? existing.eventType;
+    this.assertFamilyEventAllowed(nextType);
+    let placeId: string | null | undefined;
+    if (body.placeId !== undefined || body.place !== undefined) {
+      placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
+    }
+    const dateData =
+      body.year !== undefined ||
+      body.month !== undefined ||
+      body.day !== undefined ||
+      body.dateQualifier !== undefined ||
+      body.endYear !== undefined
+        ? this.buildDateData({
+            eventType: nextType,
+            dateQualifier: body.dateQualifier ?? existing.dateQualifier,
+            year: body.year !== undefined ? body.year : existing.year,
+            month: body.month !== undefined ? body.month : existing.month,
+            day: body.day !== undefined ? body.day : existing.day,
+            endYear: body.endYear !== undefined ? body.endYear : existing.endYear,
+            endMonth: body.endMonth !== undefined ? body.endMonth : existing.endMonth,
+            endDay: body.endDay !== undefined ? body.endDay : existing.endDay,
+            placeId: body.placeId,
+            place: body.place,
+            notes: body.notes,
+            citations: body.citations
+          } as CreateLifeEventBody)
+        : null;
+
+    const shouldUpdateCustomLabel =
+      body.customLabel !== undefined ||
+      (body.eventType !== undefined && body.eventType !== existing.eventType);
+    const nextCustomLabel = shouldUpdateCustomLabel
+      ? this.resolveCustomLabelForWrite(nextType, body.customLabel, existing.customLabel)
+      : undefined;
+
+    const updatedRow = (await prisma.$transaction(async (tx) => {
+      await tx.lifeEvent.update({
+        where: { id: eventId },
+        data: {
+          ...(body.eventType ? { eventType: body.eventType } : {}),
+          ...(dateData ? dateData : {}),
+          ...(body.notes !== undefined ? { notes: body.notes } : {}),
+          ...(placeId !== undefined ? { placeId } : {}),
+          ...(nextCustomLabel !== undefined ? { customLabel: nextCustomLabel } : {})
+        }
+      });
+      if (body.citations !== undefined) {
+        await replaceLifeEventCitations(tx, userId, eventId, body.citations);
+      }
+      return tx.lifeEvent.findFirstOrThrow({
+        where: { id: eventId },
+        include: lifeEventQueryInclude
+      });
+    })) as LifeEventWithRelations;
+    return updatedRow;
+  }
+
+  async deleteFamilyLifeEvent(userId: string, familyId: string, eventId: string): Promise<void> {
+    const fam = await prisma.family.findFirst({
+      where: { id: familyId, userId }
+    });
+    if (!fam) {
+      throw new HttpNotFoundError("Family not found");
+    }
+    const deleted = await prisma.lifeEvent.deleteMany({
+      where: { id: eventId, userId, familyId }
+    });
+    if (deleted.count === 0) {
+      throw new HttpNotFoundError("Life event not found");
+    }
   }
 
   async updateRelationshipLifeEvent(
@@ -1096,6 +1260,7 @@ export class LifeEventService {
 export function lifeEventToJson(event: LifeEventWithRelations) {
   return {
     id: event.id,
+    familyId: event.familyId ?? null,
     eventType: event.eventType,
     customLabel: event.customLabel ?? null,
     dateQualifier: event.dateQualifier,

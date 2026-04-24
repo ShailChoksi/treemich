@@ -143,7 +143,11 @@ describe("evidence routes", () => {
         listRelationshipLifeEvents: vi.fn(),
         createRelationshipLifeEvent: vi.fn(),
         updateRelationshipLifeEvent: vi.fn(),
-        deleteRelationshipLifeEvent: vi.fn()
+        deleteRelationshipLifeEvent: vi.fn(),
+        listFamilyLifeEvents: vi.fn().mockResolvedValue([]),
+        createFamilyLifeEvent: vi.fn(),
+        updateFamilyLifeEvent: vi.fn(),
+        deleteFamilyLifeEvent: vi.fn()
       } as unknown as AppServices["lifeEventService"],
       personNameService: {
         listByImmichPersonId: vi.fn().mockResolvedValue([]),
@@ -177,7 +181,16 @@ describe("evidence routes", () => {
         listMediaLinksForObject: vi.fn().mockResolvedValue([]),
         createMediaLink: createMediaLinkMock,
         deleteMediaLink: vi.fn()
-      } as unknown as AppServices["evidenceService"]
+      } as unknown as AppServices["evidenceService"],
+      familyService: {
+        listFamilies: vi.fn().mockResolvedValue([]),
+        getFamily: vi.fn(),
+        listFamiliesForPerson: vi.fn().mockResolvedValue([]),
+        createFamily: vi.fn(),
+        patchFamily: vi.fn(),
+        deleteFamily: vi.fn(),
+        findAdoptedChildImmichPersonIds: vi.fn().mockResolvedValue([])
+      } as unknown as AppServices["familyService"]
     };
 
     const { buildApp } = await import("../app.js");

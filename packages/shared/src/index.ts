@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import type { FamilyChildPedigree } from "./families.js";
 import type { AgeFilter, InterpreterIntent } from "./search/interpreter.js";
 
 /** Canonical relationship kinds stored in Treemich (Immich person id endpoints). */
@@ -84,8 +85,13 @@ export type RelationshipRecord = {
   type: RelationshipType;
   marriageAnniversaryDate?: string | null;
   divorceDate?: string | null;
+  /** When set, this parent/child edge was derived from a family union (Phase 4). */
+  familyId?: string | null;
+  /** For derived `PARENT_OF` edges: pedigree of the child in that family (for graph styling / NL). */
+  childEdgePedigree?: FamilyChildPedigree | null;
 };
 
+export * from "./families.js";
 export * from "./lifeEvents.js";
 export * from "./personNames.js";
 export * from "./researchTasks.js";

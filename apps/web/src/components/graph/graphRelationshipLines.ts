@@ -81,11 +81,15 @@ export const buildMergedParentGroups = ({
   return groups;
 };
 
+const pedigreeUsesDashedParentLine = (pedigree: RelationshipRecord["childEdgePedigree"]) =>
+  pedigree === "ADOPTED" || pedigree === "FOSTER" || pedigree === "STEP";
+
 type GraphLine = {
   key: string;
   points: NodePosition[];
   kind: RelationshipKind;
   opacity?: number;
+  dashed?: boolean;
 };
 
 export const buildVisibleRelationshipLines = ({
@@ -229,10 +233,15 @@ export const buildVisibleRelationshipLines = ({
       continue;
     }
     seen.add(key);
+    const dashed =
+      kind === "PARENT_CHILD" &&
+      relationship.type === "PARENT_OF" &&
+      pedigreeUsesDashedParentLine(relationship.childEdgePedigree ?? null);
     lines.push({
       key,
       points: [from, to],
-      kind
+      kind,
+      ...(dashed ? { dashed: true } : {})
     });
   }
 
