@@ -16,7 +16,7 @@ const unmockedResponse = (url: string) =>
     headers: { "content-type": "application/json" }
   });
 
-globalThis.fetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   return unmockedResponse(url);
 }) as typeof fetch;
