@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ApiHttpError,
+  createFamily,
   createFamilyLifeEvent,
   createResearchTask,
   createPersonLifeEvent,
   deleteFamily,
+  deleteFamilyLifeEvent,
+  getFamiliesForPerson,
   getFamilyLifeEvents,
   getPlacesMap,
   getPersonTimeline,
@@ -16,7 +19,8 @@ import {
   immichPersonUrl,
   login,
   logout,
-  patchFamily
+  patchFamily,
+  updateFamilyLifeEvent
 } from "./api";
 
 describe("session-auth API helpers", () => {
@@ -389,6 +393,66 @@ describe("family API helpers", () => {
     );
   });
 
+  it("loads family life events without citations query by default", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ lifeEvents: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    await getFamilyLifeEvents("fam-2");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/families/fam-2/life-events",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+
+  it("loads families for a person", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ families: [{ id: "f1", children: [] }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const rows = await getFamiliesForPerson("person%2F1");
+    expect(rows).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/people/person%252F1/families",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+
+  it("creates family union via POST", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "fam-new",
+          userId: "u1",
+          parent1ImmichPersonId: "a",
+          parent2ImmichPersonId: "b",
+          notes: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          children: []
+        }),
+        { status: 201, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    const row = await createFamily({
+      parent1ImmichPersonId: "a",
+      parent2ImmichPersonId: "b",
+      children: []
+    });
+    expect(row.id).toBe("fam-new");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/families",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
+  });
+
   it("creates family life event with session", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(
       new Response(
@@ -456,6 +520,48 @@ describe("family API helpers", () => {
     await deleteFamily("fam-1");
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "/api/families/fam-1",
+      expect.objectContaining({ method: "DELETE", credentials: "include" })
+    );
+  });
+
+  it("updates family life event", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "ev-1",
+          eventType: "CENSUS",
+          dateQualifier: "EXACT",
+          year: 1890,
+          month: null,
+          day: null,
+          endYear: null,
+          endMonth: null,
+          endDay: null,
+          notes: "US",
+          place: null,
+          citations: [],
+          familyId: "fam-1",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z"
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    const updated = await updateFamilyLifeEvent("fam-1", "ev-1", { notes: "US" });
+    expect(updated.notes).toBe("US");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/families/fam-1/life-events/ev-1",
+      expect.objectContaining({ method: "PATCH", credentials: "include" })
+    );
+  });
+
+  it("deletes family life event", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await deleteFamilyLifeEvent("fam-1", "ev-9");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/families/fam-1/life-events/ev-9",
       expect.objectContaining({ method: "DELETE", credentials: "include" })
     );
   });

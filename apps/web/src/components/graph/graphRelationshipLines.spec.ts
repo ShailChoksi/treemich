@@ -53,4 +53,76 @@ describe("buildVisibleRelationshipLines", () => {
     const edgeLine = lines.find((l) => l.kind === "PARENT_CHILD");
     expect(edgeLine?.dashed).toBeUndefined();
   });
+
+  it.each([
+    ["FOSTER", "FOSTER"],
+    ["STEP", "STEP"]
+  ] as const)("dashes %s pedigree on PARENT_OF", (_label, pedigree) => {
+    const rels: RelationshipRecord[] = [
+      {
+        fromPersonId: "p1",
+        toPersonId: "c1",
+        type: "PARENT_OF",
+        childEdgePedigree: pedigree
+      }
+    ];
+    const lines = buildVisibleRelationshipLines({
+      viewMode: "family",
+      photoEdges: [],
+      visiblePositionsById: new Map([
+        ["p1", pos(0, 0, 0)],
+        ["c1", pos(2, 0, 0)]
+      ]),
+      mergedParentGroups: new Map(),
+      filteredRelationships: rels,
+      visibleIdSet: new Set(["p1", "c1"])
+    });
+    expect(lines.find((l) => l.kind === "PARENT_CHILD")?.dashed).toBe(true);
+  });
+
+  it("does not dash UNKNOWN pedigree", () => {
+    const rels: RelationshipRecord[] = [
+      {
+        fromPersonId: "p1",
+        toPersonId: "c1",
+        type: "PARENT_OF",
+        childEdgePedigree: "UNKNOWN"
+      }
+    ];
+    const lines = buildVisibleRelationshipLines({
+      viewMode: "family",
+      photoEdges: [],
+      visiblePositionsById: new Map([
+        ["p1", pos(0, 0, 0)],
+        ["c1", pos(2, 0, 0)]
+      ]),
+      mergedParentGroups: new Map(),
+      filteredRelationships: rels,
+      visibleIdSet: new Set(["p1", "c1"])
+    });
+    expect(lines.find((l) => l.kind === "PARENT_CHILD")?.dashed).toBeUndefined();
+  });
+
+  it("does not apply pedigree dash styling to CHILD_OF edges", () => {
+    const rels: RelationshipRecord[] = [
+      {
+        fromPersonId: "c1",
+        toPersonId: "p1",
+        type: "CHILD_OF",
+        childEdgePedigree: "ADOPTED"
+      }
+    ];
+    const lines = buildVisibleRelationshipLines({
+      viewMode: "family",
+      photoEdges: [],
+      visiblePositionsById: new Map([
+        ["p1", pos(0, 0, 0)],
+        ["c1", pos(2, 0, 0)]
+      ]),
+      mergedParentGroups: new Map(),
+      filteredRelationships: rels,
+      visibleIdSet: new Set(["p1", "c1"])
+    });
+    expect(lines.find((l) => l.kind === "PARENT_CHILD")?.dashed).toBeUndefined();
+  });
 });

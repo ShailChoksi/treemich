@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import AdmZip from "adm-zip";
-import { HttpConflictError, HttpValidationError } from "../src/lifeEvents/errors.js";
+import { HttpConflictError, HttpNotFoundError, HttpValidationError } from "../src/lifeEvents/errors.js";
 import type { AppServices } from "../src/services.js";
 
 const upsertRelationshipMock = vi.fn();
@@ -1694,6 +1694,19 @@ describe("Treemich API routes", () => {
     expect(response.json()).toEqual({ lifeEvents: [] });
   });
 
+  it("lists family life events without include query (omits citations by default)", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/families/fam-2/life-events"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(lifeEventServiceMock.listFamilyLifeEvents).toHaveBeenCalledWith("user-1", "fam-2", {
+      includeCitations: false
+    });
+    expect(response.json()).toEqual({ lifeEvents: [] });
+  });
+
   it("returns 400 when POST family life event type is not allowed on families", async () => {
     const response = await app.inject({
       method: "POST",
@@ -1750,6 +1763,71 @@ describe("Treemich API routes", () => {
     expect(json.id).toBe("flev-1");
     expect(json.eventType).toBe("RESIDENCE");
     expect(json.familyId).toBe("fam-1");
+  });
+
+  it("patches family life event and returns JSON row", async () => {
+    lifeEventServiceMock.updateFamilyLifeEvent.mockResolvedValueOnce({
+      id: "flev-2",
+      userId: "user-1",
+      eventType: "CENSUS",
+      dateQualifier: "EXACT",
+      year: 1880,
+      month: null,
+      day: null,
+      endYear: null,
+      endMonth: null,
+      endDay: null,
+      notes: "Roll",
+      personProfileId: null,
+      relationshipId: null,
+      familyId: "fam-1",
+      placeId: null,
+      place: null,
+      citations: [],
+      createdAt: new Date("2020-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2020-01-02T00:00:00.000Z")
+    } as never);
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/families/fam-1/life-events/flev-2",
+      payload: { notes: "Roll" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(lifeEventServiceMock.updateFamilyLifeEvent).toHaveBeenCalledWith(
+      "user-1",
+      "fam-1",
+      "flev-2",
+      expect.objectContaining({ notes: "Roll" })
+    );
+    expect((response.json() as { notes: string }).notes).toBe("Roll");
+  });
+
+  it("returns 404 when PATCH family life event misses family or event", async () => {
+    lifeEventServiceMock.updateFamilyLifeEvent.mockRejectedValueOnce(
+      new HttpNotFoundError("Life event not found")
+    );
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/families/fam-1/life-events/missing",
+      payload: { notes: "x" }
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("deletes family life event with 204", async () => {
+    lifeEventServiceMock.deleteFamilyLifeEvent.mockResolvedValueOnce(undefined);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/families/fam-1/life-events/flev-9"
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(lifeEventServiceMock.deleteFamilyLifeEvent).toHaveBeenCalledWith("user-1", "fam-1", "flev-9");
   });
 
   it("merges GET /people birthDate from BIRTH life event over legacy override (post-migration parity)", async () => {
