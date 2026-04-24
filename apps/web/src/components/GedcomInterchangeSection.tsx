@@ -2,7 +2,7 @@
  * @file Phase 5: GEDCOM import wizard (preview → match Immich people → job) and async export job + immediate download.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ApiHttpError,
   downloadGedcomExportJobResult,
@@ -46,6 +46,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
   const [matchByXref, setMatchByXref] = useState<Record<string, string>>({});
   const [dryRun, setDryRun] = useState(false);
   const [skipImported, setSkipImported] = useState(false);
+  const [allowPartialMatches, setAllowPartialMatches] = useState(true);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +143,15 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
     setMatchByXref((cur) => ({ ...cur, [xref]: immichPersonId }));
   };
 
+  const matchablePeopleOptions = useMemo(
+    () =>
+      people
+        .map((p) => ({ id: p.id, label: getPersonDisplayLabel(p).trim() }))
+        .filter((p) => p.label.length > 0)
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [people]
+  );
+
   const indiRowsIncomplete = (p: GedcomImportPreviewResponse) =>
     p.indis.filter((row) => !(matchByXref[row.xref] ?? "").trim());
 
@@ -151,11 +161,11 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
       return;
     }
     const incomplete = indiRowsIncomplete(preview);
-    if (incomplete.length > 0) {
+    if (incomplete.length > 0 && !allowPartialMatches) {
       setError(`Match every INDI to an Immich person (${incomplete.length} missing).`);
       return;
     }
-    if (preview.famMatchError) {
+    if (preview.famMatchError && !allowPartialMatches) {
       setError(preview.famMatchError);
       return;
     }
@@ -174,7 +184,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
         gedcomUtf8,
         fileName,
         indiMatches,
-        importOptions: { dryRun, skipAlreadyImportedIndis: skipImported }
+        importOptions: { dryRun, skipAlreadyImportedIndis: skipImported, allowPartialMatches }
       });
       let state = await getGedcomImportJob(job.id);
       for (let i = 0; i < 120 && state.status !== "COMPLETED" && state.status !== "FAILED"; i += 1) {
@@ -274,7 +284,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                 <button
                   type="button"
                   className="secondary-button"
-                  disabled={busy || !preview || !!preview.famMatchError}
+                  disabled={busy || !preview}
                   onClick={() => void submitImport()}
                 >
                   {dryRun ? "Run dry-run" : "Apply import"}
@@ -298,13 +308,21 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                 />
                 <span>Skip INDI already stamped with gedcomIndi</span>
               </label>
+              <label className="field-group inline-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={allowPartialMatches}
+                  onChange={(e) => setAllowPartialMatches(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>Import only matched people (skip unmatched families)</span>
+              </label>
               {preview ? (
                 <div className="stack evidence-panel-divider">
                   <div className="field-label">Match each INDI to an Immich person</div>
                   <table className="gedcom-match-table">
                     <thead>
                       <tr>
-                        <th>Xref</th>
                         <th>Name in file</th>
                         <th>Person</th>
                       </tr>
@@ -313,9 +331,9 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                       {preview.indis.map((row) => (
                         <tr key={row.xref}>
                           <td>
-                            <code className="inline-code">{row.xref}</code>
+                            <div className="gedcom-source-name">{row.displayName ?? "—"}</div>
+                            <p className="hint hint--tight-below">Ref: {row.xref}</p>
                           </td>
-                          <td>{row.displayName ?? "—"}</td>
                           <td>
                             <select
                               className="gedcom-match-select"
@@ -325,9 +343,9 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                               aria-label={`Immich match for ${row.xref}`}
                             >
                               <option value="">— choose —</option>
-                              {people.map((p) => (
+                              {matchablePeopleOptions.map((p) => (
                                 <option key={p.id} value={p.id}>
-                                  {getPersonDisplayLabel(p)}
+                                  {p.label}
                                 </option>
                               ))}
                             </select>
@@ -339,6 +357,11 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                       ))}
                     </tbody>
                   </table>
+                  {allowPartialMatches ? (
+                    <p className="hint hint--tight-below">
+                      Unmatched INDI/FAM rows are skipped during import and logged as warnings.
+                    </p>
+                  ) : null}
                   {preview.lineLog.length > 0 ? (
                     <details className="gedcom-line-log">
                       <summary className="hint">

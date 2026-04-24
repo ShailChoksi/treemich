@@ -422,9 +422,11 @@ export async function processGedcomImportJob(jobId: string, services: AppService
   const options = (job.importOptions ?? {}) as {
     dryRun?: boolean;
     skipAlreadyImportedIndis?: boolean;
+    allowPartialMatches?: boolean;
   };
   const dryRun = options.dryRun === true;
   const skipAlreadyImportedIndis = options.skipAlreadyImportedIndis === true;
+  const allowPartialMatches = options.allowPartialMatches === true;
 
   await prisma.gedcomImportJob.update({
     where: { id: jobId },
@@ -576,16 +578,29 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       const husbImmich = fam.husbXref ? indiMap.get(fam.husbXref) : undefined;
       const wifeImmich = fam.wifeXref ? indiMap.get(fam.wifeXref) : undefined;
       const childImmichs = fam.childXrefs.map((cx) => indiMap.get(cx)).filter((x): x is string => Boolean(x));
+      const missingPointers: string[] = [];
       if (fam.husbXref && !husbImmich) {
-        throw new Error(`Missing match for HUSB ${fam.husbXref} in FAM ${fam.xref}`);
+        missingPointers.push(`HUSB ${fam.husbXref}`);
       }
       if (fam.wifeXref && !wifeImmich) {
-        throw new Error(`Missing match for WIFE ${fam.wifeXref} in FAM ${fam.xref}`);
+        missingPointers.push(`WIFE ${fam.wifeXref}`);
       }
-      for (let i = 0; i < fam.childXrefs.length; i++) {
-        if (!childImmichs[i]) {
-          throw new Error(`Missing match for CHIL ${fam.childXrefs[i]!} in FAM ${fam.xref}`);
+      for (const cx of fam.childXrefs) {
+        if (!indiMap.get(cx)) {
+          missingPointers.push(`CHIL ${cx}`);
         }
+      }
+      if (missingPointers.length > 0) {
+        const msg = `Missing match for ${missingPointers.join(", ")} in FAM ${fam.xref}`;
+        if (!allowPartialMatches) {
+          throw new Error(msg);
+        }
+        pushLog(lineLog, {
+          severity: "warn",
+          lineNo: block.startLineNo,
+          message: `${msg}; skipping this family because importOptions.allowPartialMatches=true`
+        });
+        continue;
       }
       const childPayload = fam.childXrefs.map((cx, i) => {
         const chLines = chunkByLevel1(block.lines).find(

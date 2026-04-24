@@ -994,7 +994,7 @@ export type GedcomImportJobCreateBody = {
   gedcomUtf8: string;
   fileName?: string;
   indiMatches: Record<string, string>;
-  importOptions?: { dryRun?: boolean; skipAlreadyImportedIndis?: boolean };
+  importOptions?: { dryRun?: boolean; skipAlreadyImportedIndis?: boolean; allowPartialMatches?: boolean };
 };
 
 export const postGedcomImportJob = async (

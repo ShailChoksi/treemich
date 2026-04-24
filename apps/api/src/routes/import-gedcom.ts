@@ -31,7 +31,9 @@ const createJobBodySchema = z.object({
   importOptions: z
     .object({
       dryRun: z.boolean().optional(),
-      skipAlreadyImportedIndis: z.boolean().optional()
+      skipAlreadyImportedIndis: z.boolean().optional(),
+      /** When true, allows importing only a matched INDI subset; FAM rows with missing matches are skipped. */
+      allowPartialMatches: z.boolean().optional()
     })
     .optional()
 });
@@ -83,11 +85,12 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
       const preview = buildGedcomImportPreview(body.gedcomUtf8);
       const merged = mergeIndiMatches(body.indiMatches, preview.records);
       const famErr = validateFamMatches(preview, merged);
-      if (famErr) {
+      const allowPartialMatches = body.importOptions?.allowPartialMatches === true;
+      if (famErr && !allowPartialMatches) {
         return reply.code(422).send({
           statusCode: 422,
           error: "Incomplete INDI matches for family records",
-          message: famErr
+          message: `${famErr}. To import only matched people, set importOptions.allowPartialMatches=true.`
         });
       }
       const job = await prisma.gedcomImportJob.create({

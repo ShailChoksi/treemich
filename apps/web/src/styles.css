@@ -1516,6 +1516,7 @@ textarea:disabled {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  table-layout: fixed;
 }
 
 .gedcom-match-table th,
@@ -1527,7 +1528,24 @@ textarea:disabled {
 
 .gedcom-match-select {
   width: 100%;
-  max-width: 14rem;
+  min-width: 16rem;
+  max-width: none;
+}
+
+.gedcom-match-table th:first-child,
+.gedcom-match-table td:first-child {
+  width: 58%;
+}
+
+.gedcom-match-table th:last-child,
+.gedcom-match-table td:last-child {
+  width: 42%;
+}
+
+.gedcom-source-name {
+  font-weight: 600;
+  line-height: 1.25;
+  word-break: break-word;
 }
 
 .gedcom-line-log {
