@@ -51,7 +51,18 @@ const envSchema = z.object({
    * When "false" / "0" / "no" / "off", disables `GET /export/gedcom` (Phase 5a GEDCOM export).
    * Default when unset: enabled.
    */
-  TREEMICH_GEDCOM_EXPORT_ENABLED: z.string().optional()
+  TREEMICH_GEDCOM_EXPORT_ENABLED: z.string().optional(),
+  /**
+   * When "true" / "1" / "yes" / "on", enables `POST /import/gedcom/*` (Phase 5b). Default when unset: **disabled**
+   * so imports never run accidentally.
+   */
+  TREEMICH_GEDCOM_IMPORT_ENABLED: z.string().optional(),
+  /** Max UTF-8 byte length for `gedcomUtf8` on import endpoints (default 3_000_000). */
+  TREEMICH_GEDCOM_IMPORT_MAX_BYTES: z.coerce.number().int().positive().optional(),
+  /** Max physical lines accepted by the GEDCOM parser (default 250_000). */
+  TREEMICH_GEDCOM_IMPORT_MAX_LINES: z.coerce.number().int().positive().optional(),
+  /** Max line-log entries returned on job GET / stored on create (default 2000). */
+  TREEMICH_GEDCOM_IMPORT_MAX_LINE_LOG: z.coerce.number().int().positive().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -112,3 +123,18 @@ export const isGedcomExportEnabled = (): boolean => {
   }
   return !["0", "false", "no", "off"].includes(v.toLowerCase());
 };
+
+/** Phase 5b: GEDCOM import (`POST /import/gedcom/*`). Default **off** when unset. */
+export const isGedcomImportEnabled = (): boolean => {
+  const v = env.TREEMICH_GEDCOM_IMPORT_ENABLED;
+  if (v == null || v === "") {
+    return false;
+  }
+  return ["1", "true", "yes", "on"].includes(v.toLowerCase());
+};
+
+export const maxGedcomImportBytes = (): number => env.TREEMICH_GEDCOM_IMPORT_MAX_BYTES ?? 3_000_000;
+
+export const maxGedcomImportLineLogEntries = (): number => env.TREEMICH_GEDCOM_IMPORT_MAX_LINE_LOG ?? 2000;
+
+export const maxGedcomImportLines = (): number => env.TREEMICH_GEDCOM_IMPORT_MAX_LINES ?? 250_000;

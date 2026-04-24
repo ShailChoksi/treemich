@@ -30,6 +30,14 @@ enum CooccurrenceJobStatus {
   FAILED
 }
 
+/// Phase 5b: background GEDCOM import job (parse + match + apply).
+enum GedcomImportJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 enum DateQualifier {
   EXACT
   ABOUT
@@ -111,6 +119,7 @@ model TreemichUser {
   mediaObjects        MediaObject[]
   mediaLinks          MediaLink[]
   families            Family[]
+  gedcomImportJobs    GedcomImportJob[]
 
   @@unique([immichBaseUrl, immichUserId])
   @@unique([immichBaseUrl, immichEmail])
@@ -460,4 +469,30 @@ model CooccurrenceEdge {
 model DataMigrationCheckpoint {
   id        String   @id
   appliedAt DateTime @default(now())
+}
+
+model GedcomImportJob {
+  id           String                @id @default(cuid())
+  userId       String
+  status       GedcomImportJobStatus @default(PENDING)
+  fileName     String                @default("import.ged")
+  byteSize     Int
+  /// Raw UTF-8 payload (bounded by `TREEMICH_GEDCOM_IMPORT_MAX_BYTES` at upload).
+  gedcomUtf8   String                @db.Text
+  /// Client-supplied xref → Immich person id (keys may be `@I1@` or `I1`).
+  indiMatches  Json                  @default("{}")
+  /// Options: dryRun, skipAlreadyImportedIndis, etc.
+  importOptions Json                 @default("{}")
+  startedAt    DateTime?
+  completedAt  DateTime?
+  errorMessage String?
+  /// Structured parse/apply messages (truncated server-side).
+  lineLog      Json                  @default("[]")
+  /// Counts and ids created (families, events, …).
+  summary      Json?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  user         TreemichUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

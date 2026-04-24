@@ -41,6 +41,18 @@ Interoperability export as **GEDCOM 5.5.1** UTF-8 (`LINEAGE-LINKED`), including 
 
 Disable the route in restrictive environments with **`TREEMICH_GEDCOM_EXPORT_ENABLED=false`** (default when unset: enabled).
 
+### GEDCOM import (Phase 5b)
+
+Imports **UTF-8 GEDCOM** into Treemich **only for people you explicitly map** to existing Immich person ids (Treemich `PersonProfile` rows). There is **no** automatic creation of Immich people in this release.
+
+1. **`POST /api/import/gedcom/preview`** — body JSON `{ "gedcomUtf8": "..." }`. Returns parsed **INDI** / **FAM** summaries, **`unmatchedIndis`** (xref + display name + optional **`_TREEMICH_IMMICH_PERSON_ID`** hint from the file), and **`famMatchError`** if any **HUSB** / **WIFE** / **CHIL** pointer cannot be resolved from matches.
+2. **`POST /api/import/gedcom/jobs`** — body `{ "gedcomUtf8", "indiMatches": { "@I1@": "<immichPersonId>", ... }, "fileName"?, "importOptions"? }`. Creates an async job (`PENDING` → `RUNNING` → `COMPLETED` or `FAILED`) and applies **REPO**, **SOUR**, **FAM** (via `Family` + derived edges), **MARR**/**DIV** on the spouse relationship, family-scoped **RESI**/**CENS**/**EVEN**, and **INDI** names / **SEX** / person life events. **`importOptions`**: `dryRun`, `skipAlreadyImportedIndis` (skips INDI when `PersonProfile.externalIds.gedcomIndi` already equals that xref).
+3. **`GET /api/import/gedcom/jobs/:jobId`** — poll status, **`summary`** counts, **`lineLog`**, **`errorMessage`**.
+
+**Limits:** payload size defaults to **3 MB** UTF-8 (`TREEMICH_GEDCOM_IMPORT_MAX_BYTES`); parser line cap **`TREEMICH_GEDCOM_IMPORT_MAX_LINES`** (default 250k).
+
+**Enable** with **`TREEMICH_GEDCOM_IMPORT_ENABLED=true`** (default when unset: **disabled**). Apply migration **`0019_gedcom_import_job`**.
+
 ### Treemich user deletion (PostgreSQL cascade)
 
 Deleting a **`TreemichUser`** row (for example via Prisma or direct SQL) **cascades** to all Treemich-owned graph data linked by `userId`: linked Immich account row, sessions, person profiles, relationships, places, life events (and citations), and co-occurrence tables. **Immich itself is unchanged** — people, faces, and photos remain in your Immich instance. To remove those, use Immich’s own account or library tools.
