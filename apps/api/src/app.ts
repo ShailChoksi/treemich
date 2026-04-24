@@ -17,6 +17,7 @@ import { registerAuthLoginRoute } from "./routes/auth.login.js";
 import { registerAuthLogoutRoute } from "./routes/auth.logout.js";
 import { registerAuthMeRoute } from "./routes/auth.me.js";
 import { registerExportAccountGetRoute } from "./routes/export-account.get.js";
+import { registerExportGedcomGetRoute } from "./routes/export-gedcom.get.js";
 import { registerFamiliesLifeEventsRoutes } from "./routes/families-life-events.js";
 import { registerFamilyRoutes } from "./routes/families.js";
 import { registerCooccurrenceComputePostRoute } from "./routes/cooccurrence-compute.post.js";
@@ -211,6 +212,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerUserPreferencesGetRoute);
   app.register(registerUserPreferencesPatchRoute);
   app.register(registerExportAccountGetRoute);
+  app.register(registerExportGedcomGetRoute);
 
   return app;
 };

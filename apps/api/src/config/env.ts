@@ -46,7 +46,12 @@ const envSchema = z.object({
    * (infer `Family` rows from untagged `PARENT_OF` edges). Default when unset: **enabled** so upgrades
    * populate family units without a manual script.
    */
-  TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL: z.string().optional()
+  TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL: z.string().optional(),
+  /**
+   * When "false" / "0" / "no" / "off", disables `GET /export/gedcom` (Phase 5a GEDCOM export).
+   * Default when unset: enabled.
+   */
+  TREEMICH_GEDCOM_EXPORT_ENABLED: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -93,6 +98,15 @@ export const isFamilyModelEnabled = (): boolean => {
 /** One-shot automatic family backfill after DB upgrade (see `maybeRunAutomaticPhase4FamilyBackfillOnBoot`). */
 export const isAutoPhase4FamilyBackfillEnabled = (): boolean => {
   const v = env.TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL;
+  if (v == null || v === "") {
+    return true;
+  }
+  return !["0", "false", "no", "off"].includes(v.toLowerCase());
+};
+
+/** Phase 5a: `GET /export/gedcom` (GEDCOM 5.5.1 UTF-8 + optional ZIP xref sidecar). */
+export const isGedcomExportEnabled = (): boolean => {
+  const v = env.TREEMICH_GEDCOM_EXPORT_ENABLED;
   if (v == null || v === "") {
     return true;
   }

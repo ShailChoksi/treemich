@@ -29,6 +29,18 @@ Authenticated users can download a snapshot of Treemich-owned data (profiles, re
 
 Use the same session cookie as the rest of the API.
 
+### GEDCOM export (Phase 5a)
+
+Interoperability export as **GEDCOM 5.5.1** UTF-8 (`LINEAGE-LINKED`), including **INDI**, **FAM** (with **CHIL** + **PEDI** when families exist), person-scoped and family-scoped life events, spouse **MARR**/**DIV** on unions, **SOUR**/**REPO**, and **OBJE** stubs for evidence media. Optional custom line **`_TREEMICH_IMMICH_PERSON_ID`** maps each `INDI` to the Immich person id (disable with `includeTreemichCustomTags=0` if your toolchain rejects unknown tags).
+
+- **`GET /api/export/gedcom`** (default) — same as **`?format=ged`**. Response is `text/plain; charset=utf-8` with `Content-Disposition: attachment` (`.ged`).
+
+- **`GET /api/export/gedcom?format=zip`** — `application/zip` containing **`treemich.ged`**, **`treemich-gedcom-xrefs.json`** (maps `I0001`/`F0001`/… xrefs to Treemich ids), and **`manifest.json`**.
+
+- **`GET /api/export/gedcom?redactLiving=1`** — omits person-scoped life-event blocks for individuals who have **no** `DEATH` life event (living heuristic). Union structure (**FAM**, **FAMS**, **FAMC**) is still exported.
+
+Disable the route in restrictive environments with **`TREEMICH_GEDCOM_EXPORT_ENABLED=false`** (default when unset: enabled).
+
 ### Treemich user deletion (PostgreSQL cascade)
 
 Deleting a **`TreemichUser`** row (for example via Prisma or direct SQL) **cascades** to all Treemich-owned graph data linked by `userId`: linked Immich account row, sessions, person profiles, relationships, places, life events (and citations), and co-occurrence tables. **Immich itself is unchanged** — people, faces, and photos remain in your Immich instance. To remove those, use Immich’s own account or library tools.
