@@ -45,6 +45,6 @@ describe("FamilyService.findAdoptedChildImmichPersonIds", () => {
     const service = new FamilyService(relationshipService);
     const ids = await service.findAdoptedChildImmichPersonIds("user-1", []);
     expect(ids).toEqual([]);
-    expect(findManyMock).not.toHaveBeenCalled();
+    expect(findManyMock).toHaveBeenCalledTimes(0);
   });
 });

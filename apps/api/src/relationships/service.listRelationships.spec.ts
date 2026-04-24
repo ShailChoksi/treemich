@@ -27,7 +27,7 @@ describe("RelationshipService.listRelationships", () => {
     const { RelationshipService } = await import("./service.js");
     const service = new RelationshipService(mockLifeEventService as never);
     await service.listRelationships("user-1");
-    expect(familyChildFindMany).not.toHaveBeenCalled();
+    expect(familyChildFindMany).toHaveBeenCalledTimes(0);
   });
 
   it("skips familyChild lookup when PARENT_OF has no familyId", async () => {
@@ -37,7 +37,7 @@ describe("RelationshipService.listRelationships", () => {
     const { RelationshipService } = await import("./service.js");
     const service = new RelationshipService(mockLifeEventService as never);
     await service.listRelationships("user-1");
-    expect(familyChildFindMany).not.toHaveBeenCalled();
+    expect(familyChildFindMany).toHaveBeenCalledTimes(0);
   });
 
   it("queries familyChild for PARENT_OF rows with familyId and attaches childEdgePedigree", async () => {
@@ -77,7 +77,7 @@ describe("RelationshipService.listRelationships", () => {
     const { RelationshipService } = await import("./service.js");
     const service = new RelationshipService(mockLifeEventService as never);
     const result = await service.listRelationships("user-1");
-    expect(result.relationships[0]).not.toHaveProperty("childEdgePedigree");
+    expect(Object.hasOwn(result.relationships[0] as object, "childEdgePedigree")).toBe(false);
   });
 
   it("still loads spouse marriage dates for SPOUSE_OF rows", async () => {

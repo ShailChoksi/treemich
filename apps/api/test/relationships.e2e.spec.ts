@@ -520,7 +520,7 @@ describe("Treemich API routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(findAdoptedChildImmichPersonIdsMock).toHaveBeenCalledWith("user-1", ["mike-id"]);
-    expect(traverseRelationshipChainMock).not.toHaveBeenCalled();
+    expect(traverseRelationshipChainMock).toHaveBeenCalledTimes(0);
     const json = response.json();
     expect(json.matches).toHaveLength(1);
     expect(json.matches[0].person.name).toBe("Ada");
@@ -1718,7 +1718,7 @@ describe("Treemich API routes", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(lifeEventServiceMock.createFamilyLifeEvent).not.toHaveBeenCalled();
+    expect(lifeEventServiceMock.createFamilyLifeEvent).toHaveBeenCalledTimes(0);
   });
 
   it("creates family life event and returns JSON row", async () => {
