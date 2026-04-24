@@ -18,7 +18,9 @@ export const createFamilyBodySchema = z
     parent1ImmichPersonId: optionalImmichId,
     parent2ImmichPersonId: optionalImmichId,
     notes: z.string().max(8000).nullable().optional(),
-    children: z.array(familyChildInputSchema).optional().default([])
+    children: z.array(familyChildInputSchema).optional().default([]),
+    /** Optional interchange keys (e.g. `gedcomFam` from GEDCOM import). */
+    externalIds: z.record(z.string(), z.unknown()).optional()
   })
   .superRefine((body, ctx) => {
     const p1 = body.parent1ImmichPersonId ?? null;
@@ -106,6 +108,7 @@ export type FamilyRecord = {
   parent1ImmichPersonId: string | null;
   parent2ImmichPersonId: string | null;
   notes: string | null;
+  externalIds: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   children: FamilyChildRecord[];

@@ -16,6 +16,10 @@ export const familyToJson = (row: FamilyWithChildren) => ({
   parent1ImmichPersonId: row.parent1ImmichPersonId,
   parent2ImmichPersonId: row.parent2ImmichPersonId,
   notes: row.notes,
+  externalIds:
+    row.externalIds != null && typeof row.externalIds === "object" && !Array.isArray(row.externalIds)
+      ? (row.externalIds as Record<string, unknown>)
+      : {},
   createdAt: toIso(row.createdAt),
   updatedAt: toIso(row.updatedAt),
   children: row.children.map((c) => ({
@@ -144,12 +148,18 @@ export class FamilyService {
       }
       await this.ensureProfiles(tx, userId, involved);
 
+      const ext =
+        body.externalIds != null && typeof body.externalIds === "object" && !Array.isArray(body.externalIds)
+          ? (body.externalIds as Prisma.InputJsonValue)
+          : undefined;
+
       const family = await tx.family.create({
         data: {
           userId,
           parent1ImmichPersonId: parent1,
           parent2ImmichPersonId: parent2,
           notes: body.notes ?? null,
+          ...(ext !== undefined ? { externalIds: ext } : {}),
           children: {
             create: childRows.map((c) => ({
               childImmichPersonId: c.childImmichPersonId,

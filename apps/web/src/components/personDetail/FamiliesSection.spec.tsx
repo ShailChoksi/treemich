@@ -38,6 +38,7 @@ const baseFamily = (overrides: Partial<FamilyRecord> = {}): FamilyRecord => ({
   parent1ImmichPersonId: "p1",
   parent2ImmichPersonId: "p2",
   notes: "Original notes",
+  externalIds: {},
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
   children: [

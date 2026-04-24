@@ -195,6 +195,55 @@ describe("buildGedcomDocument", () => {
     expect(norm).not.toContain("secret");
   });
 
+  it("uses externalIds.gedcomFam as stable FAM xref when valid", () => {
+    const { gedcomUtf8, xrefs } = buildGedcomDocument(
+      {
+        personProfiles: [
+          {
+            id: "pp-a",
+            immichPersonId: "a",
+            gender: "MALE",
+            givenName: "A",
+            surname: "One",
+            displayNameOverride: null,
+            externalIds: {}
+          },
+          {
+            id: "pp-b",
+            immichPersonId: "b",
+            gender: "FEMALE",
+            givenName: "B",
+            surname: "Two",
+            displayNameOverride: null,
+            externalIds: {}
+          }
+        ],
+        relationships: [
+          { id: "rel-sp", fromPersonId: "a", toPersonId: "b", type: "SPOUSE_OF", familyId: null }
+        ],
+        families: [
+          {
+            id: "fam-stable",
+            parent1ImmichPersonId: "a",
+            parent2ImmichPersonId: "b",
+            notes: null,
+            externalIds: { gedcomFam: "IMPORTFAM1" },
+            children: []
+          }
+        ],
+        lifeEvents: [],
+        personNames: [],
+        repositories: [],
+        sources: [],
+        mediaObjects: [],
+        mediaLinks: []
+      },
+      { includeTreemichCustomTags: false }
+    );
+    expect(gedcomUtf8).toContain("0 @IMPORTFAM1@ FAM");
+    expect(xrefs.fam.IMPORTFAM1?.familyId).toBe("fam-stable");
+  });
+
   it("omits Treemich custom tags when includeTreemichCustomTags is false", () => {
     const { gedcomUtf8 } = buildGedcomDocument(
       {

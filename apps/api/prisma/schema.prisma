@@ -247,6 +247,8 @@ model Family {
   parent1ImmichPersonId  String?
   parent2ImmichPersonId String?
   notes                  String?
+  /// Optional map for interchange (e.g. `{ "gedcomFam": "F12" }` from GEDCOM import for idempotent FAM rows).
+  externalIds            Json           @default("{}")
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
   user                   TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)

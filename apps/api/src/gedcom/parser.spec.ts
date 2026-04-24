@@ -1,11 +1,17 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  gedcomDeclaredCharsetUnsupportedMessage,
   mergeConcCont,
   normalizeIndiFamXref,
   parseGedcomDocument,
   parseTopLevelRecords,
   splitPhysicalLines
 } from "./parser.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe("gedcom parser", () => {
   it("normalizes xref keys", () => {
@@ -51,5 +57,28 @@ describe("gedcom parser", () => {
     const merged = splitPhysicalLines("0 @X@ INDI\nnot a gedcom line");
     const recs = parseTopLevelRecords(mergeConcCont(merged, log), log);
     expect(recs).toHaveLength(1);
+  });
+
+  it("rejects ANSEL-declared files before parsing records", () => {
+    const ged = `0 HEAD
+1 CHAR ANSEL
+0 @I1@ INDI
+1 NAME X /Y/
+0 TRLR
+`;
+    expect(gedcomDeclaredCharsetUnsupportedMessage(ged)).toMatch(/ANSEL/);
+    const { records, lineLog } = parseGedcomDocument(ged);
+    expect(records).toHaveLength(0);
+    expect(lineLog.some((e) => e.severity === "error" && e.message.includes("ANSEL"))).toBe(true);
+  });
+
+  it("parses checked-in minimal GEDCOM golden fixture", () => {
+    const ged = readFileSync(join(__dirname, "fixtures", "minimal-phase5.ged"), "utf8");
+    const { records, lineLog } = parseGedcomDocument(ged);
+    expect(lineLog.filter((e) => e.severity === "error")).toHaveLength(0);
+    expect(records.map((r) => [r.recordTag, r.xref])).toEqual([
+      ["INDI", "@I1@"],
+      ["FAM", "@F9@"]
+    ]);
   });
 });

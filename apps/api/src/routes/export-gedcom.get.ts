@@ -102,6 +102,10 @@ const loadGedcomExportInput = async (userId: string): Promise<GedcomExportInput>
       parent1ImmichPersonId: f.parent1ImmichPersonId,
       parent2ImmichPersonId: f.parent2ImmichPersonId,
       notes: f.notes,
+      externalIds:
+        f.externalIds != null && typeof f.externalIds === "object" && !Array.isArray(f.externalIds)
+          ? (f.externalIds as Record<string, unknown>)
+          : {},
       children: f.children.map((c) => ({
         childImmichPersonId: c.childImmichPersonId,
         pedigree: c.pedigree

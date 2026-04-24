@@ -441,6 +441,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
 
   type ImportSummary = {
     familiesCreated: number;
+    familiesReused: number;
     spouseRelationshipsResolved: number;
     personLifeEventsCreated: number;
     relationshipLifeEventsCreated: number;
@@ -453,6 +454,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
   };
   const summary: ImportSummary = {
     familiesCreated: 0,
+    familiesReused: 0,
     spouseRelationshipsResolved: 0,
     personLifeEventsCreated: 0,
     relationshipLifeEventsCreated: 0,
@@ -605,11 +607,72 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         children: childPayload
       };
 
+      const gedFamKey = fam.xref.replace(/^@|@$/g, "");
+
+      const parentsMatchFamily = (
+        row: { parent1ImmichPersonId: string | null; parent2ImmichPersonId: string | null },
+        a: string | null | undefined,
+        b: string | null | undefined
+      ): boolean => {
+        const want = new Set([a, b].filter((x): x is string => Boolean(x)));
+        const have = new Set(
+          [row.parent1ImmichPersonId, row.parent2ImmichPersonId].filter((x): x is string => Boolean(x))
+        );
+        if (want.size !== have.size) {
+          return false;
+        }
+        for (const x of want) {
+          if (!have.has(x)) {
+            return false;
+          }
+        }
+        return true;
+      };
+
+      const childrenMatch = (rows: { childImmichPersonId: string }[], wantIds: string[]): boolean => {
+        if (rows.length !== wantIds.length) {
+          return false;
+        }
+        const have = new Set(rows.map((r) => r.childImmichPersonId));
+        return wantIds.every((id) => have.has(id));
+      };
+
+      const existingFam = await prisma.family.findFirst({
+        where: {
+          userId: job.userId,
+          externalIds: { path: ["gedcomFam"], equals: gedFamKey }
+        },
+        include: { children: true }
+      });
+
       let relId: string | null = null;
       let treemichFamilyId: string | null = null;
 
-      if (!dryRun) {
-        const created = await services.familyService.createFamily(job.userId, body);
+      if (existingFam) {
+        if (
+          !parentsMatchFamily(existingFam, husbImmich ?? null, wifeImmich ?? null) ||
+          !childrenMatch(existingFam.children, childImmichs)
+        ) {
+          pushLog(lineLog, {
+            severity: "warn",
+            lineNo: block.startLineNo,
+            message: `FAM ${fam.xref}: existing Treemich family for gedcomFam=${gedFamKey} has different parents or children than this GEDCOM; reusing that family id`
+          });
+        }
+        treemichFamilyId = existingFam.id;
+        famXrefToTreemichFamilyId.set(fam.xref, existingFam.id);
+        summary.familiesReused += 1;
+        if (husbImmich && wifeImmich) {
+          relId = await findSpouseRelationshipId(job.userId, husbImmich, wifeImmich);
+          if (relId) {
+            summary.spouseRelationshipsResolved += 1;
+          }
+        }
+      } else if (!dryRun) {
+        const created = await services.familyService.createFamily(job.userId, {
+          ...body,
+          externalIds: { gedcomFam: gedFamKey }
+        });
         treemichFamilyId = created.id;
         famXrefToTreemichFamilyId.set(fam.xref, created.id);
         if (husbImmich && wifeImmich) {
@@ -618,8 +681,10 @@ export async function processGedcomImportJob(jobId: string, services: AppService
             summary.spouseRelationshipsResolved += 1;
           }
         }
+        summary.familiesCreated += 1;
+      } else {
+        summary.familiesCreated += 1;
       }
-      summary.familiesCreated += 1;
 
       for (const ch of chunkByLevel1(block.lines)) {
         const tag = ch[0]!.tag;

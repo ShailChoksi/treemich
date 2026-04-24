@@ -160,12 +160,41 @@ export const findSubValue = (chunk: GedcomPlainLine[], tag: string, subLevel = 2
   return null;
 };
 
+/**
+ * If the HEAD declares a charset Treemich does not support as UTF-8 text, returns a user-facing message.
+ * Only **ANSEL** is rejected here (common Gramps export); other CHAR values are ignored at this layer.
+ */
+export const gedcomDeclaredCharsetUnsupportedMessage = (gedcomUtf8: string): string | null => {
+  const physical = splitPhysicalLines(gedcomUtf8);
+  for (let i = 0; i < Math.min(physical.length, 500); i++) {
+    const line = physical[i]!.replace(/\r$/, "");
+    const m = /^(\d+)\s+CHAR\s+(.+)$/i.exec(line);
+    if (!m) {
+      continue;
+    }
+    const raw = m[2]!.trim();
+    const u = raw.toUpperCase();
+    if (u === "UTF-8" || u === "UTF8") {
+      return null;
+    }
+    if (u === "ANSEL") {
+      return `GEDCOM declares CHAR ${raw}, which is not supported. Re-export as UTF-8 (CHAR UTF-8) or convert the file before import.`;
+    }
+  }
+  return null;
+};
+
 export const parseGedcomDocument = (
   gedcomUtf8: string,
   options?: { maxLines?: number }
 ): { records: GedcomRecordBlock[]; lineLog: GedcomLineLogEntry[] } => {
   const maxLines = options?.maxLines ?? 250_000;
   const lineLog: GedcomLineLogEntry[] = [];
+  const charsetMsg = gedcomDeclaredCharsetUnsupportedMessage(gedcomUtf8);
+  if (charsetMsg) {
+    lineLog.push({ severity: "error", lineNo: 0, message: charsetMsg });
+    return { records: [], lineLog };
+  }
   const physical = splitPhysicalLines(gedcomUtf8);
   if (physical.length > maxLines) {
     lineLog.push({

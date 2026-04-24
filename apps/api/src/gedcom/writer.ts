@@ -99,6 +99,7 @@ export type GedcomExportFamily = {
   parent2ImmichPersonId: string | null;
   notes: string | null;
   children: GedcomExportFamilyChild[];
+  externalIds?: Record<string, unknown>;
 };
 
 export type GedcomExportRepository = {
@@ -187,6 +188,9 @@ const line = (level: number, tag: string, value?: string): string => {
 };
 
 const padXref = (prefix: string, n: number, width = 4) => `${prefix}${String(n).padStart(width, "0")}`;
+
+/** GEDCOM xref payload (without @); used when re-emitting a FAM xref from import (`externalIds.gedcomFam`). */
+const isStableFamXrefPayload = (s: string): boolean => /^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(s);
 
 const profileIdHasDeath = (lifeEvents: GedcomExportLifeEvent[], personProfileId: string): boolean =>
   lifeEvents.some((e) => e.personProfileId === personProfileId && e.eventType === "DEATH");
@@ -417,13 +421,29 @@ export function buildGedcomDocument(
   const familyIdToXref = new Map<string, string>();
   const familiesSorted = [...input.families].sort((a, b) => a.id.localeCompare(b.id));
   let famCounter = 0;
+  const usedFamXrefs = new Set<string>();
   const nextFamXref = (): string => {
     famCounter += 1;
     return padXref("F", famCounter);
   };
 
+  const allocateFamXref = (f: (typeof familiesSorted)[number]): string => {
+    const raw = f.externalIds?.gedcomFam;
+    const pref = typeof raw === "string" && isStableFamXrefPayload(raw) ? raw : null;
+    if (pref && !usedFamXrefs.has(pref)) {
+      usedFamXrefs.add(pref);
+      return pref;
+    }
+    let xref = nextFamXref();
+    while (usedFamXrefs.has(xref)) {
+      xref = nextFamXref();
+    }
+    usedFamXrefs.add(xref);
+    return xref;
+  };
+
   for (const f of familiesSorted) {
-    const xref = nextFamXref();
+    const xref = allocateFamXref(f);
     familyIdToXref.set(f.id, xref);
     const p1 = f.parent1ImmichPersonId;
     const p2 = f.parent2ImmichPersonId;
@@ -466,7 +486,11 @@ export function buildGedcomDocument(
     }
     if (!syntheticPairToXref.has(k)) {
       syntheticPairs.push(k);
-      const xref = nextFamXref();
+      let xref = nextFamXref();
+      while (usedFamXrefs.has(xref)) {
+        xref = nextFamXref();
+      }
+      usedFamXrefs.add(xref);
       syntheticPairToXref.set(k, xref);
       const [lo, hi] = k.split("|") as [string, string];
       xrefs.fam[xref] = {
