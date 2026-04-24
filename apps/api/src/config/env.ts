@@ -35,7 +35,12 @@ const envSchema = z.object({
   /** When "false" / "0" / "no" / "off", `GET /places/map` returns no place points for map UI. */
   MAP_UI_ENABLED: z.string().optional(),
   /** When "false" / "0" / "no" / "off", skip automatic geocoding for profile birth city/country edits. */
-  TREEMICH_PROFILE_PLACE_GEOCODING_ENABLED: z.string().optional()
+  TREEMICH_PROFILE_PLACE_GEOCODING_ENABLED: z.string().optional(),
+  /**
+   * When "false" / "0" / "no" / "off", disables Phase 4 family HTTP routes (`/families`, `/people/:id/families`,
+   * `/families/:id/life-events`). Default when unset: enabled.
+   */
+  TREEMICH_FAMILY_MODEL_ENABLED: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -64,6 +69,15 @@ export const isMapUiEnabled = (): boolean => {
 /** Feature flag: Nominatim backfill when profile birth city/country is saved. */
 export const isProfilePlaceGeocodingEnabled = (): boolean => {
   const v = env.TREEMICH_PROFILE_PLACE_GEOCODING_ENABLED;
+  if (v == null || v === "") {
+    return true;
+  }
+  return !["0", "false", "no", "off"].includes(v.toLowerCase());
+};
+
+/** Feature flag: Phase 4 family model HTTP surface. */
+export const isFamilyModelEnabled = (): boolean => {
+  const v = env.TREEMICH_FAMILY_MODEL_ENABLED;
   if (v == null || v === "") {
     return true;
   }

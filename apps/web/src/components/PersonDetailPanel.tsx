@@ -5,9 +5,11 @@
 import type { CreateLifeEventBody, CreateResearchTaskBody, PatchLifeEventBody } from "@treemich/shared";
 import { memo, useEffect, useMemo, useState } from "react";
 import type {
+  FamilyRecord,
   Gender,
   ImmichPerson,
   LifeEventRecord,
+  PatchFamilyBody,
   RelationshipRecord,
   RelationshipType,
   ResearchTaskRecord,
@@ -19,6 +21,7 @@ import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { LifeEventsSection } from "./personDetail/LifeEventsSection";
 import { PersonNamesSection } from "./personDetail/PersonNamesSection";
 import { PersonTimelineSection } from "./personDetail/PersonTimelineSection";
+import { FamiliesSection } from "./personDetail/FamiliesSection";
 import { ResearchTasksSection } from "./personDetail/ResearchTasksSection";
 import { SpouseLifeEventsRichPane } from "./personDetail/SpouseLifeEventsRichPane";
 import { computeExtendedFamily, computeInLawFamily } from "./graph/extendedFamily";
@@ -107,6 +110,16 @@ type Props = {
   onPersonNamesChanged?: () => void;
   personTimeline?: TimelineEventRecord[];
   researchTasks?: ResearchTaskRecord[];
+  /** Loaded family unions for this person; omit until fetched from `GET /people/:id/families`. */
+  families?: FamilyRecord[];
+  onFamilyPatch?: (familyId: string, body: PatchFamilyBody) => Promise<void>;
+  onFamilyDelete?: (familyId: string) => Promise<void>;
+  savingFamilyId?: string | null;
+  /** Cached family-scoped life events (residence/census/custom), keyed by family id */
+  familyLifeEventsById?: Partial<Record<string, LifeEventRecord[]>>;
+  onFamilyLifeEventCreate?: (familyId: string, body: CreateLifeEventBody) => Promise<void>;
+  onFamilyLifeEventPatch?: (familyId: string, eventId: string, body: PatchLifeEventBody) => Promise<void>;
+  onFamilyLifeEventDelete?: (familyId: string, eventId: string) => Promise<void>;
   onResearchTaskCreate?: (body: CreateResearchTaskBody) => Promise<void>;
   onResearchTaskUpdate?: (
     taskId: string,
@@ -128,7 +141,8 @@ const DEFAULT_COLLAPSED_SECTIONS = {
   removeRelationship: false,
   lifeEvents: true,
   timeline: true,
-  researchTasks: true
+  researchTasks: true,
+  families: true
 } as const;
 
 type SectionCollapseKey = keyof typeof DEFAULT_COLLAPSED_SECTIONS;
@@ -182,6 +196,14 @@ const PersonDetailPanelComponent = ({
   onPersonNamesChanged,
   personTimeline,
   researchTasks,
+  families,
+  onFamilyPatch,
+  onFamilyDelete,
+  savingFamilyId,
+  familyLifeEventsById,
+  onFamilyLifeEventCreate,
+  onFamilyLifeEventPatch,
+  onFamilyLifeEventDelete,
   onResearchTaskCreate,
   onResearchTaskUpdate,
   onResearchTaskDelete
@@ -591,6 +613,28 @@ const PersonDetailPanelComponent = ({
                 onCreate={onResearchTaskCreate}
                 onUpdate={onResearchTaskUpdate}
                 onDelete={onResearchTaskDelete}
+              />
+            </CollapsibleSection>
+          ) : null}
+          {person && families !== undefined ? (
+            <CollapsibleSection
+              sectionKey="families"
+              title="Family units"
+              infoTooltip="GEDCOM-style unions (parents + children + pedigree). Graph parent/child edges are derived from these rows."
+              isCollapsed={collapsedSections.families}
+              onToggleCollapsed={() => toggleSectionCollapsed("families")}
+            >
+              <FamiliesSection
+                person={person}
+                people={people}
+                families={families}
+                onPatchFamily={onFamilyPatch}
+                onDeleteFamily={onFamilyDelete}
+                savingFamilyId={savingFamilyId}
+                familyLifeEventsById={familyLifeEventsById}
+                onFamilyLifeEventCreate={onFamilyLifeEventCreate}
+                onFamilyLifeEventPatch={onFamilyLifeEventPatch}
+                onFamilyLifeEventDelete={onFamilyLifeEventDelete}
               />
             </CollapsibleSection>
           ) : null}

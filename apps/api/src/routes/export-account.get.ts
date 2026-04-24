@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";
 import { lifeEventToJson } from "../lifeEvents/service.js";
+import { familyToJson } from "../families/service.js";
 import { buildAccountExportManifestV1, zipAccountExport } from "./export-account.zip.js";
 
 const serializeForExport = (value: unknown) =>
@@ -31,6 +32,8 @@ export type AccountExportPayloadV1 = {
   linkedImmichAccount: unknown;
   personProfiles: unknown[];
   relationships: unknown[];
+  /** Phase 4: FAM-style unions with children and pedigree (nested `children`). */
+  families: unknown[];
   places: unknown[];
   lifeEvents: unknown[];
   personNames: unknown[];
@@ -61,6 +64,7 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
       user,
       personProfiles,
       relationships,
+      familyRows,
       places,
       lifeEvents,
       personNames,
@@ -86,6 +90,11 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
       }),
       prisma.personProfile.findMany({ where: { userId } }),
       prisma.relationship.findMany({ where: { userId } }),
+      prisma.family.findMany({
+        where: { userId },
+        include: { children: true },
+        orderBy: { id: "asc" }
+      }),
       prisma.place.findMany({ where: { userId } }),
       prisma.lifeEvent.findMany({
         where: { userId },
@@ -132,6 +141,7 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
       linkedImmichAccount: linkedAccount,
       personProfiles,
       relationships,
+      families: familyRows.map((row) => familyToJson(row)),
       places,
       lifeEvents: lifeEvents.map((row) => lifeEventToJson(row)),
       personNames,

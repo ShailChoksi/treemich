@@ -16,6 +16,7 @@ import { CooccurrenceService } from "./cooccurrence/service.js";
 import { ImmichClientFactory } from "./integrations/immich/factory.js";
 import { LifeEventService } from "./lifeEvents/service.js";
 import { PersonNameService } from "./personNames/service.js";
+import { FamilyService } from "./families/service.js";
 import { ResearchTaskService } from "./researchTasks/service.js";
 import { RelationshipService } from "./relationships/service.js";
 
@@ -25,6 +26,7 @@ export type AppServices = {
   cooccurrenceService: CooccurrenceService;
   immichClientFactory: ImmichClientFactory;
   relationshipService: RelationshipService;
+  familyService: FamilyService;
   lifeEventService: LifeEventService;
   personNameService: PersonNameService;
   researchTaskService: ResearchTaskService;
@@ -33,11 +35,13 @@ export type AppServices = {
 /** Constructs default service instances (shared `LifeEventService` wired into `RelationshipService`). */
 export const buildServices = (): AppServices => {
   const lifeEventService = new LifeEventService();
+  const relationshipService = new RelationshipService(lifeEventService);
   return {
     authService: new AuthService(),
     cooccurrenceService: new CooccurrenceService(),
     immichClientFactory: new ImmichClientFactory(),
-    relationshipService: new RelationshipService(lifeEventService),
+    relationshipService,
+    familyService: new FamilyService(relationshipService),
     lifeEventService,
     personNameService: new PersonNameService(),
     researchTaskService: new ResearchTaskService()

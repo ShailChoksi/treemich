@@ -171,6 +171,23 @@ export const createLifeEventBodySchema = z
     }
   });
 
+/** Event types allowed on `POST /families/:id/life-events` (household / group sheet). */
+export const familyAttachableLifeEventTypeValues = ["RESIDENCE", "CENSUS", "CUSTOM"] as const;
+export type FamilyAttachableLifeEventTypeValue = (typeof familyAttachableLifeEventTypeValues)[number];
+const familyAttachableLifeEventTypeSet = new Set<string>(familyAttachableLifeEventTypeValues);
+
+/** Same shape as {@link createLifeEventBodySchema} but restricted to {@link familyAttachableLifeEventTypeValues}. */
+export const createFamilyLifeEventBodySchema = createLifeEventBodySchema.superRefine((body, ctx) => {
+  if (!familyAttachableLifeEventTypeSet.has(body.eventType)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Only ${familyAttachableLifeEventTypeValues.join(", ")} events can be attached to a family`
+    });
+  }
+});
+
+export type CreateFamilyLifeEventBody = z.infer<typeof createFamilyLifeEventBodySchema>;
+
 /** `PATCH` life-event body: all fields optional; same place rules as create. */
 export const patchLifeEventBodySchema = z
   .object({
@@ -223,6 +240,8 @@ export type LifeEventRecord = {
   citations: LifeEventCitationRecord[];
   createdAt: string;
   updatedAt: string;
+  /** Present when the event is scoped to a family union (`Family` row). */
+  familyId?: string | null;
 };
 
 /** Standard list wrapper for life-event collections. */

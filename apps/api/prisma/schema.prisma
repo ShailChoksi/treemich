@@ -70,6 +70,15 @@ enum ResearchTaskStatus {
   DONE
 }
 
+/// GEDCOM-style pedigree for a child within a family union (FAM / CHIL).
+enum FamilyChildPedigree {
+  BIOLOGICAL
+  ADOPTED
+  FOSTER
+  STEP
+  UNKNOWN
+}
+
 model TreemichUser {
   id                  String                @id @default(cuid())
   immichBaseUrl       String
@@ -90,6 +99,7 @@ model TreemichUser {
   cooccurrenceSchedule CooccurrenceSchedule?
   personNames         PersonName[]
   researchTasks       ResearchTask[]
+  families            Family[]
 
   @@unique([immichBaseUrl, immichUserId])
   @@unique([immichBaseUrl, immichEmail])
@@ -193,17 +203,53 @@ model Relationship {
   fromPersonId String
   toPersonId String
   type       RelationshipType
+  /// When set, this parent/child edge is derived from {@link Family} membership (not edited via DELETE /people/.../relationships).
+  familyId   String?
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
   user       TreemichUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
   fromPerson PersonProfile    @relation("FromPerson", fields: [userId, fromPersonId], references: [userId, immichPersonId], onDelete: Cascade)
   toPerson   PersonProfile    @relation("ToPerson", fields: [userId, toPersonId], references: [userId, immichPersonId], onDelete: Cascade)
+  family     Family?          @relation(fields: [familyId], references: [id], onDelete: Cascade)
   lifeEvents LifeEvent[]
 
   @@unique([userId, fromPersonId, toPersonId, type])
   @@index([userId, fromPersonId])
   @@index([userId, toPersonId])
   @@index([userId, id])
+  @@index([familyId])
+}
+
+/// Union of up to two parents plus children (FAM-style). Canonical for children in this union; parent/child graph edges with {@link Relationship#familyId} are derived.
+model Family {
+  id                     String         @id @default(cuid())
+  userId                 String
+  parent1ImmichPersonId  String?
+  parent2ImmichPersonId String?
+  notes                  String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  user                   TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  children               FamilyChild[]
+  derivedRelationships   Relationship[]
+  lifeEvents             LifeEvent[]
+
+  @@index([userId])
+  @@index([userId, parent1ImmichPersonId])
+  @@index([userId, parent2ImmichPersonId])
+}
+
+model FamilyChild {
+  id                  String               @id @default(cuid())
+  familyId            String
+  childImmichPersonId String
+  pedigree            FamilyChildPedigree @default(UNKNOWN)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  family              Family               @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, childImmichPersonId])
+  @@index([childImmichPersonId])
 }
 
 model Place {
@@ -240,6 +286,7 @@ model LifeEvent {
   endDay           Int?
   personProfileId  String?
   relationshipId   String?
+  familyId         String?
   placeId          String?
   notes            String?
   createdAt        DateTime       @default(now())
@@ -247,11 +294,13 @@ model LifeEvent {
   user             TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
   personProfile    PersonProfile? @relation(fields: [personProfileId], references: [id], onDelete: Cascade)
   relationship     Relationship?  @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  family           Family?        @relation(fields: [familyId], references: [id], onDelete: Cascade)
   place            Place?         @relation(fields: [placeId], references: [id], onDelete: SetNull)
   citations        LifeEventCitation[]
 
   @@index([userId, personProfileId])
   @@index([userId, relationshipId])
+  @@index([userId, familyId])
   @@index([placeId])
 }
 

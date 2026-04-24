@@ -157,7 +157,16 @@ describe("cooccurrence routes", () => {
         create: vi.fn(),
         update: vi.fn(),
         delete: vi.fn()
-      } as unknown as AppServices["researchTaskService"]
+      } as unknown as AppServices["researchTaskService"],
+      familyService: {
+        listFamilies: vi.fn().mockResolvedValue([]),
+        getFamily: vi.fn(),
+        listFamiliesForPerson: vi.fn().mockResolvedValue([]),
+        createFamily: vi.fn(),
+        patchFamily: vi.fn(),
+        deleteFamily: vi.fn(),
+        findAdoptedChildImmichPersonIds: vi.fn().mockResolvedValue([])
+      } as unknown as AppServices["familyService"]
     };
 
     const { buildApp } = await import("../app.js");

@@ -17,6 +17,8 @@ import { registerAuthLoginRoute } from "./routes/auth.login.js";
 import { registerAuthLogoutRoute } from "./routes/auth.logout.js";
 import { registerAuthMeRoute } from "./routes/auth.me.js";
 import { registerExportAccountGetRoute } from "./routes/export-account.get.js";
+import { registerFamiliesLifeEventsRoutes } from "./routes/families-life-events.js";
+import { registerFamilyRoutes } from "./routes/families.js";
 import { registerCooccurrenceComputePostRoute } from "./routes/cooccurrence-compute.post.js";
 import { registerCooccurrenceEdgesGetRoute } from "./routes/cooccurrence-edges.get.js";
 import { registerCooccurrencePairGetRoute } from "./routes/cooccurrence-pair.get.js";
@@ -190,6 +192,8 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerPeopleCooccurrenceGetRoute);
   app.register(registerPeopleThumbnailGetRoute);
   app.register(registerPeopleRelationshipsPostRoute);
+  app.register(registerFamilyRoutes);
+  app.register(registerFamiliesLifeEventsRoutes);
   app.register(registerPeopleRelationshipsDeleteRoute);
   app.register(registerPeopleRelationshipsPatchRoute);
   app.register(registerRelationshipsGetRoute);

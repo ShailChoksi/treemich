@@ -1,12 +1,14 @@
-import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
+import type { CreateFamilyLifeEventBody, CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
 import { filterGraphLayoutTopologyRelationships } from "@treemich/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CreateResearchTaskBody,
+  FamilyRecord,
   Gender,
   GraphLayoutResponse,
   ImmichPerson,
   LifeEventRecord,
+  PatchFamilyBody,
   PlacesMapPoint,
   ResearchTaskRecord,
   RelationshipRecord,
@@ -18,9 +20,14 @@ import {
   createResearchTask,
   createPersonLifeEvent,
   createRelationshipLifeEvent,
+  createFamilyLifeEvent,
   computeGraphLayout,
   createRelationship,
+  deleteFamily,
+  deleteFamilyLifeEvent,
   deleteResearchTask,
+  getFamiliesForPerson,
+  getFamilyLifeEvents,
   deletePersonLifeEvent,
   deleteRelationship,
   deleteRelationshipLifeEvent,
@@ -33,6 +40,8 @@ import {
   getRelationships,
   getTreeValidation,
   getUserPreferences,
+  patchFamily,
+  updateFamilyLifeEvent,
   updatePersonLifeEvent,
   updateResearchTask,
   updateRelationshipLifeEvent,
@@ -187,6 +196,13 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [researchTasksByPersonId, setResearchTasksByPersonId] = useState<
     Record<string, ResearchTaskRecord[]>
   >({});
+  const [familiesByPersonId, setFamiliesByPersonId] = useState<Record<string, FamilyRecord[] | undefined>>(
+    {}
+  );
+  const [savingFamilyId, setSavingFamilyId] = useState<string | null>(null);
+  const [familyLifeEventsById, setFamilyLifeEventsById] = useState<
+    Partial<Record<string, LifeEventRecord[]>>
+  >({});
   const [mapPlaces, setMapPlaces] = useState<PlacesMapPoint[] | null>(null);
   const [mapIncludeLiving, setMapIncludeLiving] = useState(true);
   const [mapLoading, setMapLoading] = useState(false);
@@ -203,6 +219,10 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
 
   useEffect(() => {
     selectedPersonIdRef.current = selectedPersonId;
+  }, [selectedPersonId]);
+
+  useEffect(() => {
+    setFamilyLifeEventsById({});
   }, [selectedPersonId]);
 
   const refreshGraphData = useCallback(async () => {
@@ -224,6 +244,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setProfileEventFieldsByPersonId({});
       setPersonTimelineById({});
       setResearchTasksByPersonId({});
+      setFamiliesByPersonId({});
+      setFamilyLifeEventsById({});
       setGenderByPersonId(
         sortedPeople.reduce<Record<string, Gender>>((acc, person) => {
           acc[person.id] = person.profile?.gender ?? "UNKNOWN";
@@ -291,6 +313,45 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setIsLoading(false);
     }
   }, [currentUserName]);
+
+  const handleFamilyPatch = useCallback(
+    async (familyId: string, body: PatchFamilyBody) => {
+      setSavingFamilyId(familyId);
+      try {
+        await patchFamily(familyId, body);
+        const structureChanged =
+          body.children !== undefined ||
+          body.parent1ImmichPersonId !== undefined ||
+          body.parent2ImmichPersonId !== undefined;
+        if (structureChanged) {
+          await refreshGraphData();
+        } else {
+          const pid = selectedPersonIdRef.current;
+          if (pid) {
+            const next = await getFamiliesForPerson(pid);
+            setFamiliesByPersonId((current) => ({ ...current, [pid]: next }));
+          }
+        }
+      } finally {
+        setSavingFamilyId(null);
+      }
+    },
+    [refreshGraphData]
+  );
+
+  const handleFamilyDelete = useCallback(
+    async (familyId: string) => {
+      setSavingFamilyId(familyId);
+      try {
+        await deleteFamily(familyId);
+        setFamiliesByPersonId({});
+        await refreshGraphData();
+      } finally {
+        setSavingFamilyId(null);
+      }
+    },
+    [refreshGraphData]
+  );
 
   useEffect(() => {
     refreshGraphData().catch((error: unknown) => {
@@ -417,6 +478,74 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       cancelled = true;
     };
   }, [researchTasksByPersonId, selectedPerson]);
+
+  useEffect(() => {
+    if (!selectedPerson) {
+      return;
+    }
+    if (familiesByPersonId[selectedPerson.id] !== undefined) {
+      return;
+    }
+    let cancelled = false;
+    getFamiliesForPerson(selectedPerson.id)
+      .then((families) => {
+        if (cancelled) {
+          return;
+        }
+        setFamiliesByPersonId((current) => ({
+          ...current,
+          [selectedPerson.id]: families
+        }));
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        setFamiliesByPersonId((current) => ({
+          ...current,
+          [selectedPerson.id]: []
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [familiesByPersonId, selectedPerson]);
+
+  useEffect(() => {
+    if (!selectedPerson) {
+      return;
+    }
+    const fams = familiesByPersonId[selectedPerson.id];
+    if (fams === undefined) {
+      return;
+    }
+    const toFetch = fams.map((f) => f.id).filter((id) => familyLifeEventsById[id] === undefined);
+    if (toFetch.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      toFetch.map((id) =>
+        getFamilyLifeEvents(id, { includeCitations: true }).then((events) => [id, events] as const)
+      )
+    )
+      .then((rows) => {
+        if (cancelled) {
+          return;
+        }
+        setFamilyLifeEventsById((current) => {
+          const next = { ...current };
+          for (const [id, events] of rows) {
+            next[id] = events;
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPerson, familiesByPersonId, familyLifeEventsById]);
 
   useEffect(() => {
     if (!selectedPersonId) {
@@ -1034,6 +1163,45 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     [refreshGraphData]
   );
 
+  const handleFamilyLifeEventCreate = useCallback(async (familyId: string, body: CreateLifeEventBody) => {
+    try {
+      await createFamilyLifeEvent(familyId, body as CreateFamilyLifeEventBody);
+      setStatus("Household event saved");
+      const ev = await getFamilyLifeEvents(familyId, { includeCitations: true });
+      setFamilyLifeEventsById((current) => ({ ...current, [familyId]: ev }));
+    } catch (error: unknown) {
+      setStatus(getErrorMessage(error));
+      throw error;
+    }
+  }, []);
+
+  const handleFamilyLifeEventPatch = useCallback(
+    async (familyId: string, eventId: string, body: PatchLifeEventBody) => {
+      try {
+        await updateFamilyLifeEvent(familyId, eventId, body);
+        setStatus("Household event saved");
+        const ev = await getFamilyLifeEvents(familyId, { includeCitations: true });
+        setFamilyLifeEventsById((current) => ({ ...current, [familyId]: ev }));
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      }
+    },
+    []
+  );
+
+  const handleFamilyLifeEventDelete = useCallback(async (familyId: string, eventId: string) => {
+    try {
+      await deleteFamilyLifeEvent(familyId, eventId);
+      setStatus("Household event deleted");
+      const ev = await getFamilyLifeEvents(familyId, { includeCitations: true });
+      setFamilyLifeEventsById((current) => ({ ...current, [familyId]: ev }));
+    } catch (error: unknown) {
+      setStatus(getErrorMessage(error));
+      throw error;
+    }
+  }, []);
+
   const handleGenderChange = useCallback(
     (gender: Gender) => {
       if (!selectedPerson || !isGender(gender)) {
@@ -1301,6 +1469,14 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onPersonNamesChanged={refreshPeopleOnly}
           personTimeline={selectedPerson ? personTimelineById[selectedPerson.id] : undefined}
           researchTasks={selectedPerson ? researchTasksByPersonId[selectedPerson.id] : undefined}
+          families={selectedPerson ? familiesByPersonId[selectedPerson.id] : undefined}
+          onFamilyPatch={handleFamilyPatch}
+          onFamilyDelete={handleFamilyDelete}
+          savingFamilyId={savingFamilyId}
+          familyLifeEventsById={familyLifeEventsById}
+          onFamilyLifeEventCreate={handleFamilyLifeEventCreate}
+          onFamilyLifeEventPatch={handleFamilyLifeEventPatch}
+          onFamilyLifeEventDelete={handleFamilyLifeEventDelete}
           onResearchTaskCreate={handleResearchTaskCreate}
           onResearchTaskUpdate={handleResearchTaskUpdate}
           onResearchTaskDelete={handleResearchTaskDelete}
