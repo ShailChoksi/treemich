@@ -961,3 +961,136 @@ export const createEvidenceMediaObject = async (body: CreateMediaObjectBody): Pr
   await ensureOk(response, "Failed to create media object");
   return (await response.json()) as MediaObjectRecord;
 };
+
+/** `POST /import/gedcom/preview` — parse UTF-8 GEDCOM and list INDI/FAM for matching (Phase 5b). */
+export type GedcomImportPreviewIndiRow = {
+  xref: string;
+  displayName: string | null;
+  immichHint: string | null;
+};
+
+export type GedcomImportPreviewResponse = {
+  indis: GedcomImportPreviewIndiRow[];
+  fams: { xref: string; husbXref: string | null; wifeXref: string | null; childXrefs: string[] }[];
+  unmatchedIndis: GedcomImportPreviewIndiRow[];
+  famMatchError: string | null;
+  lineLog: unknown[];
+};
+
+export const postGedcomImportPreview = async (gedcomUtf8: string): Promise<GedcomImportPreviewResponse> => {
+  const response = await fetch(
+    `${treemichApi}/import/gedcom/preview`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gedcomUtf8 })
+    })
+  );
+  await ensureOk(response, "GEDCOM preview failed");
+  return (await response.json()) as GedcomImportPreviewResponse;
+};
+
+export type GedcomImportJobCreateBody = {
+  gedcomUtf8: string;
+  fileName?: string;
+  indiMatches: Record<string, string>;
+  importOptions?: { dryRun?: boolean; skipAlreadyImportedIndis?: boolean };
+};
+
+export const postGedcomImportJob = async (
+  body: GedcomImportJobCreateBody
+): Promise<{ id: string; status: string; createdAt: string }> => {
+  const response = await fetch(
+    `${treemichApi}/import/gedcom/jobs`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "GEDCOM import job failed to start");
+  return (await response.json()) as { id: string; status: string; createdAt: string };
+};
+
+export type GedcomImportJobStatusResponse = {
+  id: string;
+  status: string;
+  fileName: string;
+  byteSize: number;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
+  summary: unknown;
+  lineLog: unknown[];
+};
+
+export const getGedcomImportJob = async (jobId: string): Promise<GedcomImportJobStatusResponse> => {
+  const response = await fetch(
+    `${treemichApi}/import/gedcom/jobs/${encodeURIComponent(jobId)}`,
+    withSession({ cache: "no-store" })
+  );
+  await ensureOk(response, "Failed to load GEDCOM import job");
+  return (await response.json()) as GedcomImportJobStatusResponse;
+};
+
+/** `POST /export/gedcom/jobs` — queue async UTF-8 export (Phase 5a). */
+export const postGedcomExportJob = async (opts?: {
+  redactLiving?: boolean;
+  includeTreemichCustomTags?: boolean;
+}): Promise<{ id: string; status: string; createdAt: string }> => {
+  const response = await fetch(
+    `${treemichApi}/export/gedcom/jobs`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts ?? {})
+    })
+  );
+  await ensureOk(response, "GEDCOM export job failed to start");
+  return (await response.json()) as { id: string; status: string; createdAt: string };
+};
+
+export type GedcomExportJobStatusResponse = {
+  id: string;
+  status: string;
+  redactLiving: boolean;
+  includeTreemichCustomTags: boolean;
+  byteSize: number | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
+  resultPath: string | null;
+};
+
+export const getGedcomExportJob = async (jobId: string): Promise<GedcomExportJobStatusResponse> => {
+  const response = await fetch(
+    `${treemichApi}/export/gedcom/jobs/${encodeURIComponent(jobId)}`,
+    withSession({ cache: "no-store" })
+  );
+  await ensureOk(response, "Failed to load GEDCOM export job");
+  return (await response.json()) as GedcomExportJobStatusResponse;
+};
+
+/** Download completed async export (same session as API). */
+export const downloadGedcomExportJobResult = async (jobId: string): Promise<Blob> => {
+  const response = await fetch(
+    `${treemichApi}/export/gedcom/jobs/${encodeURIComponent(jobId)}/ged`,
+    withSession({ cache: "no-store" })
+  );
+  await ensureOk(response, "Failed to download GEDCOM export result");
+  return response.blob();
+};
+
+/** Immediate `GET /export/gedcom` download as Blob (UTF-8 `.ged` or ZIP). */
+export const fetchGedcomExportDownload = async (format: "ged" | "zip" = "ged"): Promise<Blob> => {
+  const response = await fetch(
+    `${treemichApi}/export/gedcom?format=${encodeURIComponent(format)}`,
+    withSession({ cache: "no-store" })
+  );
+  await ensureOk(response, "GEDCOM export download failed");
+  return response.blob();
+};

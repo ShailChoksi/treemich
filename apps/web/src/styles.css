@@ -1499,3 +1499,47 @@ textarea:disabled {
   margin: 0.35rem 0 0.5rem;
   padding-left: 1.25rem;
 }
+
+.inline-code {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.88em;
+}
+
+.inline-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gedcom-match-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.gedcom-match-table th,
+.gedcom-match-table td {
+  border: 1px solid #334155;
+  padding: 0.35rem 0.5rem;
+  vertical-align: top;
+}
+
+.gedcom-match-select {
+  width: 100%;
+  max-width: 14rem;
+}
+
+.gedcom-line-log {
+  margin-top: 0.5rem;
+}
+
+.gedcom-line-pre {
+  max-height: 200px;
+  overflow: auto;
+  font-size: 0.75rem;
+  background: #020617;
+  padding: 0.5rem;
+  border-radius: 6px;
+  margin: 0.35rem 0 0;
+}

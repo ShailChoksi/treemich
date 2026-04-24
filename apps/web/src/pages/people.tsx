@@ -56,6 +56,7 @@ import {
 import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { EvidenceLibrariesSection } from "../components/EvidenceLibrariesSection";
 import { EvidenceMediaSection } from "../components/EvidenceMediaSection";
+import { GedcomInterchangeSection } from "../components/GedcomInterchangeSection";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
 import { MapPlacesPanel } from "../components/MapPlacesPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
@@ -1483,6 +1484,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onResearchTaskUpdate={handleResearchTaskUpdate}
           onResearchTaskDelete={handleResearchTaskDelete}
         />
+        <GedcomInterchangeSection people={people} onTreeChanged={() => void refreshGraphData()} />
         {import.meta.env.VITE_EVIDENCE_MANAGEMENT_UI !== "false" ? (
           <>
             <EvidenceLibrariesSection />

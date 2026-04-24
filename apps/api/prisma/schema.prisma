@@ -38,6 +38,13 @@ enum GedcomImportJobStatus {
   FAILED
 }
 
+enum GedcomExportJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 enum DateQualifier {
   EXACT
   ABOUT
@@ -120,6 +127,7 @@ model TreemichUser {
   mediaLinks          MediaLink[]
   families            Family[]
   gedcomImportJobs    GedcomImportJob[]
+  gedcomExportJobs    GedcomExportJob[]
 
   @@unique([immichBaseUrl, immichUserId])
   @@unique([immichBaseUrl, immichEmail])
@@ -495,6 +503,25 @@ model GedcomImportJob {
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt
   user         TreemichUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+/// Async GEDCOM export (UTF-8 text stored when complete, capped like import max bytes).
+model GedcomExportJob {
+  id                        String                 @id @default(cuid())
+  userId                    String
+  status                    GedcomExportJobStatus  @default(PENDING)
+  redactLiving              Boolean                @default(false)
+  includeTreemichCustomTags Boolean                @default(true)
+  byteSize                  Int?
+  gedcomUtf8                String?                @db.Text
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  errorMessage              String?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  user                      TreemichUser           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }
