@@ -1113,6 +1113,131 @@ body {
   font-weight: 600;
 }
 
+.person-detail-panel .hint--danger {
+  color: #fca5a5;
+}
+
+.family-units-intro {
+  margin-bottom: 4px;
+}
+
+.family-units-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.family-unit-block {
+  border: 1px solid rgba(71, 85, 105, 0.45);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.family-unit-block > .stack {
+  gap: 12px;
+}
+
+.family-unit-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.family-unit-toolbar-title {
+  margin: 0;
+}
+
+.family-unit-toolbar-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.family-unit-readonly {
+  font-size: 0.96rem;
+  color: #e2e8f0;
+  line-height: 1.45;
+}
+
+.family-unit-actions-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.family-unit-children {
+  list-style: disc;
+  margin: 4px 0 0 1.15rem;
+  padding: 0;
+  font-size: 0.96rem;
+  color: #e2e8f0;
+}
+
+.family-unit-children li {
+  margin: 3px 0;
+}
+
+.family-unit-pedigree {
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 0.82rem;
+}
+
+.family-unit-block .life-events-section {
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(71, 85, 105, 0.4);
+}
+
+.family-household-events__lede {
+  margin: 0;
+  max-width: 40rem;
+}
+
+.person-detail-details-summary {
+  cursor: pointer;
+}
+
+.evidence-panel-stack {
+  margin-top: 0.5rem;
+}
+
+.evidence-panel-divider {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(71, 85, 105, 0.45);
+}
+
+.person-detail-form-grid--limit {
+  max-width: 40rem;
+}
+
+.person-detail-form-grid--limit-sm {
+  max-width: 36rem;
+}
+
+.field-label--spaced {
+  margin-bottom: 0.25rem;
+}
+
+.hint--tight-below {
+  margin-bottom: 0.5rem;
+}
+
+.evidence-field-align-end {
+  align-self: end;
+}
+
+.evidence-grid-full-width {
+  grid-column: 1 / -1;
+}
+
 .person-detail-primary-action {
   width: 100%;
 }
@@ -1318,11 +1443,6 @@ textarea:disabled {
   cursor: pointer;
   padding: 0;
   text-decoration: underline;
-}
-
-.person-detail-immich-link {
-  display: inline-flex;
-  width: fit-content;
 }
 
 @media (max-width: 768px) {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import AdmZip from "adm-zip";
-import { HttpConflictError, HttpValidationError } from "../src/lifeEvents/errors.js";
+import { HttpConflictError, HttpNotFoundError, HttpValidationError } from "../src/lifeEvents/errors.js";
 import type { AppServices } from "../src/services.js";
 
 const upsertRelationshipMock = vi.fn();
@@ -47,6 +47,8 @@ const repositoryFindManyMock = vi.fn();
 const sourceFindManyMock = vi.fn();
 const mediaObjectFindManyMock = vi.fn();
 const mediaLinkFindManyMock = vi.fn();
+const familyFindManyMock = vi.fn();
+const findAdoptedChildImmichPersonIdsMock = vi.fn();
 const lifeEventServiceMock = {
   getSpouseMarriageDivorceIsoForPairs: vi.fn().mockResolvedValue(new Map()),
   getBirthDeathByPersonProfileIds: vi.fn().mockResolvedValue(new Map()),
@@ -60,7 +62,11 @@ const lifeEventServiceMock = {
   listRelationshipLifeEvents: vi.fn().mockResolvedValue([]),
   createRelationshipLifeEvent: vi.fn(),
   updateRelationshipLifeEvent: vi.fn(),
-  deleteRelationshipLifeEvent: vi.fn()
+  deleteRelationshipLifeEvent: vi.fn(),
+  listFamilyLifeEvents: vi.fn().mockResolvedValue([]),
+  createFamilyLifeEvent: vi.fn(),
+  updateFamilyLifeEvent: vi.fn(),
+  deleteFamilyLifeEvent: vi.fn()
 };
 
 const personNameServiceMock = {
@@ -110,6 +116,7 @@ vi.mock("../src/db/client.js", () => ({
     place: { findMany: placeFindManyMock },
     lifeEvent: { findMany: lifeEventFindManyForExportMock },
     personName: { findMany: personNameFindManyMock },
+    family: { findMany: familyFindManyMock },
     researchTask: { findMany: researchTaskFindManyMock },
     repository: { findMany: repositoryFindManyMock },
     source: { findMany: sourceFindManyMock },
@@ -194,6 +201,7 @@ describe("Treemich API routes", () => {
     lifeEventServiceMock.listPersonLifeEvents.mockResolvedValue([]);
     lifeEventServiceMock.validatePersonLifeEvents.mockResolvedValue({ findings: [] });
     lifeEventServiceMock.listRelationshipLifeEvents.mockResolvedValue([]);
+    lifeEventServiceMock.listFamilyLifeEvents.mockResolvedValue([]);
     personNameServiceMock.listByImmichPersonId.mockResolvedValue([]);
     personNameServiceMock.getPrimaryMapForProfileIds.mockResolvedValue(new Map());
     personNameServiceMock.getAllFormattedForUser.mockResolvedValue(new Map());
@@ -220,6 +228,7 @@ describe("Treemich API routes", () => {
     cooccurrenceEdgeFindManyMock.mockResolvedValue([]);
     cooccurrenceScheduleFindUniqueMock.mockResolvedValue(null);
     personNameFindManyMock.mockResolvedValue([]);
+    familyFindManyMock.mockResolvedValue([]);
     treemichUserFindUniqueOrThrowMock.mockResolvedValue({ preferences: null });
     getClientMock.mockReturnValue(immichClient);
     requireSessionMock.mockResolvedValue(authContext);
@@ -266,7 +275,16 @@ describe("Treemich API routes", () => {
       lifeEventService: lifeEventServiceMock as unknown as AppServices["lifeEventService"],
       personNameService: personNameServiceMock as unknown as AppServices["personNameService"],
       researchTaskService: researchTaskServiceMock as unknown as AppServices["researchTaskService"],
-      evidenceService: evidenceServiceMock as unknown as AppServices["evidenceService"]
+      evidenceService: evidenceServiceMock as unknown as AppServices["evidenceService"],
+      familyService: {
+        listFamilies: vi.fn().mockResolvedValue([]),
+        getFamily: vi.fn(),
+        listFamiliesForPerson: vi.fn().mockResolvedValue([]),
+        createFamily: vi.fn(),
+        patchFamily: vi.fn(),
+        deleteFamily: vi.fn(),
+        findAdoptedChildImmichPersonIds: findAdoptedChildImmichPersonIdsMock
+      } as unknown as AppServices["familyService"]
     };
 
     const { buildApp } = await import("../src/app.js");
@@ -516,6 +534,27 @@ describe("Treemich API routes", () => {
     const json = response.json();
     expect(json.matches).toHaveLength(1);
     expect(json.matches[0].person.name).toBe("John");
+  });
+
+  it("searches adopted children via family pedigree instead of graph hops", async () => {
+    findAdoptedChildImmichPersonIdsMock.mockResolvedValueOnce(["ada-id"]);
+    getProfilesForPersonIdsMock.mockResolvedValueOnce(new Map([["ada-id", { gender: "FEMALE" }]]));
+    listPeopleMock.mockResolvedValueOnce([
+      { id: "ada-id", name: "Ada" },
+      { id: "mike-id", name: "Mike" }
+    ]);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/search?q=adopted%20children%20of%20Mike"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(findAdoptedChildImmichPersonIdsMock).toHaveBeenCalledWith("user-1", ["mike-id"]);
+    expect(traverseRelationshipChainMock).toHaveBeenCalledTimes(0);
+    const json = response.json();
+    expect(json.matches).toHaveLength(1);
+    expect(json.matches[0].person.name).toBe("Ada");
   });
 
   describe("search with multi-hop and filters", () => {
@@ -1703,6 +1742,155 @@ describe("Treemich API routes", () => {
       includeCitations: true
     });
     expect(response.json()).toEqual({ lifeEvents: [] });
+  });
+
+  it("lists family life events with citations when include=citations", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/families/fam-1/life-events?include=citations"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(lifeEventServiceMock.listFamilyLifeEvents).toHaveBeenCalledWith("user-1", "fam-1", {
+      includeCitations: true
+    });
+    expect(response.json()).toEqual({ lifeEvents: [] });
+  });
+
+  it("lists family life events without include query (omits citations by default)", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/families/fam-2/life-events"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(lifeEventServiceMock.listFamilyLifeEvents).toHaveBeenCalledWith("user-1", "fam-2", {
+      includeCitations: false
+    });
+    expect(response.json()).toEqual({ lifeEvents: [] });
+  });
+
+  it("returns 400 when POST family life event type is not allowed on families", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/families/fam-1/life-events",
+      payload: {
+        eventType: "MARRIAGE",
+        year: 1910
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(lifeEventServiceMock.createFamilyLifeEvent).toHaveBeenCalledTimes(0);
+  });
+
+  it("creates family life event and returns JSON row", async () => {
+    lifeEventServiceMock.createFamilyLifeEvent.mockResolvedValueOnce({
+      id: "flev-1",
+      userId: "user-1",
+      eventType: "RESIDENCE",
+      dateQualifier: "EXACT",
+      year: 1920,
+      month: null,
+      day: null,
+      endYear: null,
+      endMonth: null,
+      endDay: null,
+      notes: "Farm",
+      personProfileId: null,
+      relationshipId: null,
+      familyId: "fam-1",
+      placeId: null,
+      place: null,
+      citations: [],
+      createdAt: new Date("2020-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2020-01-01T00:00:00.000Z")
+    } as never);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/families/fam-1/life-events",
+      payload: {
+        eventType: "RESIDENCE",
+        year: 1920
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(lifeEventServiceMock.createFamilyLifeEvent).toHaveBeenCalledWith(
+      "user-1",
+      "fam-1",
+      expect.objectContaining({ eventType: "RESIDENCE", year: 1920 })
+    );
+    const json = response.json() as { id: string; eventType: string; familyId: string | null };
+    expect(json.id).toBe("flev-1");
+    expect(json.eventType).toBe("RESIDENCE");
+    expect(json.familyId).toBe("fam-1");
+  });
+
+  it("patches family life event and returns JSON row", async () => {
+    lifeEventServiceMock.updateFamilyLifeEvent.mockResolvedValueOnce({
+      id: "flev-2",
+      userId: "user-1",
+      eventType: "CENSUS",
+      dateQualifier: "EXACT",
+      year: 1880,
+      month: null,
+      day: null,
+      endYear: null,
+      endMonth: null,
+      endDay: null,
+      notes: "Roll",
+      personProfileId: null,
+      relationshipId: null,
+      familyId: "fam-1",
+      placeId: null,
+      place: null,
+      citations: [],
+      createdAt: new Date("2020-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2020-01-02T00:00:00.000Z")
+    } as never);
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/families/fam-1/life-events/flev-2",
+      payload: { notes: "Roll" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(lifeEventServiceMock.updateFamilyLifeEvent).toHaveBeenCalledWith(
+      "user-1",
+      "fam-1",
+      "flev-2",
+      expect.objectContaining({ notes: "Roll" })
+    );
+    expect((response.json() as { notes: string }).notes).toBe("Roll");
+  });
+
+  it("returns 404 when PATCH family life event misses family or event", async () => {
+    lifeEventServiceMock.updateFamilyLifeEvent.mockRejectedValueOnce(
+      new HttpNotFoundError("Life event not found")
+    );
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/families/fam-1/life-events/missing",
+      payload: { notes: "x" }
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("deletes family life event with 204", async () => {
+    lifeEventServiceMock.deleteFamilyLifeEvent.mockResolvedValueOnce(undefined);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/families/fam-1/life-events/flev-9"
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(lifeEventServiceMock.deleteFamilyLifeEvent).toHaveBeenCalledWith("user-1", "fam-1", "flev-9");
   });
 
   it("merges GET /people birthDate from BIRTH life event over legacy override (post-migration parity)", async () => {

@@ -8,6 +8,9 @@ import type { RelationshipType } from "../index.js";
 
 /** High-level relationship query intent produced by {@link RuleBasedInterpreter}. */
 export type InterpreterIntent =
+  | "FIND_ADOPTED_CHILDREN"
+  | "FIND_ADOPTED_SONS"
+  | "FIND_ADOPTED_DAUGHTERS"
   | "FIND_CHILDREN"
   | "FIND_SONS"
   | "FIND_DAUGHTERS"
@@ -90,6 +93,21 @@ type MatcherEntry = {
 };
 
 const matchers: MatcherEntry[] = [
+  // --- adopted children (family pedigree); must appear before generic "children of" ---
+  {
+    pattern: /^adopted sons? of (.+)$/i,
+    intent: "FIND_ADOPTED_SONS",
+    hops: ["CHILD_OF"],
+    requiredGender: "MALE"
+  },
+  {
+    pattern: /^adopted daughters? of (.+)$/i,
+    intent: "FIND_ADOPTED_DAUGHTERS",
+    hops: ["CHILD_OF"],
+    requiredGender: "FEMALE"
+  },
+  { pattern: /^adopted children of (.+)$/i, intent: "FIND_ADOPTED_CHILDREN", hops: ["CHILD_OF"] },
+
   // --- single-hop: children ---
   { pattern: /^sons? of (.+)$/i, intent: "FIND_SONS", hops: ["CHILD_OF"], requiredGender: "MALE" },
   {
@@ -373,6 +391,7 @@ function stripGenderPrefix(query: string): { remaining: string; genderOverride?:
 }
 
 const SUPPORTED_QUERIES = [
+  "adopted children/sons/daughters of NAME (when family pedigree is ADOPTED)",
   "son/daughter/children of NAME",
   "father/mother/parents of NAME",
   "brother/sister/siblings of NAME",

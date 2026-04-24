@@ -22,6 +22,7 @@ type VisibleLine = {
   points: NodePosition[];
   kind: RelationshipKind;
   opacity?: number;
+  dashed?: boolean;
 };
 
 type DisplayPerson = {
@@ -152,6 +153,8 @@ export const GraphCanvasScene = ({
           color={relationshipStyleByKind[line.kind].color}
           lineWidth={1.35}
           transparent
+          dashed={Boolean(line.dashed)}
+          dashScale={line.dashed ? 2.5 : undefined}
           opacity={line.opacity ?? relationshipStyleByKind[line.kind].opacity}
         />
       ))}

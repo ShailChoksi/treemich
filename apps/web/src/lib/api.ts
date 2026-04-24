@@ -7,12 +7,15 @@
 import type {
   AuthState,
   AuthUser,
+  CreateFamilyBody,
+  CreateFamilyLifeEventBody,
   CreateLifeEventBody,
   CreateMediaObjectBody,
   CreatePersonNameBody,
   CreateRepositoryBody,
   CreateResearchTaskBody,
   CreateSourceBody,
+  FamilyRecord,
   GraphLayoutRequest,
   GraphLayoutResponse,
   GenderValue as Gender,
@@ -22,6 +25,7 @@ import type {
   LinkStatus,
   MediaObjectRecord,
   MergeSourcesBody,
+  PatchFamilyBody,
   PatchLifeEventBody,
   PatchPersonNameBody,
   PatchResearchTaskBody,
@@ -42,12 +46,15 @@ import type {
 export type {
   AuthState,
   AuthUser,
+  CreateFamilyBody,
+  CreateFamilyLifeEventBody,
   CreateLifeEventBody,
   CreateMediaObjectBody,
   CreatePersonNameBody,
   CreateRepositoryBody,
   CreateResearchTaskBody,
   CreateSourceBody,
+  FamilyRecord,
   GraphLayoutRequest,
   GraphLayoutResponse,
   Gender,
@@ -55,6 +62,7 @@ export type {
   LifeEventRecord,
   MediaObjectRecord,
   MergeSourcesBody,
+  PatchFamilyBody,
   PatchLifeEventBody,
   PatchPersonNameBody,
   PatchResearchTaskBody,
@@ -721,6 +729,111 @@ export const getPlacesMap = async (options?: { includeLiving?: boolean }): Promi
 };
 
 /** `GET /research/tasks` — optional `personId` filters to person-linked tasks. */
+/** `GET /people/:immichPersonId/families` — family units this person appears in (read-only list in UI). */
+export const getFamiliesForPerson = async (immichPersonId: string): Promise<FamilyRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/people/${encodeURIComponent(immichPersonId)}/families`,
+    { cache: "no-store" }
+  );
+  await ensureOk(response, "Failed to load families");
+  const body = (await response.json()) as { families: FamilyRecord[] };
+  return body.families ?? [];
+};
+
+/** `POST /families` — create a family union; server derives parent/child graph edges. */
+export const createFamily = async (body: CreateFamilyBody): Promise<FamilyRecord> => {
+  const response = await fetch(`${treemichApi}/families`, {
+    ...withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  });
+  await ensureOk(response, "Failed to create family");
+  return (await response.json()) as FamilyRecord;
+};
+
+/** `PATCH /families/:id` — notes, parents, or replace children list. */
+export const patchFamily = async (familyId: string, body: PatchFamilyBody): Promise<FamilyRecord> => {
+  const response = await fetch(
+    `${treemichApi}/families/${encodeURIComponent(familyId)}`,
+    withSession({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to update family");
+  return (await response.json()) as FamilyRecord;
+};
+
+/** `DELETE /families/:id` — removes union and derived tagged parent/child edges. */
+export const deleteFamily = async (familyId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/families/${encodeURIComponent(familyId)}`,
+    withSession({ method: "DELETE" })
+  );
+  await ensureOk(response, "Failed to delete family");
+};
+
+/** `GET /families/:familyId/life-events`. */
+export const getFamilyLifeEvents = async (
+  familyId: string,
+  options?: { includeCitations?: boolean }
+): Promise<LifeEventRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/families/${encodeURIComponent(familyId)}/life-events${lifeEventsIncludeQuery(options?.includeCitations)}`,
+    { cache: "no-store" }
+  );
+  await ensureOk(response, "Failed to load family life events");
+  const json = (await response.json()) as LifeEventListResponse;
+  return json.lifeEvents ?? [];
+};
+
+/** `POST /families/:familyId/life-events` — RESIDENCE, CENSUS, CUSTOM only. */
+export const createFamilyLifeEvent = async (
+  familyId: string,
+  body: CreateFamilyLifeEventBody
+): Promise<LifeEventRecord> => {
+  const response = await fetch(
+    `${treemichApi}/families/${encodeURIComponent(familyId)}/life-events`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create family life event");
+  return (await response.json()) as LifeEventRecord;
+};
+
+/** `PATCH /families/:familyId/life-events/:eventId`. */
+export const updateFamilyLifeEvent = async (
+  familyId: string,
+  eventId: string,
+  body: PatchLifeEventBody
+): Promise<LifeEventRecord> => {
+  const response = await fetch(
+    `${treemichApi}/families/${encodeURIComponent(familyId)}/life-events/${encodeURIComponent(eventId)}`,
+    withSession({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to update family life event");
+  return (await response.json()) as LifeEventRecord;
+};
+
+/** `DELETE /families/:familyId/life-events/:eventId`. */
+export const deleteFamilyLifeEvent = async (familyId: string, eventId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/families/${encodeURIComponent(familyId)}/life-events/${encodeURIComponent(eventId)}`,
+    withSession({ method: "DELETE" })
+  );
+  await ensureOk(response, "Failed to delete family life event");
+};
+
 export const getResearchTasks = async (personId?: string): Promise<ResearchTaskRecord[]> => {
   const query = personId ? `?personId=${encodeURIComponent(personId)}` : "";
   const response = await fetchWithRetry(`${treemichApi}/research/tasks${query}`, { cache: "no-store" });

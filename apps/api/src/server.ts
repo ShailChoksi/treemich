@@ -5,8 +5,9 @@
 
 import { buildApp } from "./app.js";
 import { CooccurrenceConflictError } from "./cooccurrence/service.js";
-import { env } from "./config/env.js";
+import { env, isAutoPhase4FamilyBackfillEnabled } from "./config/env.js";
 import { prisma } from "./db/client.js";
+import { maybeRunAutomaticPhase4FamilyBackfillOnBoot } from "./families/phase4BackfillFromParentEdges.js";
 
 const app = buildApp();
 const sessionCleanupIntervalMs = 60 * 60_000;
@@ -83,6 +84,12 @@ const shutdown = async (signal: NodeJS.Signals) => {
 
 const start = async () => {
   try {
+    await maybeRunAutomaticPhase4FamilyBackfillOnBoot({
+      prisma,
+      familyService: app.services.familyService,
+      log: app.log,
+      enabled: isAutoPhase4FamilyBackfillEnabled()
+    });
     await cleanupExpiredSessions();
     await refreshScheduledCooccurrence();
     sessionCleanupTimer = setInterval(() => {

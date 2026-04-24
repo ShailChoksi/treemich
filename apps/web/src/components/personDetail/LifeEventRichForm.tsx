@@ -397,11 +397,7 @@ export const LifeEventRichForm = ({
 
   return (
     <div className="life-event-rich-form stack">
-      {error ? (
-        <p className="hint" style={{ color: "var(--danger, #c62828)" }}>
-          {error}
-        </p>
-      ) : null}
+      {error ? <p className="hint hint--danger">{error}</p> : null}
       <div className="person-detail-form-grid">
         {variant === "create" && !fixedEventType ? (
           <label className="field-group">

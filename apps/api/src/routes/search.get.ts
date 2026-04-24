@@ -5,7 +5,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Gender, LifeEvent } from "@prisma/client";
-import type { AgeFilter } from "@treemich/shared/search/interpreter";
+import type { AgeFilter, InterpreterIntent } from "@treemich/shared/search/interpreter";
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";
 import { partialDateToComparableDate } from "../lifeEvents/dateValue.js";
@@ -47,6 +47,12 @@ function computeAge(birthDate: Date, now: Date): number {
   }
   return age;
 }
+
+const adoptedSearchIntents = new Set<InterpreterIntent>([
+  "FIND_ADOPTED_CHILDREN",
+  "FIND_ADOPTED_SONS",
+  "FIND_ADOPTED_DAUGHTERS"
+]);
 
 function matchesAgeFilter(birthDate: Date, filter: AgeFilter, now: Date): boolean {
   switch (filter.kind) {
@@ -111,11 +117,13 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
     }
 
     const sourceIds = sourceCandidates.map((person) => person.id);
-    const targetIds = await app.services.relationshipService.traverseRelationshipChain(
-      auth.user.id,
-      sourceIds,
-      interpreted.parsed.hops
-    );
+    const targetIds = adoptedSearchIntents.has(interpreted.parsed.intent)
+      ? await app.services.familyService.findAdoptedChildImmichPersonIds(auth.user.id, sourceIds)
+      : await app.services.relationshipService.traverseRelationshipChain(
+          auth.user.id,
+          sourceIds,
+          interpreted.parsed.hops
+        );
 
     const profilesById = (await app.services.relationshipService.getProfilesForPersonIds(
       auth.user.id,
