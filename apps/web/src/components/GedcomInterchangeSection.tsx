@@ -47,6 +47,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
   const [dryRun, setDryRun] = useState(false);
   const [skipImported, setSkipImported] = useState(false);
   const [allowPartialMatches, setAllowPartialMatches] = useState(true);
+  const [showOnlyUnmatched, setShowOnlyUnmatched] = useState(true);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,6 +155,9 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
 
   const indiRowsIncomplete = (p: GedcomImportPreviewResponse) =>
     p.indis.filter((row) => !(matchByXref[row.xref] ?? "").trim());
+
+  const getVisibleRows = (p: GedcomImportPreviewResponse) =>
+    showOnlyUnmatched ? p.indis.filter((row) => !(matchByXref[row.xref] ?? "").trim()) : p.indis;
 
   const submitImport = async () => {
     if (!gedcomUtf8 || !preview) {
@@ -320,6 +324,18 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
               {preview ? (
                 <div className="stack evidence-panel-divider">
                   <div className="field-label">Match each INDI to an Immich person</div>
+                  <label className="field-group inline-checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyUnmatched}
+                      onChange={(e) => setShowOnlyUnmatched(e.target.checked)}
+                      disabled={busy}
+                    />
+                    <span>
+                      Show only unmatched rows ({indiRowsIncomplete(preview).length} unmatched of{" "}
+                      {preview.indis.length})
+                    </span>
+                  </label>
                   <table className="gedcom-match-table">
                     <thead>
                       <tr>
@@ -328,7 +344,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {preview.indis.map((row) => (
+                      {getVisibleRows(preview).map((row) => (
                         <tr key={row.xref}>
                           <td>
                             <div className="gedcom-source-name">{row.displayName ?? "—"}</div>
@@ -357,6 +373,9 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                       ))}
                     </tbody>
                   </table>
+                  {getVisibleRows(preview).length === 0 ? (
+                    <p className="hint hint--tight-below">No rows to show for the current filter.</p>
+                  ) : null}
                   {allowPartialMatches ? (
                     <p className="hint hint--tight-below">
                       Unmatched INDI/FAM rows are skipped during import and logged as warnings.
