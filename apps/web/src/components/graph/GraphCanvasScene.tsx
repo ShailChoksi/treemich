@@ -3,8 +3,8 @@
  */
 
 import { Line, OrbitControls } from "@react-three/drei";
-import { Canvas, type RootState } from "@react-three/fiber";
-import { useCallback } from "react";
+import { Canvas, invalidate, type RootState, useThree } from "@react-three/fiber";
+import { useCallback, useLayoutEffect } from "react";
 import { MOUSE, PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { ImmichPerson } from "../../lib/api";
@@ -32,7 +32,24 @@ type DisplayPerson = {
 
 const orbitControlMouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN } as const;
 
+const CanvasResizeNudge = ({ layoutResizeSignal }: { layoutResizeSignal: number }) => {
+  const { gl, setSize } = useThree();
+  useLayoutEffect(() => {
+    const parent = gl.domElement.parentElement;
+    if (parent) {
+      const w = parent.clientWidth;
+      const h = parent.clientHeight;
+      if (w > 0 && h > 0) {
+        setSize(w, h);
+      }
+    }
+    invalidate();
+  }, [gl, layoutResizeSignal, setSize]);
+  return null;
+};
+
 type Props = {
+  layoutResizeSignal: number;
   displayVisiblePeople: DisplayPerson[];
   visibleRelationshipLines: VisibleLine[];
   relationshipStyleByKind: Record<RelationshipKind, { color: string; opacity: number }>;
@@ -55,6 +72,7 @@ type Props = {
 };
 
 export const GraphCanvasScene = ({
+  layoutResizeSignal,
   displayVisiblePeople,
   visibleRelationshipLines,
   relationshipStyleByKind,
@@ -129,6 +147,7 @@ export const GraphCanvasScene = ({
       onCreated={handleCanvasCreated}
       gl={createWebGlRenderer}
     >
+      <CanvasResizeNudge layoutResizeSignal={layoutResizeSignal} />
       <ambientLight intensity={1.1} />
       <pointLight position={[15, 15, 10]} intensity={1.2} />
       <OrbitControls

@@ -374,8 +374,12 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                 ) : null}
                 {preview.lineLog.length > 0 ? (
                   <details className="gedcom-line-log">
-                    <summary className="hint">Parser log ({preview.lineLog.length} entries, first 40 shown)</summary>
-                    <pre className="gedcom-line-pre">{JSON.stringify(preview.lineLog.slice(0, 40), null, 2)}</pre>
+                    <summary className="hint">
+                      Parser log ({preview.lineLog.length} entries, first 40 shown)
+                    </summary>
+                    <pre className="gedcom-line-pre">
+                      {JSON.stringify(preview.lineLog.slice(0, 40), null, 2)}
+                    </pre>
                   </details>
                 ) : null}
               </div>

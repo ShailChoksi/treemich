@@ -40,6 +40,16 @@ type Props = {
   /** When set, clusters that include this Immich person id (via map `samplePersonIds`) render green. */
   selectedPersonId?: string | null;
   error?: string | null;
+  /** Bumps when shell layout resizes; triggers Leaflet `invalidateSize` without window.resize. */
+  layoutResizeSignal?: number;
+};
+
+const MapInvalidateOnLayout = ({ layoutResizeSignal }: { layoutResizeSignal: number }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+  }, [layoutResizeSignal, map]);
+  return null;
 };
 
 const AutoFitBounds = ({
@@ -74,6 +84,7 @@ const MapViewportController = ({
   onZoomChange: (zoom: number) => void;
   onBoundsChange: (bounds: GeoBounds) => void;
 }) => {
+  const map = useMap();
   const updateViewport = () => {
     const bounds = map.getBounds();
     onZoomChange(map.getZoom());
@@ -84,7 +95,7 @@ const MapViewportController = ({
       east: bounds.getEast()
     });
   };
-  const map = useMapEvents({
+  useMapEvents({
     zoomend() {
       updateViewport();
     },
@@ -110,7 +121,8 @@ export const MapPlacesPanel = ({
   onFocusPerson,
   getPersonLabel,
   selectedPersonId = null,
-  error
+  error,
+  layoutResizeSignal = 0
 }: Props) => {
   const [search, setSearch] = useState("");
   const [minEvents, setMinEvents] = useState(1);
@@ -226,16 +238,17 @@ export const MapPlacesPanel = ({
         </label>
         {focusPersonId ? (
           <p className="hint map-places-legend">
-            Clusters: <span className="map-places-legend-swatch map-places-legend-swatch--selected" /> selected
-            person &nbsp;
-            <span className="map-places-legend-swatch map-places-legend-swatch--default" /> others (uses sample
-            ids from the map feed).
+            Clusters: <span className="map-places-legend-swatch map-places-legend-swatch--selected" />{" "}
+            selected person &nbsp;
+            <span className="map-places-legend-swatch map-places-legend-swatch--default" /> others (uses
+            sample ids from the map feed).
           </p>
         ) : null}
       </div>
       {hasGeocodedPlaces ? (
         <>
           <MapContainer center={center} zoom={2} scrollWheelZoom className="map-places-canvas">
+            <MapInvalidateOnLayout layoutResizeSignal={layoutResizeSignal} />
             <MapViewportController onZoomChange={setMapZoom} onBoundsChange={setViewportBounds} />
             <AutoFitBounds points={fitPoints} fitKey={fitKey} />
             <TileLayer
@@ -258,7 +271,8 @@ export const MapPlacesPanel = ({
                   <Popup>
                     <strong>{cluster.placeNames.slice(0, 3).join(", ")}</strong>
                     <br />
-                    {cluster.eventCount} events across {cluster.placeCount} places, {cluster.personCount} people
+                    {cluster.eventCount} events across {cluster.placeCount} places, {cluster.personCount}{" "}
+                    people
                     <br />({cluster.latitude.toFixed(3)}, {cluster.longitude.toFixed(3)})
                     {cluster.samplePersonIds.length > 0 ? (
                       <div className="map-popup-focus-links workspace-action-row">

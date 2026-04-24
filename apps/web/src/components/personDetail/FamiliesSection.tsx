@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
 import type { FamilyRecord, ImmichPerson, LifeEventRecord, PatchFamilyBody } from "../../lib/api";
 import { getPersonDisplayLabel } from "../../lib/personDisplay";
+import { DestructiveConfirmDialog } from "../DestructiveConfirmDialog";
 import { FamilyLifeEventsBlock } from "./FamilyLifeEventsBlock";
 
 type Props = {
@@ -40,6 +41,8 @@ export const FamiliesSection = ({
   const [editingFamilyId, setEditingFamilyId] = useState<string | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingDeleteFamilyId, setPendingDeleteFamilyId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const beginEditNotes = (family: FamilyRecord) => {
     setErrorMessage(null);
@@ -66,20 +69,34 @@ export const FamiliesSection = ({
     }
   };
 
-  const removeFamily = async (familyId: string) => {
+  const requestRemoveFamily = (familyId: string) => {
     if (!onDeleteFamily) {
       return;
     }
-    if (
-      !window.confirm("Delete this family unit? Derived parent/child edges for this union will be removed.")
-    ) {
+    setErrorMessage(null);
+    setPendingDeleteFamilyId(familyId);
+  };
+
+  const cancelRemoveFamily = () => {
+    if (deleteBusy) {
       return;
     }
+    setPendingDeleteFamilyId(null);
+  };
+
+  const confirmRemoveFamily = async () => {
+    if (!onDeleteFamily || !pendingDeleteFamilyId) {
+      return;
+    }
+    setDeleteBusy(true);
     setErrorMessage(null);
     try {
-      await onDeleteFamily(familyId);
+      await onDeleteFamily(pendingDeleteFamilyId);
+      setPendingDeleteFamilyId(null);
     } catch (e: unknown) {
       setErrorMessage(e instanceof Error ? e.message : "Could not delete family");
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -102,6 +119,16 @@ export const FamiliesSection = ({
 
   return (
     <>
+      <DestructiveConfirmDialog
+        open={pendingDeleteFamilyId !== null}
+        title="Delete family unit?"
+        description="Derived parent/child edges for this union will be removed. This cannot be undone from the UI."
+        confirmLabel="Delete family"
+        cancelLabel="Keep family"
+        busy={deleteBusy}
+        onCancel={cancelRemoveFamily}
+        onConfirm={confirmRemoveFamily}
+      />
       {errorMessage ? <p className="hint hint--danger">{errorMessage}</p> : null}
       <p className="hint family-units-intro">
         Unions involving {getPersonDisplayLabel(person)}. Notes can be edited here; changing parents or
@@ -125,7 +152,7 @@ export const FamiliesSection = ({
                       type="button"
                       className="secondary-button danger-button"
                       disabled={busy}
-                      onClick={() => removeFamily(family.id)}
+                      onClick={() => requestRemoveFamily(family.id)}
                     >
                       Delete family
                     </button>

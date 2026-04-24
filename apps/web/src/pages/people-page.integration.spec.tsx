@@ -63,6 +63,11 @@ describe("PeoplePage + life events (integration)", () => {
   let placesMapCallCount = 0;
 
   beforeEach(() => {
+    try {
+      window.localStorage.clear();
+    } catch {
+      /* ignore */
+    }
     latestMapPanelProps = null;
     placesMapCallCount = 0;
     globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -102,6 +107,10 @@ describe("PeoplePage + life events (integration)", () => {
 
       if (method === "GET" && url.includes("/people/p1/life-events/validation")) {
         return jsonResponse({ findings: [] });
+      }
+
+      if (method === "GET" && url.includes("/tree/validation")) {
+        return jsonResponse({ findings: [], engineDisabled: false, persist: false });
       }
 
       if (method === "GET" && url.includes("/people/p1/life-events")) {
@@ -258,7 +267,7 @@ describe("PeoplePage + life events (integration)", () => {
         await Promise.resolve();
       });
       const fetchMock = vi.mocked(globalThis.fetch);
-      if (fetchMock.mock.calls.some((call) => String(call[0]).includes("/places/map"))) {
+      if (fetchMock.mock.calls.some((call) => String(call[0]).includes("/people/p1/life-events"))) {
         break;
       }
     }
@@ -274,6 +283,22 @@ describe("PeoplePage + life events (integration)", () => {
       await act(async () => {
         await Promise.resolve();
       });
+      const fetchMock = vi.mocked(globalThis.fetch);
+      if (fetchMock.mock.calls.filter((call) => String(call[0]).includes("/places/map")).length >= 1) {
+        break;
+      }
+    }
+
+    const placesNav = container.querySelector('[data-workspace="places"]') as HTMLButtonElement | null;
+    expect(placesNav).toBeTruthy();
+    await act(async () => {
+      placesNav!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
       if ((latestMapPanelProps?.places?.length ?? 0) > 0) {
         break;
       }
@@ -281,7 +306,7 @@ describe("PeoplePage + life events (integration)", () => {
 
     const fetchMock = vi.mocked(globalThis.fetch);
     const mapCalls = fetchMock.mock.calls.filter((call) => String(call[0]).includes("/places/map"));
-    expect(mapCalls.length).toBeGreaterThanOrEqual(2);
+    expect(mapCalls.length).toBeGreaterThanOrEqual(1);
     expect(latestMapPanelProps?.places).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -291,6 +316,57 @@ describe("PeoplePage + life events (integration)", () => {
         })
       ])
     );
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("does not request places map until the Places workspace is opened", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const fetchMock = vi.mocked(globalThis.fetch);
+      if (fetchMock.mock.calls.some((call) => String(call[0]).includes("/people/p1/life-events"))) {
+        break;
+      }
+    }
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const mapCallsBefore = fetchMock.mock.calls.filter((call) => String(call[0]).includes("/places/map"));
+    expect(mapCallsBefore.length).toBe(0);
+
+    const placesNav = container.querySelector('[data-workspace="places"]') as HTMLButtonElement | null;
+    await act(async () => {
+      placesNav!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (
+        vi.mocked(globalThis.fetch).mock.calls.filter((call) => String(call[0]).includes("/places/map")).length >=
+        1
+      ) {
+        break;
+      }
+    }
+
+    const mapCallsAfter = vi.mocked(globalThis.fetch).mock.calls.filter((call) =>
+      String(call[0]).includes("/places/map")
+    );
+    expect(mapCallsAfter.length).toBeGreaterThanOrEqual(1);
 
     act(() => {
       root.unmount();

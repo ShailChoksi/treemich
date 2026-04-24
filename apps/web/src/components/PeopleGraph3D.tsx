@@ -60,6 +60,10 @@ type Props = {
     relationshipType: RelationshipType
   ) => Promise<void>;
   onPreferencesChange: (prefs: Partial<UserPreferences>) => void;
+  /** When false, global graph camera/arrow shortcuts do not run (e.g. other workspaces). */
+  graphKeyboardEnabled?: boolean;
+  /** Bumps when workspace layout resizes; triggers canvas/GL refresh without window.resize. */
+  layoutResizeSignal?: number;
 };
 
 const DEFAULT_RENDER_LIMIT = 120;
@@ -115,7 +119,9 @@ const PeopleGraph3DComponent = ({
   onCameraFocusPersonConsumed,
   onSelectedPersonChange,
   onCreateRelationship,
-  onPreferencesChange
+  onPreferencesChange,
+  graphKeyboardEnabled = true,
+  layoutResizeSignal = 0
 }: Props) => {
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
   const [focusPersonId, setFocusPersonId] = useState<string | null>(null);
@@ -240,9 +246,16 @@ const PeopleGraph3DComponent = ({
       lastCameraSampleRef
     });
 
-  useGraphCamera({ frameAllNodes, focusActiveNode, topDownView });
+  const graphShortcutsActive = graphKeyboardEnabled && !addRelativeIntent;
+
+  useGraphCamera({
+    enabled: graphShortcutsActive,
+    frameAllNodes,
+    focusActiveNode,
+    topDownView
+  });
   useGraphKeyboardNavigation({
-    enabled: !addRelativeIntent,
+    enabled: graphShortcutsActive,
     selectedPersonId,
     relationships,
     visiblePositionsById,
@@ -353,7 +366,7 @@ const PeopleGraph3DComponent = ({
     [focusPersonById, handleNodeClick]
   );
 
-  const handleOpenAddRelative = (slot: AddRelativeSlot) => {
+  const handleOpenAddRelative = useCallback((slot: AddRelativeSlot) => {
     if (!selectedPersonId) {
       return;
     }
@@ -361,7 +374,7 @@ const PeopleGraph3DComponent = ({
       slot,
       selectedPersonId
     });
-  };
+  }, [selectedPersonId]);
 
   const handleAddRelative = async (personName: string, relationshipType?: RelationshipType) => {
     if (!addRelativeIntent) {
@@ -474,6 +487,7 @@ const PeopleGraph3DComponent = ({
           />
         ) : null}
         <ErrorBoundary
+          errorContext="Graph canvas"
           fallback={
             <div className="graph-overlay graph-overlay-error">
               <p>Graph rendering failed. Reload the page to recover WebGL rendering.</p>
@@ -481,6 +495,7 @@ const PeopleGraph3DComponent = ({
           }
         >
           <GraphCanvasScene
+            layoutResizeSignal={layoutResizeSignal}
             displayVisiblePeople={renderVisiblePeople}
             visibleRelationshipLines={renderVisibleRelationshipLines}
             renderVisibilityBucketByPersonId={renderVisibilityBucketByPersonId}

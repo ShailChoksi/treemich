@@ -17,7 +17,8 @@ const leafletMocks = vi.hoisted(() => {
   const map = {
     getZoom: vi.fn(() => 2),
     getBounds: vi.fn(() => createBounds(-90, -180, 90, 180)),
-    fitBounds
+    fitBounds,
+    invalidateSize: vi.fn()
   };
   const zoomHandlers: Array<() => void> = [];
   const moveHandlers: Array<() => void> = [];
@@ -25,7 +26,8 @@ const leafletMocks = vi.hoisted(() => {
 });
 
 vi.mock("react-leaflet", () => ({
-  MapContainer: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
+  MapContainer: ({ children, className }: { children: ReactNode; className?: string }) =>
+    createElement("div", { className }, children),
   TileLayer: () => createElement("div"),
   CircleMarker: ({ children, pathOptions }: { children: ReactNode; pathOptions?: { fillColor?: string } }) =>
     createElement("div", { "data-marker-fill": pathOptions?.fillColor ?? "" }, children),
@@ -43,16 +45,6 @@ vi.mock("react-leaflet", () => ({
 }));
 
 describe("MapPlacesPanel", () => {
-  const expandMap = async (container: HTMLDivElement) => {
-    const toggle = [...container.querySelectorAll("button")].find((node) =>
-      node.textContent?.includes("Show map")
-    ) as HTMLButtonElement | undefined;
-    expect(toggle).toBeDefined();
-    await act(async () => {
-      toggle?.click();
-    });
-  };
-
   afterEach(() => {
     document.body.innerHTML = "";
     vi.restoreAllMocks();
@@ -135,7 +127,7 @@ describe("MapPlacesPanel", () => {
     root.unmount();
   });
 
-  it("starts collapsed to keep sidebar compact", async () => {
+  it("shows the map canvas when geocoded places are available", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -162,12 +154,12 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    expect(container.textContent).toContain("Map is collapsed");
-    expect(container.textContent).toContain("Show map");
+    expect(container.querySelector(".map-places-panel")).toBeTruthy();
+    expect(container.querySelector(".map-places-canvas")).toBeTruthy();
     root.unmount();
   });
 
-  it("renders expanded content inside the map popout container", async () => {
+  it("renders the map in the main panel container", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -194,13 +186,7 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    const toggle = [...container.querySelectorAll("button")].find((node) =>
-      node.textContent?.includes("Show map")
-    ) as HTMLButtonElement | undefined;
-    await act(async () => {
-      toggle?.click();
-    });
-    expect(container.querySelector(".map-places-popout")).toBeTruthy();
+    expect(container.querySelector(".map-places-canvas")).toBeTruthy();
     root.unmount();
   });
 
@@ -232,7 +218,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     await act(async () => {
       checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -279,7 +264,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     const fills = [...container.querySelectorAll("[data-marker-fill]")].map((el) =>
       el.getAttribute("data-marker-fill")
     );
@@ -317,7 +301,6 @@ describe("MapPlacesPanel", () => {
     await act(async () => {
       root.render(createElement(Harness));
     });
-    await expandMap(container);
     let checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
     expect(checkbox).toBeTruthy();
     await act(async () => {
@@ -358,7 +341,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     const focusButtons = [...container.querySelectorAll("button")].filter((node) =>
       node.textContent?.includes("Focus Person")
     );
@@ -398,7 +380,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     expect(leafletMocks.fitBounds.mock.calls.length).toBe(0);
     await act(async () => {
       vi.advanceTimersByTime(200);
@@ -435,7 +416,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     expect(container.textContent).toContain("at zoom 2.0");
     leafletMocks.map.getZoom.mockReturnValue(8);
     await act(async () => {
@@ -485,7 +465,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     expect(container.textContent).toContain("2 in view");
 
     leafletMocks.map.getBounds.mockReturnValue(leafletMocks.createBounds(40, -10, 55, 10));
@@ -526,8 +505,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
-
     await act(async () => {
       vi.advanceTimersByTime(220);
     });

@@ -1,6 +1,7 @@
 import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import "../styles.css";
 import type { ImmichPerson, LifeEventRecord, RelationshipRecord } from "../lib/api";
 import {
   PersonDetailPanel,
@@ -201,13 +202,18 @@ describe("PersonDetailPanel", () => {
     });
 
     expect(profileToggle?.getAttribute("aria-expanded")).toBe("false");
-    expect((container.textContent ?? "").includes("Save profile")).toBe(false);
+    const profileRegion = container.querySelector("#person-detail-section-content-profile");
+    expect((profileRegion as HTMLElement | null)?.hasAttribute("hidden")).toBe(true);
+    expect(window.getComputedStyle(profileRegion as HTMLElement).display).toBe("none");
 
     act(() => {
       profileToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(profileToggle?.getAttribute("aria-expanded")).toBe("true");
+    const profileRegionOpen = container.querySelector("#person-detail-section-content-profile");
+    expect((profileRegionOpen as HTMLElement | null)?.hasAttribute("hidden")).toBe(false);
+    expect(window.getComputedStyle(profileRegionOpen as HTMLElement).display).not.toBe("none");
     expect(container.textContent).toContain("Save profile");
 
     act(() => {

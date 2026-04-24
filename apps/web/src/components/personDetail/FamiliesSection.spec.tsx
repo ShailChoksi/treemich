@@ -129,9 +129,7 @@ describe("FamiliesSection", () => {
     container.remove();
   });
 
-  it("calls onDeleteFamily when delete is confirmed", async () => {
-    const confirmMock = vi.fn(() => true);
-    vi.stubGlobal("confirm", confirmMock);
+  it("calls onDeleteFamily when delete is confirmed in the dialog", async () => {
     const onDeleteFamily = vi.fn().mockResolvedValue(undefined);
 
     act(() => {
@@ -153,7 +151,16 @@ describe("FamiliesSection", () => {
       deleteBtn!.click();
     });
 
-    expect(confirmMock).toHaveBeenCalled();
+    const dialog = container.querySelector('[role="alertdialog"]');
+    expect(dialog).toBeTruthy();
+    expect(dialog?.textContent).toContain("Delete family unit?");
+
+    const confirmBtn = dialog!.querySelector(".danger-button") as HTMLButtonElement | null;
+    expect(confirmBtn?.textContent).toContain("Delete family");
+    await act(async () => {
+      confirmBtn!.click();
+    });
+
     expect(onDeleteFamily).toHaveBeenCalledWith("fam-1");
 
     act(() => {
@@ -162,11 +169,7 @@ describe("FamiliesSection", () => {
     container.remove();
   });
 
-  it("does not delete when confirm is dismissed", async () => {
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => false)
-    );
+  it("does not delete when the confirmation dialog is dismissed", async () => {
     const onDeleteFamily = vi.fn().mockResolvedValue(undefined);
 
     act(() => {
@@ -185,6 +188,15 @@ describe("FamiliesSection", () => {
     );
     await act(async () => {
       deleteBtn!.click();
+    });
+
+    const dialog = container.querySelector('[role="alertdialog"]');
+    const keepBtn = Array.from(dialog?.querySelectorAll("button") ?? []).find((b) =>
+      b.textContent?.includes("Keep family")
+    );
+    expect(keepBtn).toBeTruthy();
+    await act(async () => {
+      keepBtn!.click();
     });
 
     expect(onDeleteFamily).toHaveBeenCalledTimes(0);

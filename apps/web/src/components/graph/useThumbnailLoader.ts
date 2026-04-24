@@ -177,6 +177,9 @@ export const useThumbnailLoader = ({
   cameraSampleRef: MutableRefObject<Vector3>;
 }) => {
   const [thumbnailTextures, setThumbnailTextures] = useState<Map<string, Texture>>(() => new Map());
+  /** Always latest map for queue drain without listing `thumbnailTextures` in effect deps. */
+  const thumbnailTexturesRef = useRef(thumbnailTextures);
+  thumbnailTexturesRef.current = thumbnailTextures;
   const [nearCameraNodeIds, setNearCameraNodeIds] = useState<string[]>([]);
   const [backoffUntilMs, setBackoffUntilMs] = useState(0);
   const inFlightIdsRef = useRef(new Set<string>());
@@ -272,7 +275,7 @@ export const useThumbnailLoader = ({
       }
       const batch = pickThumbnailBatch({
         loadOrder: thumbnailLoadOrder,
-        loadedIds: new Set(thumbnailTextures.keys()),
+        loadedIds: new Set(thumbnailTexturesRef.current.keys()),
         inFlightIds: inFlightIdsRef.current,
         batchSize: THUMBNAIL_BATCH_SIZE
       });
@@ -336,7 +339,7 @@ export const useThumbnailLoader = ({
       isDisposed = true;
       window.clearInterval(interval);
     };
-  }, [backoffUntilMs, thumbnailTextures, thumbnailLoadOrder]);
+  }, [backoffUntilMs, thumbnailLoadOrder]);
 
   const thumbnailNodeIds = useMemo(() => new Set(thumbnailTextures.keys()), [thumbnailTextures]);
 

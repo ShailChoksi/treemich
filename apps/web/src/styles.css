@@ -9,6 +9,13 @@ body {
   height: 100vh;
 }
 
+.app-title {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 700;
+  line-height: inherit;
+}
+
 .app-shell {
   height: 95vh;
   box-sizing: border-box;
@@ -83,11 +90,11 @@ body {
 
 .people-layout--workspace {
   grid-template-columns:
-    var(--workspace-left-width, 206px)
+    minmax(0, var(--workspace-left-width, 206px))
     12px
     minmax(0, 1fr)
     12px
-    var(--workspace-right-width, 360px);
+    minmax(0, var(--workspace-right-width, 360px));
   align-items: stretch;
   gap: 12px;
   position: relative;
@@ -101,6 +108,7 @@ body {
   border-radius: 10px;
   background: #0f172a;
   padding: 10px 8px;
+  min-width: 0;
   min-height: 0;
   height: 100%;
   box-sizing: border-box;
@@ -225,6 +233,15 @@ body {
   margin-top: 0;
 }
 
+.workspace-tree-context {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
 .workspace-main-stack--evidence,
 .workspace-main-stack--interchange,
 .workspace-main-stack--places {
@@ -306,8 +323,11 @@ body {
   height: 100%;
   padding: 0;
   border-radius: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   line-height: 1;
   font-size: 0.58rem;
   align-self: stretch;
@@ -342,6 +362,16 @@ body {
   opacity: 1;
   background: rgba(30, 41, 59, 0.45);
   color: #cbd5e1;
+}
+
+.workspace-column-toggle-hint {
+  font-size: 0.48rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.85;
 }
 
 .workspace-column-grip {
@@ -445,7 +475,7 @@ body {
   }
 
   .workspace-context-pane {
-    width: 100% !important;
+    width: 100%;
     max-width: none;
     flex: 0 0 auto;
   }
@@ -522,7 +552,7 @@ body {
 }
 
 .hint {
-  color: #cbd5e1;
+  color: #e2e8f0;
   margin: 0;
 }
 
@@ -956,6 +986,12 @@ body {
   gap: 10px;
 }
 
+/* `.stack` sets `display: flex`, which overrides the UA default for `[hidden]` on the same element.
+   Collapsible bodies use `class="stack"` + `hidden` — force collapse to win (any ancestor). */
+.stack[hidden] {
+  display: none !important;
+}
+
 .graph-search-overlay {
   position: absolute;
   top: 12px;
@@ -1169,7 +1205,19 @@ body {
   position: absolute;
   inset: 0;
   z-index: 15;
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
   background: rgba(15, 23, 42, 0.64);
+}
+
+.add-relative-backdrop:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .add-relative-popup {
@@ -1894,4 +1942,16 @@ textarea:disabled {
   min-width: 0;
   padding: 6px 10px;
   font-size: 0.82rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-nav-item,
+  .workspace-column-toggle,
+  .secondary-button,
+  .person-detail-section-toggle,
+  .add-relative-backdrop,
+  .add-relative-popup,
+  .node-action-btn {
+    transition: none;
+  }
 }

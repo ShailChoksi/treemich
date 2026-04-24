@@ -62,6 +62,7 @@ import {
   parseDateInputToParts
 } from "../lib/lifeEventUi";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
+import { getLocalStorageItem, setLocalStorageItem } from "../lib/safeLocalStorage";
 import { EvidenceLibrariesSection } from "../components/EvidenceLibrariesSection";
 import { EvidenceMediaSection } from "../components/EvidenceMediaSection";
 import { GedcomInterchangeSection } from "../components/GedcomInterchangeSection";
@@ -196,21 +197,23 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     if (typeof window === "undefined") {
       return "tree";
     }
-    const stored = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    const stored = getLocalStorageItem(WORKSPACE_STORAGE_KEY);
     return WORKSPACE_ITEMS.some((item) => item.id === stored) ? (stored as WorkspaceId) : "tree";
   });
   const [leftPaneOpen, setLeftPaneOpen] = useState(() => {
     if (typeof window === "undefined") {
       return true;
     }
-    return window.localStorage.getItem(LEFT_PANE_OPEN_STORAGE_KEY) !== "false";
+    return getLocalStorageItem(LEFT_PANE_OPEN_STORAGE_KEY) !== "false";
   });
   const [contextPaneOpen, setContextPaneOpen] = useState(() => {
     if (typeof window === "undefined") {
       return true;
     }
-    return window.localStorage.getItem(CONTEXT_OPEN_STORAGE_KEY) !== "false";
+    return getLocalStorageItem(CONTEXT_OPEN_STORAGE_KEY) !== "false";
   });
+  const [layoutResizeSignal, setLayoutResizeSignal] = useState(0);
+  const workspaceMainViewsRef = useRef<HTMLDivElement | null>(null);
   const [people, setPeople] = useState<ImmichPerson[]>([]);
   const [relationships, setRelationships] = useState<RelationshipRecord[]>([]);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
@@ -257,6 +260,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const lastPersistedSelectionRef = useRef<string | null>(null);
   const layoutRequestIdRef = useRef(0);
   const workspaceButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  /** True when quick-edit profile fields were changed but not yet saved via Save profile. */
+  const profileDraftDirtyRef = useRef(false);
+  const mapPlacesRequestIdRef = useRef(0);
+  const layoutResizeRafRef = useRef<number | null>(null);
+  const treeValidationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshPeopleOnly = useCallback(async () => {
     const peopleResponse = await getImmichPeople();
@@ -268,10 +276,45 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   }, [selectedPersonId]);
 
   useEffect(() => {
+    profileDraftDirtyRef.current = false;
+  }, [selectedPersonId]);
+
+  useEffect(() => {
     setFamilyLifeEventsById({});
   }, [selectedPersonId]);
 
+  const loadMapPlaces = useCallback(async (includeLiving: boolean) => {
+    const requestId = (mapPlacesRequestIdRef.current += 1);
+    setMapLoading(true);
+    setMapLoadError(null);
+    try {
+      const response = await getPlacesMap({ includeLiving });
+      if (mapPlacesRequestIdRef.current !== requestId) {
+        return;
+      }
+      setMapUiEnabled(response.mapUiEnabled);
+      setMapPlaces(response.places);
+    } catch (error: unknown) {
+      if (mapPlacesRequestIdRef.current !== requestId) {
+        return;
+      }
+      setMapLoadError(getErrorMessage(error));
+    } finally {
+      if (mapPlacesRequestIdRef.current === requestId) {
+        setMapLoading(false);
+      }
+    }
+  }, []);
+
   const refreshGraphData = useCallback(async () => {
+    if (profileDraftDirtyRef.current) {
+      setStatus("Save your profile changes before refreshing the tree.");
+      return;
+    }
+    if (isSavingProfile || isSavingRelationship || savingFamilyId) {
+      setStatus("Wait for the current save to finish before refreshing the tree.");
+      return;
+    }
     setIsLoading(true);
     try {
       const [peopleResponse, relationshipsResponse, preferencesResponse] = await Promise.all([
@@ -346,11 +389,12 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           }
           setServerLayout(layout);
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           if (layoutRequestIdRef.current !== layoutRequestId) {
             return;
           }
           setServerLayout(null);
+          setStatus(`Server layout failed: ${getErrorMessage(err)}. Using a local graph layout.`);
         });
     } catch (error: unknown) {
       setLoadError(getErrorMessage(error));
@@ -358,7 +402,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     } finally {
       setIsLoading(false);
     }
-  }, [currentUserName]);
+  }, [currentUserName, isSavingProfile, isSavingRelationship, savingFamilyId]);
 
   const handleFamilyPatch = useCallback(
     async (familyId: string, body: PatchFamilyBody) => {
@@ -420,11 +464,12 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     );
   }, [selectedPerson, profileEventFieldsByPersonId, lifeEventsByPersonId]);
 
+  const lifeEventsForSelected = selectedPerson ? lifeEventsByPersonId[selectedPerson.id] : undefined;
   useEffect(() => {
     if (!selectedPerson) {
       return;
     }
-    if (lifeEventsByPersonId[selectedPerson.id] !== undefined) {
+    if (lifeEventsForSelected !== undefined) {
       return;
     }
     let cancelled = false;
@@ -443,10 +488,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           [selectedPerson.id]: values
         }));
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) {
           return;
         }
+        setStatus(`Could not load life events: ${getErrorMessage(err)}`);
         setLifeEventsByPersonId((current) => ({
           ...current,
           [selectedPerson.id]: []
@@ -459,13 +505,14 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     return () => {
       cancelled = true;
     };
-  }, [lifeEventsByPersonId, selectedPerson]);
+  }, [lifeEventsForSelected, selectedPerson]);
 
+  const timelineForSelected = selectedPerson ? personTimelineById[selectedPerson.id] : undefined;
   useEffect(() => {
     if (!selectedPerson) {
       return;
     }
-    if (personTimelineById[selectedPerson.id] !== undefined) {
+    if (timelineForSelected !== undefined) {
       return;
     }
     let cancelled = false;
@@ -479,10 +526,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           [selectedPerson.id]: response.timeline
         }));
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) {
           return;
         }
+        setStatus(`Could not load timeline: ${getErrorMessage(err)}`);
         setPersonTimelineById((current) => ({
           ...current,
           [selectedPerson.id]: []
@@ -491,13 +539,14 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     return () => {
       cancelled = true;
     };
-  }, [personTimelineById, selectedPerson]);
+  }, [selectedPerson, timelineForSelected]);
 
+  const researchForSelected = selectedPerson ? researchTasksByPersonId[selectedPerson.id] : undefined;
   useEffect(() => {
     if (!selectedPerson) {
       return;
     }
-    if (researchTasksByPersonId[selectedPerson.id] !== undefined) {
+    if (researchForSelected !== undefined) {
       return;
     }
     let cancelled = false;
@@ -511,10 +560,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           [selectedPerson.id]: tasks
         }));
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) {
           return;
         }
+        setStatus(`Could not load research tasks: ${getErrorMessage(err)}`);
         setResearchTasksByPersonId((current) => ({
           ...current,
           [selectedPerson.id]: []
@@ -523,13 +573,14 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     return () => {
       cancelled = true;
     };
-  }, [researchTasksByPersonId, selectedPerson]);
+  }, [researchForSelected, selectedPerson]);
 
+  const familiesForSelected = selectedPerson ? familiesByPersonId[selectedPerson.id] : undefined;
   useEffect(() => {
     if (!selectedPerson) {
       return;
     }
-    if (familiesByPersonId[selectedPerson.id] !== undefined) {
+    if (familiesForSelected !== undefined) {
       return;
     }
     let cancelled = false;
@@ -543,10 +594,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           [selectedPerson.id]: families
         }));
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) {
           return;
         }
+        setStatus(`Could not load families: ${getErrorMessage(err)}`);
         setFamiliesByPersonId((current) => ({
           ...current,
           [selectedPerson.id]: []
@@ -555,13 +607,13 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     return () => {
       cancelled = true;
     };
-  }, [familiesByPersonId, selectedPerson]);
+  }, [familiesForSelected, selectedPerson]);
 
   useEffect(() => {
     if (!selectedPerson) {
       return;
     }
-    const fams = familiesByPersonId[selectedPerson.id];
+    const fams = familiesForSelected;
     if (fams === undefined) {
       return;
     }
@@ -587,11 +639,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           return next;
         });
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setStatus(`Could not load some family life events: ${getErrorMessage(err)}`);
+      });
     return () => {
       cancelled = true;
     };
-  }, [selectedPerson, familiesByPersonId, familyLifeEventsById]);
+  }, [familyLifeEventsById, familiesForSelected, selectedPerson]);
 
   useEffect(() => {
     if (!selectedPersonId) {
@@ -626,7 +683,12 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           return next;
         });
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setStatus(`Could not load some relationship life events: ${getErrorMessage(err)}`);
+      });
     return () => {
       cancelled = true;
     };
@@ -643,25 +705,40 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   }, [status]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, activeWorkspace);
+    setLocalStorageItem(WORKSPACE_STORAGE_KEY, activeWorkspace);
   }, [activeWorkspace]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(LEFT_PANE_OPEN_STORAGE_KEY, leftPaneOpen ? "true" : "false");
+    setLocalStorageItem(LEFT_PANE_OPEN_STORAGE_KEY, leftPaneOpen ? "true" : "false");
   }, [leftPaneOpen]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    setLocalStorageItem(CONTEXT_OPEN_STORAGE_KEY, contextPaneOpen ? "true" : "false");
+  }, [contextPaneOpen]);
+
+  useEffect(() => {
+    const el = workspaceMainViewsRef.current;
+    if (!el || typeof ResizeObserver === "undefined") {
       return;
     }
-    window.localStorage.setItem(CONTEXT_OPEN_STORAGE_KEY, contextPaneOpen ? "true" : "false");
-  }, [contextPaneOpen]);
+    const observer = new ResizeObserver(() => {
+      if (layoutResizeRafRef.current != null) {
+        return;
+      }
+      layoutResizeRafRef.current = window.requestAnimationFrame(() => {
+        layoutResizeRafRef.current = null;
+        setLayoutResizeSignal((n) => n + 1);
+      });
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      if (layoutResizeRafRef.current != null) {
+        window.cancelAnimationFrame(layoutResizeRafRef.current);
+        layoutResizeRafRef.current = null;
+      }
+    };
+  }, []);
 
   const onPreferencesChange = useCallback((prefs: Partial<UserPreferences>) => {
     setSavedPreferences((current) => ({
@@ -674,11 +751,13 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         prefs.lastSelectedPersonId !== undefined ? prefs.lastSelectedPersonId : current?.lastSelectedPersonId,
       primaryFamilyUnitByPersonId: prefs.primaryFamilyUnitByPersonId ?? current?.primaryFamilyUnitByPersonId
     }));
-    updateUserPreferences(prefs)
+    void updateUserPreferences(prefs)
       .then((nextPrefs) => {
         setSavedPreferences(nextPrefs);
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        setStatus(`Could not save preferences: ${getErrorMessage(err)}`);
+      });
   }, []);
 
   const onPrimaryFamilyUnitChange = useCallback(
@@ -876,15 +955,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         ...current,
         [selectedPerson.id]: displayValues
       }));
-      void getPlacesMap({ includeLiving: mapIncludeLiving })
-        .then((response) => {
-          setMapUiEnabled(response.mapUiEnabled);
-          setMapPlaces(response.places);
-          setMapLoadError(null);
-        })
-        .catch((error: unknown) => {
-          setMapLoadError(getErrorMessage(error));
-        });
+      profileDraftDirtyRef.current = false;
+      void loadMapPlaces(mapIncludeLiving);
       setStatus("Profile saved");
     } catch (error: unknown) {
       setStatus(getErrorMessage(error));
@@ -895,6 +967,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     genderByPersonId,
     givenNameByPersonId,
     lifeEventsByPersonId,
+    loadMapPlaces,
     mapIncludeLiving,
     nicknamesByPersonId,
     profileEventFieldsByPersonId,
@@ -1274,6 +1347,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson || !isGender(gender)) {
         return;
       }
+      profileDraftDirtyRef.current = true;
       setGenderByPersonId((current) => ({
         ...current,
         [selectedPerson.id]: gender
@@ -1287,6 +1361,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
+      profileDraftDirtyRef.current = true;
       const pid = selectedPerson.id;
       setProfileEventFieldsByPersonId((current) => {
         const base = current[pid] ?? deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
@@ -1304,6 +1379,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
+      profileDraftDirtyRef.current = true;
       setGivenNameByPersonId((current) => ({
         ...current,
         [selectedPerson.id]: givenName
@@ -1317,6 +1393,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
+      profileDraftDirtyRef.current = true;
       setSurnameByPersonId((current) => ({
         ...current,
         [selectedPerson.id]: surname
@@ -1330,6 +1407,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
+      profileDraftDirtyRef.current = true;
       setNicknamesByPersonId((current) => ({
         ...current,
         [selectedPerson.id]: nicknames
@@ -1343,6 +1421,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
+      profileDraftDirtyRef.current = true;
       const pid = selectedPerson.id;
       setProfileEventFieldsByPersonId((current) => {
         const base = current[pid] ?? deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
@@ -1360,6 +1439,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
+      profileDraftDirtyRef.current = true;
       const pid = selectedPerson.id;
       setProfileEventFieldsByPersonId((current) => {
         const base = current[pid] ?? deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
@@ -1377,6 +1457,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       if (!selectedPerson) {
         return;
       }
+      profileDraftDirtyRef.current = true;
       const pid = selectedPerson.id;
       setProfileEventFieldsByPersonId((current) => {
         const base = current[pid] ?? deriveProfileDisplayValuesFromLifeEvents(lifeEventsByPersonId[pid]);
@@ -1421,44 +1502,35 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     if (isLoading) {
       return;
     }
-    void getTreeValidation()
-      .then((r) => {
-        setTreeValidationEngineDisabled(r.engineDisabled);
-        setTreeValidationIssueCount(r.findings.length);
-      })
-      .catch(() => {
-        setTreeValidationIssueCount(null);
-      });
+    if (treeValidationDebounceRef.current != null) {
+      window.clearTimeout(treeValidationDebounceRef.current);
+    }
+    treeValidationDebounceRef.current = window.setTimeout(() => {
+      treeValidationDebounceRef.current = null;
+      void getTreeValidation()
+        .then((r) => {
+          setTreeValidationEngineDisabled(r.engineDisabled);
+          setTreeValidationIssueCount(r.findings.length);
+        })
+        .catch((err: unknown) => {
+          setTreeValidationIssueCount(null);
+          setStatus(`Tree validation check failed: ${getErrorMessage(err)}`);
+        });
+    }, 400);
+    return () => {
+      if (treeValidationDebounceRef.current != null) {
+        window.clearTimeout(treeValidationDebounceRef.current);
+        treeValidationDebounceRef.current = null;
+      }
+    };
   }, [isLoading, people, relationships]);
 
   useEffect(() => {
-    let cancelled = false;
-    setMapLoading(true);
-    setMapLoadError(null);
-    void getPlacesMap({ includeLiving: mapIncludeLiving })
-      .then((response) => {
-        if (cancelled) {
-          return;
-        }
-        setMapUiEnabled(response.mapUiEnabled);
-        setMapPlaces(response.places);
-      })
-      .catch((error: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        setMapLoadError(getErrorMessage(error));
-      })
-      .finally(() => {
-        if (cancelled) {
-          return;
-        }
-        setMapLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mapIncludeLiving]);
+    if (activeWorkspace !== "places") {
+      return;
+    }
+    void loadMapPlaces(mapIncludeLiving);
+  }, [activeWorkspace, loadMapPlaces, mapIncludeLiving]);
 
   const noRelationshipsDefaultsEnabled = !hasRelationships && !savedPreferences?.graphFilterVisibility;
 
@@ -1467,6 +1539,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       return;
     }
     event.preventDefault();
+    event.stopPropagation();
     const nextIndex =
       event.key === "ArrowDown"
         ? (index + 1) % WORKSPACE_ITEMS.length
@@ -1552,24 +1625,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     [contextPaneOpen, leftPaneOpen]
   );
 
-  useEffect(() => {
-    // Ensure Three.js canvas remeasures after column width changes.
-    const frame = window.requestAnimationFrame(() => {
-      window.dispatchEvent(new Event("resize"));
-    });
-    const timeout = window.setTimeout(() => {
-      window.dispatchEvent(new Event("resize"));
-    }, 120);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(timeout);
-    };
-  }, [activeWorkspace, contextPaneOpen, leftPaneOpen]);
-
   return (
-    <main
+    <section
       className="people-layout people-layout--workspace"
       style={workspaceLayoutStyle}
+      aria-label="People workspace: navigation, main view, and context"
     >
       <aside
         className={`workspace-nav workspace-nav--expanded ${leftPaneOpen ? "" : "workspace-pane--closed"}`}
@@ -1580,13 +1640,13 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
             return (
               <button
                 key={workspace.id}
+                data-workspace={workspace.id}
                 ref={(node) => {
                   workspaceButtonRefs.current[index] = node;
                 }}
                 type="button"
                 className={`workspace-nav-item ${isActive ? "workspace-nav-item--active" : ""}`}
                 aria-current={isActive ? "page" : undefined}
-                aria-label={workspace.label}
                 onKeyDown={(event) => handleWorkspaceNavKeyDown(event, index)}
                 onClick={() => setActiveWorkspace(workspace.id)}
               >
@@ -1604,44 +1664,51 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         type="button"
         className="secondary-button workspace-column-toggle workspace-column-toggle--left"
         onClick={() => setLeftPaneOpen((current) => !current)}
-        aria-label={leftPaneOpen ? "Collapse left column" : "Expand left column"}
-        title={leftPaneOpen ? "Collapse left column" : "Expand left column"}
+        aria-label={leftPaneOpen ? "Collapse workspace navigation column" : "Expand workspace navigation column"}
+        title={leftPaneOpen ? "Collapse left column (workspace nav)" : "Expand left column (workspace nav)"}
       >
+        <span className="workspace-column-toggle-hint" aria-hidden="true">
+          Nav
+        </span>
         <span className="workspace-column-grip" aria-hidden="true">
           ||
         </span>
       </button>
 
       <section className="workspace-main">
-        <div className="workspace-main-views">
+        <div className="workspace-main-views" ref={workspaceMainViewsRef}>
           <section
             className={`people-main-column ${activeWorkspace === "tree" ? "" : "workspace-view-hidden"}`}
             aria-hidden={activeWorkspace !== "tree"}
           >
-            <PeopleGraph3D
-              people={people}
-              relationships={relationships}
-              serverPositionsByPersonId={serverLayout?.positionsByPersonId}
-              serverLayoutRevision={serverLayout?.layoutRevision ?? null}
-              serverLayoutAlgorithmVersion={serverLayout?.algorithmVersion ?? null}
-              selectedPersonId={selectedPersonId}
-              status={status}
-              isLoading={isLoading}
-              isSavingRelationship={isSavingRelationship}
-              loadError={loadError}
-              focusPersonRequest={graphFocusPersonId}
-              cameraFocusPersonRequest={graphCameraFocusPersonId}
-              noRelationshipsGraphFilterVisibility={noRelationshipsGraphFilterVisibility}
-              defaultToNoRelationshipsGraphState={noRelationshipsDefaultsEnabled}
-              savedPreferences={savedPreferences}
-              treeValidationIssueCount={treeValidationIssueCount}
-              treeValidationEngineDisabled={treeValidationEngineDisabled}
-              onFocusPersonConsumed={clearGraphFocus}
-              onCameraFocusPersonConsumed={clearGraphCameraFocus}
-              onSelectedPersonChange={setSelectedPersonId}
-              onCreateRelationship={onCreateRelationship}
-              onPreferencesChange={onPreferencesChange}
-            />
+            {activeWorkspace === "tree" ? (
+              <PeopleGraph3D
+                people={people}
+                relationships={relationships}
+                serverPositionsByPersonId={serverLayout?.positionsByPersonId}
+                serverLayoutRevision={serverLayout?.layoutRevision ?? null}
+                serverLayoutAlgorithmVersion={serverLayout?.algorithmVersion ?? null}
+                selectedPersonId={selectedPersonId}
+                status={status}
+                isLoading={isLoading}
+                isSavingRelationship={isSavingRelationship}
+                loadError={loadError}
+                focusPersonRequest={graphFocusPersonId}
+                cameraFocusPersonRequest={graphCameraFocusPersonId}
+                noRelationshipsGraphFilterVisibility={noRelationshipsGraphFilterVisibility}
+                defaultToNoRelationshipsGraphState={noRelationshipsDefaultsEnabled}
+                savedPreferences={savedPreferences}
+                treeValidationIssueCount={treeValidationIssueCount}
+                treeValidationEngineDisabled={treeValidationEngineDisabled}
+                onFocusPersonConsumed={clearGraphFocus}
+                onCameraFocusPersonConsumed={clearGraphCameraFocus}
+                onSelectedPersonChange={setSelectedPersonId}
+                onCreateRelationship={onCreateRelationship}
+                onPreferencesChange={onPreferencesChange}
+                graphKeyboardEnabled
+                layoutResizeSignal={layoutResizeSignal}
+              />
+            ) : null}
           </section>
           <section
             className={`workspace-main-stack workspace-main-stack--places ${
@@ -1653,17 +1720,20 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
               <h2>Places workspace</h2>
               <p className="hint">Review mapped places and focus people from geographic context.</p>
             </section>
-            <MapPlacesPanel
-              mapUiEnabled={mapUiEnabled}
-              places={mapPlaces}
-              isLoading={mapLoading}
-              includeLiving={mapIncludeLiving}
-              onIncludeLivingChange={setMapIncludeLiving}
-              onFocusPerson={focusPersonInGraph}
-              getPersonLabel={getPersonLabelForMap}
-              selectedPersonId={selectedPersonId}
-              error={mapLoadError}
-            />
+            {activeWorkspace === "places" ? (
+              <MapPlacesPanel
+                mapUiEnabled={mapUiEnabled}
+                places={mapPlaces}
+                isLoading={mapLoading}
+                includeLiving={mapIncludeLiving}
+                onIncludeLivingChange={setMapIncludeLiving}
+                onFocusPerson={focusPersonInGraph}
+                getPersonLabel={getPersonLabelForMap}
+                selectedPersonId={selectedPersonId}
+                error={mapLoadError}
+                layoutResizeSignal={layoutResizeSignal}
+              />
+            ) : null}
           </section>
           {activeWorkspace !== "tree" ? renderSecondaryWorkspace() : null}
         </div>
@@ -1672,9 +1742,12 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         type="button"
         className="secondary-button workspace-column-toggle workspace-column-toggle--right"
         onClick={() => setContextPaneOpen((current) => !current)}
-        aria-label={contextPaneOpen ? "Collapse right column" : "Expand right column"}
-        title={contextPaneOpen ? "Collapse right column" : "Expand right column"}
+        aria-label={contextPaneOpen ? "Collapse person context column" : "Expand person context column"}
+        title={contextPaneOpen ? "Collapse right column (person context)" : "Expand right column (person context)"}
       >
+        <span className="workspace-column-toggle-hint" aria-hidden="true">
+          Profile
+        </span>
         <span className="workspace-column-grip" aria-hidden="true">
           ||
         </span>
@@ -1683,74 +1756,81 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       <aside
         className={`people-sidebar workspace-context-pane ${contextPaneOpen ? "" : "workspace-pane--closed"}`}
       >
-        {contextPaneOpen ? (
-          activeWorkspace === "tree" ? (
-            <PersonDetailPanel
-              person={selectedPerson}
-              people={people}
-              relationships={relationships}
-              dismissedSuggestionKeys={savedPreferences?.dismissedSuggestions ?? []}
-              genders={genders}
-              genderValue={selectedPerson ? (genderByPersonId[selectedPerson.id] ?? "UNKNOWN") : "UNKNOWN"}
-              onGenderChange={handleGenderChange}
-              birthDateValue={selectedProfileEventFields.birthDate}
-              onBirthDateChange={handleBirthDateChange}
-              givenNameValue={selectedPerson ? (givenNameByPersonId[selectedPerson.id] ?? "") : ""}
-              surnameValue={selectedPerson ? (surnameByPersonId[selectedPerson.id] ?? "") : ""}
-              nicknamesValue={selectedPerson ? (nicknamesByPersonId[selectedPerson.id] ?? "") : ""}
-              deathDateValue={selectedProfileEventFields.deathDate}
-              birthCityValue={selectedProfileEventFields.birthCity}
-              birthCountryValue={selectedProfileEventFields.birthCountry}
-              onGivenNameChange={handleGivenNameChange}
-              onSurnameChange={handleSurnameChange}
-              onNicknamesChange={handleNicknamesChange}
-              onDeathDateChange={handleDeathDateChange}
-              onBirthCityChange={handleBirthCityChange}
-              onBirthCountryChange={handleBirthCountryChange}
-              onProfileSave={onProfileSave}
-              isSavingProfile={isSavingProfile}
-              onFocusPerson={focusPersonInGraph}
-              onCreateRelationship={onCreateRelationship}
-              onUpdateRelationship={onUpdateExistingRelationship}
-              onDeleteRelationship={onDeleteExistingRelationship}
-              onDismissSuggestion={onDismissSuggestion}
-              isSavingRelationship={isSavingRelationship}
-              immichBaseUrl={immichBaseUrl}
-              primaryFamilyUnitByPersonId={savedPreferences?.primaryFamilyUnitByPersonId ?? {}}
-              onPrimaryFamilyUnitChange={onPrimaryFamilyUnitChange}
-              relationshipLifeEventsById={relationshipLifeEventsById}
-              personLifeEvents={selectedPerson ? lifeEventsByPersonId[selectedPerson.id] : undefined}
-              onPersonLifeEventCreate={handlePersonLifeEventCreate}
-              onPersonLifeEventPatch={handlePersonLifeEventPatch}
-              onPersonLifeEventDelete={handlePersonLifeEventDelete}
-              onRelationshipLifeEventCreate={handleRelationshipLifeEventCreate}
-              onRelationshipLifeEventPatch={handleRelationshipLifeEventPatch}
-              onRelationshipLifeEventDelete={handleRelationshipLifeEventDelete}
-              onPersonNamesChanged={refreshPeopleOnly}
-              personTimeline={selectedPerson ? personTimelineById[selectedPerson.id] : undefined}
-              researchTasks={selectedPerson ? researchTasksByPersonId[selectedPerson.id] : undefined}
-              families={selectedPerson ? familiesByPersonId[selectedPerson.id] : undefined}
-              onFamilyPatch={handleFamilyPatch}
-              onFamilyDelete={handleFamilyDelete}
-              savingFamilyId={savingFamilyId}
-              familyLifeEventsById={familyLifeEventsById}
-              onFamilyLifeEventCreate={handleFamilyLifeEventCreate}
-              onFamilyLifeEventPatch={handleFamilyLifeEventPatch}
-              onFamilyLifeEventDelete={handleFamilyLifeEventDelete}
-              onResearchTaskCreate={handleResearchTaskCreate}
-              onResearchTaskUpdate={handleResearchTaskUpdate}
-              onResearchTaskDelete={handleResearchTaskDelete}
-            />
-          ) : (
-            <section className="card stack workspace-context-placeholder">
-              <p className="hint">
-                Optional context for {activeWorkspace} will appear here as this workspace gains secondary
-                details, filters, and inspectors.
-              </p>
-            </section>
-          )
+        <div
+          className={activeWorkspace === "tree" ? "workspace-tree-context" : "workspace-view-hidden"}
+          inert={activeWorkspace !== "tree" ? true : undefined}
+          aria-hidden={activeWorkspace !== "tree"}
+        >
+          <PersonDetailPanel
+            person={selectedPerson}
+            people={people}
+            relationships={relationships}
+            dismissedSuggestionKeys={savedPreferences?.dismissedSuggestions ?? []}
+            genders={genders}
+            genderValue={selectedPerson ? (genderByPersonId[selectedPerson.id] ?? "UNKNOWN") : "UNKNOWN"}
+            onGenderChange={handleGenderChange}
+            birthDateValue={selectedProfileEventFields.birthDate}
+            onBirthDateChange={handleBirthDateChange}
+            givenNameValue={selectedPerson ? (givenNameByPersonId[selectedPerson.id] ?? "") : ""}
+            surnameValue={selectedPerson ? (surnameByPersonId[selectedPerson.id] ?? "") : ""}
+            nicknamesValue={selectedPerson ? (nicknamesByPersonId[selectedPerson.id] ?? "") : ""}
+            deathDateValue={selectedProfileEventFields.deathDate}
+            birthCityValue={selectedProfileEventFields.birthCity}
+            birthCountryValue={selectedProfileEventFields.birthCountry}
+            onGivenNameChange={handleGivenNameChange}
+            onSurnameChange={handleSurnameChange}
+            onNicknamesChange={handleNicknamesChange}
+            onDeathDateChange={handleDeathDateChange}
+            onBirthCityChange={handleBirthCityChange}
+            onBirthCountryChange={handleBirthCountryChange}
+            onProfileSave={onProfileSave}
+            isSavingProfile={isSavingProfile}
+            onFocusPerson={focusPersonInGraph}
+            onCreateRelationship={onCreateRelationship}
+            onUpdateRelationship={onUpdateExistingRelationship}
+            onDeleteRelationship={onDeleteExistingRelationship}
+            onDismissSuggestion={onDismissSuggestion}
+            isSavingRelationship={isSavingRelationship}
+            immichBaseUrl={immichBaseUrl}
+            primaryFamilyUnitByPersonId={savedPreferences?.primaryFamilyUnitByPersonId ?? {}}
+            onPrimaryFamilyUnitChange={onPrimaryFamilyUnitChange}
+            relationshipLifeEventsById={relationshipLifeEventsById}
+            personLifeEvents={selectedPerson ? lifeEventsByPersonId[selectedPerson.id] : undefined}
+            onPersonLifeEventCreate={handlePersonLifeEventCreate}
+            onPersonLifeEventPatch={handlePersonLifeEventPatch}
+            onPersonLifeEventDelete={handlePersonLifeEventDelete}
+            onRelationshipLifeEventCreate={handleRelationshipLifeEventCreate}
+            onRelationshipLifeEventPatch={handleRelationshipLifeEventPatch}
+            onRelationshipLifeEventDelete={handleRelationshipLifeEventDelete}
+            onPersonNamesChanged={refreshPeopleOnly}
+            personTimeline={selectedPerson ? personTimelineById[selectedPerson.id] : undefined}
+            researchTasks={selectedPerson ? researchTasksByPersonId[selectedPerson.id] : undefined}
+            families={selectedPerson ? familiesByPersonId[selectedPerson.id] : undefined}
+            onFamilyPatch={handleFamilyPatch}
+            onFamilyDelete={handleFamilyDelete}
+            savingFamilyId={savingFamilyId}
+            familyLifeEventsById={familyLifeEventsById}
+            onFamilyLifeEventCreate={handleFamilyLifeEventCreate}
+            onFamilyLifeEventPatch={handleFamilyLifeEventPatch}
+            onFamilyLifeEventDelete={handleFamilyLifeEventDelete}
+            onResearchTaskCreate={handleResearchTaskCreate}
+            onResearchTaskUpdate={handleResearchTaskUpdate}
+            onResearchTaskDelete={handleResearchTaskDelete}
+          />
+        </div>
+        {activeWorkspace !== "tree" ? (
+          <section
+            className="card stack workspace-context-placeholder"
+            hidden={!contextPaneOpen}
+            aria-hidden={!contextPaneOpen}
+          >
+            <p className="hint">
+              Optional context for {activeWorkspace} will appear here as this workspace gains secondary
+              details, filters, and inspectors.
+            </p>
+          </section>
         ) : null}
       </aside>
-    </main>
+    </section>
   );
 };

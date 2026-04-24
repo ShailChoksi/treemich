@@ -145,16 +145,19 @@ const PersonNodeComponent = ({
       return;
     }
     let disposed = false;
+    let loadedTexture: Texture | null = null;
     const loader = new TextureLoader();
     loader.setCrossOrigin("use-credentials");
     loader.load(
       thumbnailUrl,
-      (loadedTexture) => {
+      (tex) => {
         if (disposed) {
+          tex.dispose();
           return;
         }
-        applyCoverCrop(loadedTexture);
-        setLocalTexture(loadedTexture);
+        applyCoverCrop(tex);
+        loadedTexture = tex;
+        setLocalTexture(tex);
       },
       undefined,
       () => {
@@ -166,6 +169,11 @@ const PersonNodeComponent = ({
     );
     return () => {
       disposed = true;
+      if (loadedTexture) {
+        loadedTexture.dispose();
+        loadedTexture = null;
+        setLocalTexture(null);
+      }
     };
   }, [thumbnailUrl, preloadedTexture]);
 

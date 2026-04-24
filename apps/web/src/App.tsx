@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AuthScreen } from "./components/AuthScreen";
 import { getCurrentUser, getLinkStatus, login, logout, type AuthState } from "./lib/api";
 
@@ -101,7 +102,7 @@ export const App = () => {
     <main className="app-shell">
       <header className="card session-bar">
         <div className="session-bar-left">
-          <strong>Treemich</strong>
+          <h1 className="app-title">Treemich</h1>
         </div>
         <div className="session-bar-right">
           <strong className="session-user-name">{currentUser.name}</strong>
@@ -115,18 +116,33 @@ export const App = () => {
           </button>
         </div>
       </header>
-      <Suspense
+      <ErrorBoundary
+        errorContext="Authenticated app"
         fallback={
           <section className="card stack" style={{ margin: "1rem" }}>
-            <p className="hint">Loading graph…</p>
+            <h2 className="app-title" style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>
+              Something went wrong
+            </h2>
+            <p className="hint">
+              The app hit an unexpected error. Reload the page to try again. If the problem persists, check the
+              browser console for details.
+            </p>
           </section>
         }
       >
-        <PeoplePage
-          immichBaseUrl={linkStatus?.immichBaseUrl ?? null}
-          currentUserName={linkStatus?.immichName ?? currentUser.name}
-        />
-      </Suspense>
+        <Suspense
+          fallback={
+            <section className="card stack" style={{ margin: "1rem" }}>
+              <p className="hint">Loading graph…</p>
+            </section>
+          }
+        >
+          <PeoplePage
+            immichBaseUrl={linkStatus?.immichBaseUrl ?? null}
+            currentUserName={linkStatus?.immichName ?? currentUser.name}
+          />
+        </Suspense>
+      </ErrorBoundary>
     </main>
   );
 };

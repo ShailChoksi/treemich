@@ -2,9 +2,12 @@
  * @file Popup flow to pick relative type and target when adding an edge from the graph.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { RelationshipType } from "../../lib/api";
 import type { AddRelativeSlot } from "./NodeActionButtons";
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 type Props = {
   slot: AddRelativeSlot;
@@ -28,6 +31,32 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
   const [relationshipType, setRelationshipType] = useState<RelationshipType>("SIBLING_OF");
   const [error, setError] = useState<string | null>(null);
   const selectedPersonFirstName = getFirstName(selectedPersonName);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const errorId = useId();
+  const titleId = useId();
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  const getFocusableElements = useCallback(() => {
+    const root = dialogRef.current;
+    if (!root) {
+      return [] as HTMLElement[];
+    }
+    return [...root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
+      (el) => el.offsetParent !== null || el.getClientRects().length > 0
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const t = window.setTimeout(() => {
+      const el = getFocusableElements()[0];
+      el?.focus();
+    }, 0);
+    return () => {
+      window.clearTimeout(t);
+      previousFocusRef.current?.focus?.();
+    };
+  }, [getFocusableElements]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -46,6 +75,30 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
     setError(null);
   }, [slot, selectedPersonName]);
 
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab" || !dialogRef.current) {
+      return;
+    }
+    const focusables = getFocusableElements();
+    if (focusables.length === 0) {
+      return;
+    }
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (first == null || last == null) {
+      return;
+    }
+    if (event.shiftKey) {
+      if (document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else if (document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -58,9 +111,23 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
 
   return (
     <>
-      <div className="add-relative-backdrop" onClick={onCancel} />
-      <div className="add-relative-popup" role="dialog" aria-modal="true" aria-label={slotTitle[slot]}>
-        <h3>
+      <button
+        type="button"
+        className="add-relative-backdrop"
+        aria-label="Close add relative dialog"
+        onClick={() => onCancel()}
+        disabled={busy}
+      />
+      <div
+        ref={dialogRef}
+        className="add-relative-popup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={error ? errorId : undefined}
+        onKeyDown={handleDialogKeyDown}
+      >
+        <h3 id={titleId}>
           {slotTitle[slot]} of {selectedPersonFirstName}
         </h3>
         <form className="stack add-relative-form" onSubmit={handleSubmit}>
@@ -93,7 +160,11 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
               </select>
             </label>
           ) : null}
-          {error ? <p className="hint add-relative-error">{error}</p> : null}
+          {error ? (
+            <p id={errorId} className="hint add-relative-error" role="alert">
+              {error}
+            </p>
+          ) : null}
           <div className="add-relative-actions">
             <button type="submit" className="add-relative-submit" disabled={busy || !personName.trim()}>
               {busy ? "Adding..." : "Add"}
