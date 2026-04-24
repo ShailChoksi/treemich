@@ -124,8 +124,8 @@ export const App = () => {
               Something went wrong
             </h2>
             <p className="hint">
-              The app hit an unexpected error. Reload the page to try again. If the problem persists, check the
-              browser console for details.
+              The app hit an unexpected error. Reload the page to try again. If the problem persists, check
+              the browser console for details.
             </p>
           </section>
         }

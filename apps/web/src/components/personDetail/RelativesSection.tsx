@@ -57,7 +57,12 @@ export const RelativesSection = ({
         </button>
         <span className="person-detail-count">{totalCount}</span>
       </div>
-      <div id={contentId} className="stack" hidden={isCollapsed} style={isCollapsed ? { display: "none" } : undefined}>
+      <div
+        id={contentId}
+        className="stack"
+        hidden={isCollapsed}
+        style={isCollapsed ? { display: "none" } : undefined}
+      >
         {items.length > 0 ? (
           <ul className="relatives-list">
             {items.map((relative) => (

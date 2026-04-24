@@ -2,7 +2,14 @@
  * @file Accessible confirmation for destructive actions (replaces window.confirm).
  */
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent
+} from "react";
 
 type Props = {
   open: boolean;
@@ -126,7 +133,13 @@ export const DestructiveConfirmDialog = ({
           {description}
         </p>
         <div className="add-relative-actions confirm-dialog-actions">
-          <button ref={cancelButtonRef} type="button" className="secondary-button" onClick={onCancel} disabled={busy}>
+          <button
+            ref={cancelButtonRef}
+            type="button"
+            className="secondary-button"
+            onClick={onCancel}
+            disabled={busy}
+          >
             {cancelLabel}
           </button>
           <button

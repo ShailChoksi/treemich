@@ -366,15 +366,18 @@ const PeopleGraph3DComponent = ({
     [focusPersonById, handleNodeClick]
   );
 
-  const handleOpenAddRelative = useCallback((slot: AddRelativeSlot) => {
-    if (!selectedPersonId) {
-      return;
-    }
-    setAddRelativeIntent({
-      slot,
-      selectedPersonId
-    });
-  }, [selectedPersonId]);
+  const handleOpenAddRelative = useCallback(
+    (slot: AddRelativeSlot) => {
+      if (!selectedPersonId) {
+        return;
+      }
+      setAddRelativeIntent({
+        slot,
+        selectedPersonId
+      });
+    },
+    [selectedPersonId]
+  );
 
   const handleAddRelative = async (personName: string, relationshipType?: RelationshipType) => {
     if (!addRelativeIntent) {

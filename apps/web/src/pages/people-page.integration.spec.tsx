@@ -356,16 +356,16 @@ describe("PeoplePage + life events (integration)", () => {
         await Promise.resolve();
       });
       if (
-        vi.mocked(globalThis.fetch).mock.calls.filter((call) => String(call[0]).includes("/places/map")).length >=
-        1
+        vi.mocked(globalThis.fetch).mock.calls.filter((call) => String(call[0]).includes("/places/map"))
+          .length >= 1
       ) {
         break;
       }
     }
 
-    const mapCallsAfter = vi.mocked(globalThis.fetch).mock.calls.filter((call) =>
-      String(call[0]).includes("/places/map")
-    );
+    const mapCallsAfter = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.filter((call) => String(call[0]).includes("/places/map"));
     expect(mapCallsAfter.length).toBeGreaterThanOrEqual(1);
 
     act(() => {

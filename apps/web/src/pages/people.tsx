@@ -1664,7 +1664,9 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         type="button"
         className="secondary-button workspace-column-toggle workspace-column-toggle--left"
         onClick={() => setLeftPaneOpen((current) => !current)}
-        aria-label={leftPaneOpen ? "Collapse workspace navigation column" : "Expand workspace navigation column"}
+        aria-label={
+          leftPaneOpen ? "Collapse workspace navigation column" : "Expand workspace navigation column"
+        }
         title={leftPaneOpen ? "Collapse left column (workspace nav)" : "Expand left column (workspace nav)"}
       >
         <span className="workspace-column-toggle-hint" aria-hidden="true">
@@ -1743,7 +1745,9 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         className="secondary-button workspace-column-toggle workspace-column-toggle--right"
         onClick={() => setContextPaneOpen((current) => !current)}
         aria-label={contextPaneOpen ? "Collapse person context column" : "Expand person context column"}
-        title={contextPaneOpen ? "Collapse right column (person context)" : "Expand right column (person context)"}
+        title={
+          contextPaneOpen ? "Collapse right column (person context)" : "Expand right column (person context)"
+        }
       >
         <span className="workspace-column-toggle-hint" aria-hidden="true">
           Profile
