@@ -1,6 +1,14 @@
 import type { CreateFamilyLifeEventBody, CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
 import { filterGraphLayoutTopologyRelationships } from "@treemich/shared";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent
+} from "react";
 import type {
   CreateResearchTaskBody,
   FamilyRecord,
@@ -64,6 +72,21 @@ import { PeopleGraph3D } from "../components/PeopleGraph3D";
 const genders: Gender[] = ["MALE", "FEMALE", "OTHER", "UNKNOWN"];
 const isGender = (value: string): value is Gender => genders.includes(value as Gender);
 const getErrorMessage = (error: unknown) => (error instanceof Error ? error.message : "Unknown error");
+const WORKSPACE_STORAGE_KEY = "treemich.activeWorkspace";
+const LEFT_PANE_OPEN_STORAGE_KEY = "treemich.leftPaneOpen";
+const CONTEXT_OPEN_STORAGE_KEY = "treemich.contextOpen";
+
+type WorkspaceId = "tree" | "research" | "evidence" | "interchange" | "places" | "reports" | "settings";
+
+const WORKSPACE_ITEMS: { id: WorkspaceId; label: string; iconLabel: string }[] = [
+  { id: "tree", label: "Tree", iconLabel: "TR" },
+  { id: "research", label: "Research", iconLabel: "RS" },
+  { id: "evidence", label: "Evidence", iconLabel: "EV" },
+  { id: "interchange", label: "Interchange", iconLabel: "GX" },
+  { id: "places", label: "Places", iconLabel: "MP" },
+  { id: "reports", label: "Reports", iconLabel: "RP" },
+  { id: "settings", label: "Settings", iconLabel: "ST" }
+];
 
 const sortPeopleStable = (people: ImmichPerson[]) =>
   [...people].sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
@@ -169,6 +192,25 @@ type Props = {
 };
 
 export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Props) => {
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>(() => {
+    if (typeof window === "undefined") {
+      return "tree";
+    }
+    const stored = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    return WORKSPACE_ITEMS.some((item) => item.id === stored) ? (stored as WorkspaceId) : "tree";
+  });
+  const [leftPaneOpen, setLeftPaneOpen] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return window.localStorage.getItem(LEFT_PANE_OPEN_STORAGE_KEY) !== "false";
+  });
+  const [contextPaneOpen, setContextPaneOpen] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return window.localStorage.getItem(CONTEXT_OPEN_STORAGE_KEY) !== "false";
+  });
   const [people, setPeople] = useState<ImmichPerson[]>([]);
   const [relationships, setRelationships] = useState<RelationshipRecord[]>([]);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
@@ -214,6 +256,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const selectedPersonIdRef = useRef<string | null>(null);
   const lastPersistedSelectionRef = useRef<string | null>(null);
   const layoutRequestIdRef = useRef(0);
+  const workspaceButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const refreshPeopleOnly = useCallback(async () => {
     const peopleResponse = await getImmichPeople();
@@ -598,6 +641,27 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     }, 5000);
     return () => window.clearTimeout(timeout);
   }, [status]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, activeWorkspace);
+  }, [activeWorkspace]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(LEFT_PANE_OPEN_STORAGE_KEY, leftPaneOpen ? "true" : "false");
+  }, [leftPaneOpen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(CONTEXT_OPEN_STORAGE_KEY, contextPaneOpen ? "true" : "false");
+  }, [contextPaneOpen]);
 
   const onPreferencesChange = useCallback((prefs: Partial<UserPreferences>) => {
     setSavedPreferences((current) => ({
@@ -1398,110 +1462,294 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
 
   const noRelationshipsDefaultsEnabled = !hasRelationships && !savedPreferences?.graphFilterVisibility;
 
-  return (
-    <main className="people-layout">
-      <section className="people-main-column">
-        <PeopleGraph3D
-          people={people}
-          relationships={relationships}
-          serverPositionsByPersonId={serverLayout?.positionsByPersonId}
-          serverLayoutRevision={serverLayout?.layoutRevision ?? null}
-          serverLayoutAlgorithmVersion={serverLayout?.algorithmVersion ?? null}
-          selectedPersonId={selectedPersonId}
-          status={status}
-          isLoading={isLoading}
-          isSavingRelationship={isSavingRelationship}
-          loadError={loadError}
-          focusPersonRequest={graphFocusPersonId}
-          cameraFocusPersonRequest={graphCameraFocusPersonId}
-          noRelationshipsGraphFilterVisibility={noRelationshipsGraphFilterVisibility}
-          defaultToNoRelationshipsGraphState={noRelationshipsDefaultsEnabled}
-          savedPreferences={savedPreferences}
-          treeValidationIssueCount={treeValidationIssueCount}
-          treeValidationEngineDisabled={treeValidationEngineDisabled}
-          onFocusPersonConsumed={clearGraphFocus}
-          onCameraFocusPersonConsumed={clearGraphCameraFocus}
-          onSelectedPersonChange={setSelectedPersonId}
-          onCreateRelationship={onCreateRelationship}
-          onPreferencesChange={onPreferencesChange}
-        />
-      </section>
+  const handleWorkspaceNavKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
+    event.preventDefault();
+    const nextIndex =
+      event.key === "ArrowDown"
+        ? (index + 1) % WORKSPACE_ITEMS.length
+        : (index - 1 + WORKSPACE_ITEMS.length) % WORKSPACE_ITEMS.length;
+    workspaceButtonRefs.current[nextIndex]?.focus();
+  }, []);
 
-      <aside className="people-sidebar">
-        <PersonDetailPanel
-          person={selectedPerson}
-          people={people}
-          relationships={relationships}
-          dismissedSuggestionKeys={savedPreferences?.dismissedSuggestions ?? []}
-          genders={genders}
-          genderValue={selectedPerson ? (genderByPersonId[selectedPerson.id] ?? "UNKNOWN") : "UNKNOWN"}
-          onGenderChange={handleGenderChange}
-          birthDateValue={selectedProfileEventFields.birthDate}
-          onBirthDateChange={handleBirthDateChange}
-          givenNameValue={selectedPerson ? (givenNameByPersonId[selectedPerson.id] ?? "") : ""}
-          surnameValue={selectedPerson ? (surnameByPersonId[selectedPerson.id] ?? "") : ""}
-          nicknamesValue={selectedPerson ? (nicknamesByPersonId[selectedPerson.id] ?? "") : ""}
-          deathDateValue={selectedProfileEventFields.deathDate}
-          birthCityValue={selectedProfileEventFields.birthCity}
-          birthCountryValue={selectedProfileEventFields.birthCountry}
-          onGivenNameChange={handleGivenNameChange}
-          onSurnameChange={handleSurnameChange}
-          onNicknamesChange={handleNicknamesChange}
-          onDeathDateChange={handleDeathDateChange}
-          onBirthCityChange={handleBirthCityChange}
-          onBirthCountryChange={handleBirthCountryChange}
-          onProfileSave={onProfileSave}
-          isSavingProfile={isSavingProfile}
-          onFocusPerson={focusPersonInGraph}
-          onCreateRelationship={onCreateRelationship}
-          onUpdateRelationship={onUpdateExistingRelationship}
-          onDeleteRelationship={onDeleteExistingRelationship}
-          onDismissSuggestion={onDismissSuggestion}
-          isSavingRelationship={isSavingRelationship}
-          immichBaseUrl={immichBaseUrl}
-          primaryFamilyUnitByPersonId={savedPreferences?.primaryFamilyUnitByPersonId ?? {}}
-          onPrimaryFamilyUnitChange={onPrimaryFamilyUnitChange}
-          relationshipLifeEventsById={relationshipLifeEventsById}
-          personLifeEvents={selectedPerson ? lifeEventsByPersonId[selectedPerson.id] : undefined}
-          onPersonLifeEventCreate={handlePersonLifeEventCreate}
-          onPersonLifeEventPatch={handlePersonLifeEventPatch}
-          onPersonLifeEventDelete={handlePersonLifeEventDelete}
-          onRelationshipLifeEventCreate={handleRelationshipLifeEventCreate}
-          onRelationshipLifeEventPatch={handleRelationshipLifeEventPatch}
-          onRelationshipLifeEventDelete={handleRelationshipLifeEventDelete}
-          onPersonNamesChanged={refreshPeopleOnly}
-          personTimeline={selectedPerson ? personTimelineById[selectedPerson.id] : undefined}
-          researchTasks={selectedPerson ? researchTasksByPersonId[selectedPerson.id] : undefined}
-          families={selectedPerson ? familiesByPersonId[selectedPerson.id] : undefined}
-          onFamilyPatch={handleFamilyPatch}
-          onFamilyDelete={handleFamilyDelete}
-          savingFamilyId={savingFamilyId}
-          familyLifeEventsById={familyLifeEventsById}
-          onFamilyLifeEventCreate={handleFamilyLifeEventCreate}
-          onFamilyLifeEventPatch={handleFamilyLifeEventPatch}
-          onFamilyLifeEventDelete={handleFamilyLifeEventDelete}
-          onResearchTaskCreate={handleResearchTaskCreate}
-          onResearchTaskUpdate={handleResearchTaskUpdate}
-          onResearchTaskDelete={handleResearchTaskDelete}
-        />
-        <GedcomInterchangeSection people={people} onTreeChanged={() => void refreshGraphData()} />
-        {import.meta.env.VITE_EVIDENCE_MANAGEMENT_UI !== "false" ? (
-          <>
-            <EvidenceLibrariesSection />
-            <EvidenceMediaSection />
-          </>
+  const renderSecondaryWorkspace = () => {
+    if (activeWorkspace === "evidence") {
+      return (
+        <section className="workspace-main-stack workspace-main-stack--evidence">
+          <section className="card stack">
+            <h2>Evidence workspace</h2>
+            <p className="hint">
+              Manage repositories, sources, and linked media outside of the person profile flow.
+            </p>
+          </section>
+          {import.meta.env.VITE_EVIDENCE_MANAGEMENT_UI !== "false" ? (
+            <>
+              <EvidenceLibrariesSection />
+              <EvidenceMediaSection />
+            </>
+          ) : (
+            <section className="card stack">
+              <p className="hint">Evidence workspace is disabled by feature flag.</p>
+            </section>
+          )}
+        </section>
+      );
+    }
+
+    if (activeWorkspace === "interchange") {
+      return (
+        <section className="workspace-main-stack workspace-main-stack--interchange">
+          <section className="card stack">
+            <h2>Interchange workspace</h2>
+            <p className="hint">Use this space for GEDCOM import/export without crowding person editing.</p>
+          </section>
+          <GedcomInterchangeSection people={people} onTreeChanged={() => void refreshGraphData()} />
+        </section>
+      );
+    }
+
+    if (activeWorkspace === "research") {
+      return (
+        <section className="card stack workspace-placeholder">
+          <h2>Research workspace</h2>
+          <p className="hint">
+            Research tasks and validation will land here as dedicated modules while remaining available in the
+            tree inspector for now.
+          </p>
+        </section>
+      );
+    }
+
+    if (activeWorkspace === "reports") {
+      return (
+        <section className="card stack workspace-placeholder">
+          <h2>Reports workspace</h2>
+          <p className="hint">Reserved for lineage, completeness, and quality reports.</p>
+        </section>
+      );
+    }
+
+    if (activeWorkspace === "settings") {
+      return (
+        <section className="card stack workspace-placeholder">
+          <h2>Settings workspace</h2>
+          <p className="hint">Reserved for global app and workspace preferences.</p>
+        </section>
+      );
+    }
+
+    return null;
+  };
+
+  const workspaceLayoutStyle = useMemo(
+    () =>
+      ({
+        "--workspace-left-width": leftPaneOpen ? "206px" : "0px",
+        "--workspace-right-width": contextPaneOpen ? "360px" : "0px"
+      }) as CSSProperties,
+    [contextPaneOpen, leftPaneOpen]
+  );
+
+  useEffect(() => {
+    // Ensure Three.js canvas remeasures after column width changes.
+    const frame = window.requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    const timeout = window.setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+    }, 120);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [activeWorkspace, contextPaneOpen, leftPaneOpen]);
+
+  return (
+    <main
+      className="people-layout people-layout--workspace"
+      style={workspaceLayoutStyle}
+    >
+      <aside
+        className={`workspace-nav workspace-nav--expanded ${leftPaneOpen ? "" : "workspace-pane--closed"}`}
+      >
+        <nav aria-label="Workspace navigation" className="workspace-nav-list">
+          {WORKSPACE_ITEMS.map((workspace, index) => {
+            const isActive = workspace.id === activeWorkspace;
+            return (
+              <button
+                key={workspace.id}
+                ref={(node) => {
+                  workspaceButtonRefs.current[index] = node;
+                }}
+                type="button"
+                className={`workspace-nav-item ${isActive ? "workspace-nav-item--active" : ""}`}
+                aria-current={isActive ? "page" : undefined}
+                aria-label={workspace.label}
+                onKeyDown={(event) => handleWorkspaceNavKeyDown(event, index)}
+                onClick={() => setActiveWorkspace(workspace.id)}
+              >
+                <span className="workspace-nav-icon" aria-hidden="true">
+                  {workspace.iconLabel}
+                </span>
+                <span className="workspace-nav-label">{workspace.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      <button
+        type="button"
+        className="secondary-button workspace-column-toggle workspace-column-toggle--left"
+        onClick={() => setLeftPaneOpen((current) => !current)}
+        aria-label={leftPaneOpen ? "Collapse left column" : "Expand left column"}
+        title={leftPaneOpen ? "Collapse left column" : "Expand left column"}
+      >
+        <span className="workspace-column-grip" aria-hidden="true">
+          ||
+        </span>
+      </button>
+
+      <section className="workspace-main">
+        <div className="workspace-main-views">
+          <section
+            className={`people-main-column ${activeWorkspace === "tree" ? "" : "workspace-view-hidden"}`}
+            aria-hidden={activeWorkspace !== "tree"}
+          >
+            <PeopleGraph3D
+              people={people}
+              relationships={relationships}
+              serverPositionsByPersonId={serverLayout?.positionsByPersonId}
+              serverLayoutRevision={serverLayout?.layoutRevision ?? null}
+              serverLayoutAlgorithmVersion={serverLayout?.algorithmVersion ?? null}
+              selectedPersonId={selectedPersonId}
+              status={status}
+              isLoading={isLoading}
+              isSavingRelationship={isSavingRelationship}
+              loadError={loadError}
+              focusPersonRequest={graphFocusPersonId}
+              cameraFocusPersonRequest={graphCameraFocusPersonId}
+              noRelationshipsGraphFilterVisibility={noRelationshipsGraphFilterVisibility}
+              defaultToNoRelationshipsGraphState={noRelationshipsDefaultsEnabled}
+              savedPreferences={savedPreferences}
+              treeValidationIssueCount={treeValidationIssueCount}
+              treeValidationEngineDisabled={treeValidationEngineDisabled}
+              onFocusPersonConsumed={clearGraphFocus}
+              onCameraFocusPersonConsumed={clearGraphCameraFocus}
+              onSelectedPersonChange={setSelectedPersonId}
+              onCreateRelationship={onCreateRelationship}
+              onPreferencesChange={onPreferencesChange}
+            />
+          </section>
+          <section
+            className={`workspace-main-stack workspace-main-stack--places ${
+              activeWorkspace === "places" ? "" : "workspace-view-hidden"
+            }`}
+            aria-hidden={activeWorkspace !== "places"}
+          >
+            <section className="card stack">
+              <h2>Places workspace</h2>
+              <p className="hint">Review mapped places and focus people from geographic context.</p>
+            </section>
+            <MapPlacesPanel
+              mapUiEnabled={mapUiEnabled}
+              places={mapPlaces}
+              isLoading={mapLoading}
+              includeLiving={mapIncludeLiving}
+              onIncludeLivingChange={setMapIncludeLiving}
+              onFocusPerson={focusPersonInGraph}
+              getPersonLabel={getPersonLabelForMap}
+              selectedPersonId={selectedPersonId}
+              error={mapLoadError}
+            />
+          </section>
+          {activeWorkspace !== "tree" ? renderSecondaryWorkspace() : null}
+        </div>
+      </section>
+      <button
+        type="button"
+        className="secondary-button workspace-column-toggle workspace-column-toggle--right"
+        onClick={() => setContextPaneOpen((current) => !current)}
+        aria-label={contextPaneOpen ? "Collapse right column" : "Expand right column"}
+        title={contextPaneOpen ? "Collapse right column" : "Expand right column"}
+      >
+        <span className="workspace-column-grip" aria-hidden="true">
+          ||
+        </span>
+      </button>
+
+      <aside
+        className={`people-sidebar workspace-context-pane ${contextPaneOpen ? "" : "workspace-pane--closed"}`}
+      >
+        {contextPaneOpen ? (
+          activeWorkspace === "tree" ? (
+            <PersonDetailPanel
+              person={selectedPerson}
+              people={people}
+              relationships={relationships}
+              dismissedSuggestionKeys={savedPreferences?.dismissedSuggestions ?? []}
+              genders={genders}
+              genderValue={selectedPerson ? (genderByPersonId[selectedPerson.id] ?? "UNKNOWN") : "UNKNOWN"}
+              onGenderChange={handleGenderChange}
+              birthDateValue={selectedProfileEventFields.birthDate}
+              onBirthDateChange={handleBirthDateChange}
+              givenNameValue={selectedPerson ? (givenNameByPersonId[selectedPerson.id] ?? "") : ""}
+              surnameValue={selectedPerson ? (surnameByPersonId[selectedPerson.id] ?? "") : ""}
+              nicknamesValue={selectedPerson ? (nicknamesByPersonId[selectedPerson.id] ?? "") : ""}
+              deathDateValue={selectedProfileEventFields.deathDate}
+              birthCityValue={selectedProfileEventFields.birthCity}
+              birthCountryValue={selectedProfileEventFields.birthCountry}
+              onGivenNameChange={handleGivenNameChange}
+              onSurnameChange={handleSurnameChange}
+              onNicknamesChange={handleNicknamesChange}
+              onDeathDateChange={handleDeathDateChange}
+              onBirthCityChange={handleBirthCityChange}
+              onBirthCountryChange={handleBirthCountryChange}
+              onProfileSave={onProfileSave}
+              isSavingProfile={isSavingProfile}
+              onFocusPerson={focusPersonInGraph}
+              onCreateRelationship={onCreateRelationship}
+              onUpdateRelationship={onUpdateExistingRelationship}
+              onDeleteRelationship={onDeleteExistingRelationship}
+              onDismissSuggestion={onDismissSuggestion}
+              isSavingRelationship={isSavingRelationship}
+              immichBaseUrl={immichBaseUrl}
+              primaryFamilyUnitByPersonId={savedPreferences?.primaryFamilyUnitByPersonId ?? {}}
+              onPrimaryFamilyUnitChange={onPrimaryFamilyUnitChange}
+              relationshipLifeEventsById={relationshipLifeEventsById}
+              personLifeEvents={selectedPerson ? lifeEventsByPersonId[selectedPerson.id] : undefined}
+              onPersonLifeEventCreate={handlePersonLifeEventCreate}
+              onPersonLifeEventPatch={handlePersonLifeEventPatch}
+              onPersonLifeEventDelete={handlePersonLifeEventDelete}
+              onRelationshipLifeEventCreate={handleRelationshipLifeEventCreate}
+              onRelationshipLifeEventPatch={handleRelationshipLifeEventPatch}
+              onRelationshipLifeEventDelete={handleRelationshipLifeEventDelete}
+              onPersonNamesChanged={refreshPeopleOnly}
+              personTimeline={selectedPerson ? personTimelineById[selectedPerson.id] : undefined}
+              researchTasks={selectedPerson ? researchTasksByPersonId[selectedPerson.id] : undefined}
+              families={selectedPerson ? familiesByPersonId[selectedPerson.id] : undefined}
+              onFamilyPatch={handleFamilyPatch}
+              onFamilyDelete={handleFamilyDelete}
+              savingFamilyId={savingFamilyId}
+              familyLifeEventsById={familyLifeEventsById}
+              onFamilyLifeEventCreate={handleFamilyLifeEventCreate}
+              onFamilyLifeEventPatch={handleFamilyLifeEventPatch}
+              onFamilyLifeEventDelete={handleFamilyLifeEventDelete}
+              onResearchTaskCreate={handleResearchTaskCreate}
+              onResearchTaskUpdate={handleResearchTaskUpdate}
+              onResearchTaskDelete={handleResearchTaskDelete}
+            />
+          ) : (
+            <section className="card stack workspace-context-placeholder">
+              <p className="hint">
+                Optional context for {activeWorkspace} will appear here as this workspace gains secondary
+                details, filters, and inspectors.
+              </p>
+            </section>
+          )
         ) : null}
-        <MapPlacesPanel
-          mapUiEnabled={mapUiEnabled}
-          places={mapPlaces}
-          isLoading={mapLoading}
-          includeLiving={mapIncludeLiving}
-          onIncludeLivingChange={setMapIncludeLiving}
-          onFocusPerson={focusPersonInGraph}
-          getPersonLabel={getPersonLabelForMap}
-          selectedPersonId={selectedPersonId}
-          error={mapLoadError}
-        />
       </aside>
     </main>
   );

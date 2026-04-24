@@ -69,15 +69,14 @@ describe("FamiliesSection", () => {
     root = createRoot(container);
   });
 
-  it("empty state mentions backfill when graph already has family relatives", () => {
+  it("empty state keeps concise guidance", () => {
     act(() => {
-      root.render(
-        <FamiliesSection person={person} people={[person, parent1]} families={[]} graphHasFamilyRelatives />
-      );
+      root.render(<FamiliesSection person={person} people={[person, parent1]} families={[]} />);
     });
 
-    expect(container.textContent).toContain("phase4:backfill-families");
     expect(container.textContent).toContain("not created automatically");
+    expect(container.textContent).toContain("POST /families");
+    expect(container.textContent).not.toContain("phase4:backfill-families");
 
     act(() => {
       root.unmount();

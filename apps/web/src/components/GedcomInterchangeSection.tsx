@@ -2,7 +2,7 @@
  * @file Phase 5: GEDCOM import wizard (preview → match Immich people → job) and async export job + immediate download.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiHttpError,
   downloadGedcomExportJobResult,
@@ -37,7 +37,6 @@ const triggerBlobDownload = (blob: Blob, filename: string) => {
 };
 
 export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
-  const [open, setOpen] = useState(false);
   const [importApiAvailable, setImportApiAvailable] = useState<boolean | null>(null);
 
   const [gedcomUtf8, setGedcomUtf8] = useState<string | null>(null);
@@ -80,12 +79,9 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
     setMatchByXref(next);
   };
 
-  const onToggle = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (nextOpen) {
-      void probeImport();
-    }
-  };
+  useEffect(() => {
+    void probeImport();
+  }, [probeImport]);
 
   const onFileChosen = async (file: File | null) => {
     setError(null);
@@ -249,188 +245,178 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
   };
 
   return (
-    <details
-      className="evidence-libraries-details"
-      open={open}
-      onToggle={(e) => onToggle(e.currentTarget.open)}
-    >
-      <summary className="field-label person-detail-details-summary">GEDCOM import / export</summary>
+    <section className="evidence-libraries-details gedcom-interchange-panel">
+      <div className="field-label">GEDCOM import / export</div>
       {error ? <p className="hint hint--danger">{error}</p> : null}
       {statusNote ? <p className="hint hint--tight-below">{statusNote}</p> : null}
-      {open ? (
-        <div className="stack evidence-panel-stack">
-          <p className="hint hint--tight-below">
-            Import only attaches data to people already in Immich. Server needs{" "}
-            <code className="inline-code">TREEMICH_GEDCOM_IMPORT_ENABLED</code> for preview and jobs.
-          </p>
-          {importApiAvailable === false ? (
-            <p className="hint">GEDCOM import API is not available on this server.</p>
-          ) : (
-            <>
-              <label className="field-group">
-                <span className="field-label">GEDCOM file (.ged, UTF-8)</span>
-                <input
-                  type="file"
-                  accept=".ged,text/plain"
-                  disabled={busy}
-                  onChange={(ev) => void onFileChosen(ev.target.files?.[0] ?? null)}
-                />
-              </label>
-              <div className="person-detail-form-grid person-detail-form-grid--limit">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={busy || !gedcomUtf8}
-                  onClick={() => void runPreview()}
-                >
-                  {busy ? "Working…" : "Preview"}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={busy || !preview}
-                  onClick={() => void submitImport()}
-                >
-                  {dryRun ? "Run dry-run" : "Apply import"}
-                </button>
-              </div>
-              <label className="field-group inline-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={dryRun}
-                  onChange={(e) => setDryRun(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>Dry run (no database writes)</span>
-              </label>
-              <label className="field-group inline-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={skipImported}
-                  onChange={(e) => setSkipImported(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>Skip INDI already stamped with gedcomIndi</span>
-              </label>
-              <label className="field-group inline-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={allowPartialMatches}
-                  onChange={(e) => setAllowPartialMatches(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>Import only matched people (skip unmatched families)</span>
-              </label>
-              {preview ? (
-                <div className="stack evidence-panel-divider">
-                  <div className="field-label">Match each INDI to an Immich person</div>
-                  <label className="field-group inline-checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyUnmatched}
-                      onChange={(e) => setShowOnlyUnmatched(e.target.checked)}
-                      disabled={busy}
-                    />
-                    <span>
-                      Show only unmatched rows ({indiRowsIncomplete(preview).length} unmatched of{" "}
-                      {preview.indis.length})
-                    </span>
-                  </label>
-                  <table className="gedcom-match-table">
-                    <thead>
-                      <tr>
-                        <th>Name in file</th>
-                        <th>Person</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {getVisibleRows(preview).map((row) => (
-                        <tr key={row.xref}>
-                          <td>
-                            <div className="gedcom-source-name">{row.displayName ?? "—"}</div>
-                            <p className="hint hint--tight-below">Ref: {row.xref}</p>
-                          </td>
-                          <td>
-                            <select
-                              className="gedcom-match-select"
-                              value={matchByXref[row.xref] ?? ""}
-                              onChange={(e) => setMatch(row.xref, e.target.value)}
-                              disabled={busy}
-                              aria-label={`Immich match for ${row.xref}`}
-                            >
-                              <option value="">— choose —</option>
-                              {matchablePeopleOptions.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.label}
-                                </option>
-                              ))}
-                            </select>
-                            {row.immichHint ? (
-                              <p className="hint hint--tight-below">Hint in file: {row.immichHint}</p>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {getVisibleRows(preview).length === 0 ? (
-                    <p className="hint hint--tight-below">No rows to show for the current filter.</p>
-                  ) : null}
-                  {allowPartialMatches ? (
-                    <p className="hint hint--tight-below">
-                      Unmatched INDI/FAM rows are skipped during import and logged as warnings.
-                    </p>
-                  ) : null}
-                  {preview.lineLog.length > 0 ? (
-                    <details className="gedcom-line-log">
-                      <summary className="hint">
-                        Parser log ({preview.lineLog.length} entries, first 40 shown)
-                      </summary>
-                      <pre className="gedcom-line-pre">
-                        {JSON.stringify(preview.lineLog.slice(0, 40), null, 2)}
-                      </pre>
-                    </details>
-                  ) : null}
-                </div>
-              ) : null}
-            </>
-          )}
-
-          <div className="stack evidence-panel-divider">
-            <div className="field-label">Export</div>
-            <p className="hint hint--tight-below">
-              Immediate download calls <code className="inline-code">GET /export/gedcom</code>. Async export
-              stores UTF-8 server-side (same byte cap as import) for large trees.
-            </p>
-            <div className="person-detail-form-grid person-detail-form-grid--limit">
+      <div className="stack evidence-panel-stack">
+        <p className="hint hint--tight-below">
+          Import only attaches data to people already in Immich. Server needs{" "}
+          <code className="inline-code">TREEMICH_GEDCOM_IMPORT_ENABLED</code> for preview and jobs.
+        </p>
+        {importApiAvailable === false ? (
+          <p className="hint">GEDCOM import API is not available on this server.</p>
+        ) : (
+          <>
+            <label className="field-group">
+              <span className="field-label">GEDCOM file (.ged, UTF-8)</span>
+              <input
+                type="file"
+                accept=".ged,text/plain"
+                disabled={busy}
+                onChange={(ev) => void onFileChosen(ev.target.files?.[0] ?? null)}
+              />
+            </label>
+            <div className="workspace-action-row">
               <button
                 type="button"
-                className="secondary-button"
-                disabled={busy}
-                onClick={() => void immediateExport("ged")}
+                className="secondary-button workspace-action-button"
+                disabled={busy || !gedcomUtf8}
+                onClick={() => void runPreview()}
               >
-                Download .ged
+                {busy ? "Working..." : "Preview"}
               </button>
               <button
                 type="button"
-                className="secondary-button"
-                disabled={busy}
-                onClick={() => void immediateExport("zip")}
+                className="secondary-button workspace-action-button"
+                disabled={busy || !preview}
+                onClick={() => void submitImport()}
               >
-                Download ZIP
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={busy}
-                onClick={() => void runAsyncExport()}
-              >
-                Async .ged job
+                {dryRun ? "Run dry-run" : "Apply import"}
               </button>
             </div>
+            <label className="field-group inline-checkbox-row">
+              <input
+                type="checkbox"
+                checked={dryRun}
+                onChange={(e) => setDryRun(e.target.checked)}
+                disabled={busy}
+              />
+              <span>Dry run (no database writes)</span>
+            </label>
+            <label className="field-group inline-checkbox-row">
+              <input
+                type="checkbox"
+                checked={skipImported}
+                onChange={(e) => setSkipImported(e.target.checked)}
+                disabled={busy}
+              />
+              <span>Skip INDI already stamped with gedcomIndi</span>
+            </label>
+            <label className="field-group inline-checkbox-row">
+              <input
+                type="checkbox"
+                checked={allowPartialMatches}
+                onChange={(e) => setAllowPartialMatches(e.target.checked)}
+                disabled={busy}
+              />
+              <span>Import only matched people (skip unmatched families)</span>
+            </label>
+            {preview ? (
+              <div className="stack evidence-panel-divider">
+                <div className="field-label">Match each INDI to an Immich person</div>
+                <label className="field-group inline-checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={showOnlyUnmatched}
+                    onChange={(e) => setShowOnlyUnmatched(e.target.checked)}
+                    disabled={busy}
+                  />
+                  <span>
+                    Show only unmatched rows ({indiRowsIncomplete(preview).length} unmatched of{" "}
+                    {preview.indis.length})
+                  </span>
+                </label>
+                <table className="gedcom-match-table">
+                  <thead>
+                    <tr>
+                      <th>Name in file</th>
+                      <th>Person</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getVisibleRows(preview).map((row) => (
+                      <tr key={row.xref}>
+                        <td>
+                          <div className="gedcom-source-name">{row.displayName ?? "-"}</div>
+                          <p className="hint hint--tight-below">Ref: {row.xref}</p>
+                        </td>
+                        <td>
+                          <select
+                            className="gedcom-match-select"
+                            value={matchByXref[row.xref] ?? ""}
+                            onChange={(e) => setMatch(row.xref, e.target.value)}
+                            disabled={busy}
+                            aria-label={`Immich match for ${row.xref}`}
+                          >
+                            <option value="">- choose -</option>
+                            {matchablePeopleOptions.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                          {row.immichHint ? (
+                            <p className="hint hint--tight-below">Hint in file: {row.immichHint}</p>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {getVisibleRows(preview).length === 0 ? (
+                  <p className="hint hint--tight-below">No rows to show for the current filter.</p>
+                ) : null}
+                {allowPartialMatches ? (
+                  <p className="hint hint--tight-below">
+                    Unmatched INDI/FAM rows are skipped during import and logged as warnings.
+                  </p>
+                ) : null}
+                {preview.lineLog.length > 0 ? (
+                  <details className="gedcom-line-log">
+                    <summary className="hint">Parser log ({preview.lineLog.length} entries, first 40 shown)</summary>
+                    <pre className="gedcom-line-pre">{JSON.stringify(preview.lineLog.slice(0, 40), null, 2)}</pre>
+                  </details>
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        )}
+
+        <div className="stack evidence-panel-divider">
+          <div className="field-label">Export</div>
+          <p className="hint hint--tight-below">
+            Immediate download calls <code className="inline-code">GET /export/gedcom</code>. Async export
+            stores UTF-8 server-side (same byte cap as import) for large trees.
+          </p>
+          <div className="workspace-action-row">
+            <button
+              type="button"
+              className="secondary-button workspace-action-button"
+              disabled={busy}
+              onClick={() => void immediateExport("ged")}
+            >
+              Download .ged
+            </button>
+            <button
+              type="button"
+              className="secondary-button workspace-action-button"
+              disabled={busy}
+              onClick={() => void immediateExport("zip")}
+            >
+              Download ZIP
+            </button>
+            <button
+              type="button"
+              className="secondary-button workspace-action-button"
+              disabled={busy}
+              onClick={() => void runAsyncExport()}
+            >
+              Async .ged job
+            </button>
           </div>
         </div>
-      ) : null}
-    </details>
+      </div>
+    </section>
   );
 };

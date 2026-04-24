@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { AuthScreen } from "./components/AuthScreen";
 import { getCurrentUser, getLinkStatus, login, logout, type AuthState } from "./lib/api";
 
@@ -82,14 +82,6 @@ export const App = () => {
     }
   };
 
-  const headerSummary = useMemo(() => {
-    if (!currentUser) {
-      return null;
-    }
-
-    return linkStatus?.immichEmail ? `${currentUser.name} · ${linkStatus.immichEmail}` : currentUser.name;
-  }, [currentUser, linkStatus?.immichEmail]);
-
   if (isBooting) {
     return (
       <main className="auth-screen">
@@ -108,20 +100,20 @@ export const App = () => {
   return (
     <main className="app-shell">
       <header className="card session-bar">
-        <div className="stack">
-          <strong>{headerSummary}</strong>
-          <span className="hint">
-            {linkStatus?.linked ? "Linked to Immich" : "Immich account not linked"}
-          </span>
+        <div className="session-bar-left">
+          <strong>Treemich</strong>
         </div>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => void handleLogout()}
-          disabled={isSubmittingAuth}
-        >
-          {isSubmittingAuth ? "Signing out..." : "Sign out"}
-        </button>
+        <div className="session-bar-right">
+          <strong className="session-user-name">{currentUser.name}</strong>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void handleLogout()}
+            disabled={isSubmittingAuth}
+          >
+            {isSubmittingAuth ? "Signing out..." : "Sign out"}
+          </button>
+        </div>
       </header>
       <Suspense
         fallback={

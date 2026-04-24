@@ -562,6 +562,38 @@ const PersonDetailPanelComponent = ({
               {isSavingProfile ? "Saving..." : "Save profile"}
             </button>
           </CollapsibleSection>
+          <RelativesSection
+            sectionKey="relatives"
+            title="Relatives"
+            items={familyRelatives}
+            extendedFamily={extendedFamily}
+            isCollapsed={collapsedSections.relatives}
+            onToggleCollapsed={() => toggleSectionCollapsed("relatives")}
+            onFocusPerson={onFocusPerson}
+            isSavingRelationship={isSavingRelationship}
+            onStartEditing={startEditingRelationship}
+            onStartDeleting={(key) => setPendingDeleteKey(key)}
+            emptyMessage="No relatives found yet."
+          />
+          <RelativesSection
+            sectionKey="in-laws"
+            title="In-Laws"
+            items={[]}
+            extendedFamily={inLaws}
+            isCollapsed={collapsedSections.inLaws}
+            onToggleCollapsed={() => toggleSectionCollapsed("inLaws")}
+            onFocusPerson={onFocusPerson}
+            resolveExtendedLabel={(member) =>
+              getInLawRelationshipLabel(
+                member.label,
+                peopleById.get(member.personId)?.profile?.gender ?? "UNKNOWN"
+              )
+            }
+            isSavingRelationship={isSavingRelationship}
+            onStartEditing={startEditingRelationship}
+            onStartDeleting={(key) => setPendingDeleteKey(key)}
+            emptyMessage="No in-laws found yet."
+          />
           {person ? (
             <CollapsibleSection
               sectionKey="names"
@@ -618,7 +650,6 @@ const PersonDetailPanelComponent = ({
                 person={person}
                 people={people}
                 families={families}
-                graphHasFamilyRelatives={familyRelatives.length > 0}
                 onPatchFamily={onFamilyPatch}
                 onDeleteFamily={onFamilyDelete}
                 savingFamilyId={savingFamilyId}
@@ -647,38 +678,6 @@ const PersonDetailPanelComponent = ({
               />
             </CollapsibleSection>
           ) : null}
-          <RelativesSection
-            sectionKey="relatives"
-            title="Relatives"
-            items={familyRelatives}
-            extendedFamily={extendedFamily}
-            isCollapsed={collapsedSections.relatives}
-            onToggleCollapsed={() => toggleSectionCollapsed("relatives")}
-            onFocusPerson={onFocusPerson}
-            isSavingRelationship={isSavingRelationship}
-            onStartEditing={startEditingRelationship}
-            onStartDeleting={(key) => setPendingDeleteKey(key)}
-            emptyMessage="No relatives found yet."
-          />
-          <RelativesSection
-            sectionKey="in-laws"
-            title="In-Laws"
-            items={[]}
-            extendedFamily={inLaws}
-            isCollapsed={collapsedSections.inLaws}
-            onToggleCollapsed={() => toggleSectionCollapsed("inLaws")}
-            onFocusPerson={onFocusPerson}
-            resolveExtendedLabel={(member) =>
-              getInLawRelationshipLabel(
-                member.label,
-                peopleById.get(member.personId)?.profile?.gender ?? "UNKNOWN"
-              )
-            }
-            isSavingRelationship={isSavingRelationship}
-            onStartEditing={startEditingRelationship}
-            onStartDeleting={(key) => setPendingDeleteKey(key)}
-            emptyMessage="No in-laws found yet."
-          />
           {suggestions.length > 0 ? (
             <CollapsibleSection
               sectionKey="suggestions"

@@ -8,8 +8,6 @@ type Props = {
   person: ImmichPerson;
   people: ImmichPerson[];
   families: FamilyRecord[];
-  /** True when the person already has parent/child/spouse/sibling edges — family units are still a separate layer. */
-  graphHasFamilyRelatives?: boolean;
   onPatchFamily?: (familyId: string, body: PatchFamilyBody) => Promise<void>;
   onDeleteFamily?: (familyId: string) => Promise<void>;
   savingFamilyId?: string | null;
@@ -31,7 +29,6 @@ export const FamiliesSection = ({
   person,
   people,
   families,
-  graphHasFamilyRelatives = false,
   onPatchFamily,
   onDeleteFamily,
   savingFamilyId,
@@ -95,22 +92,10 @@ export const FamiliesSection = ({
           <strong>not created automatically</strong> from the spouse/parent edges in{" "}
           <strong>Relatives</strong>.
         </p>
-        {graphHasFamilyRelatives ? (
-          <p className="hint">
-            You already have family-type relationships in the graph. After upgrading the API and running{" "}
-            <code>prisma migrate deploy</code>, Treemich normally infers families <strong>once</strong> on the
-            first process start (see server logs). To run manually instead, on the server with{" "}
-            <code>DATABASE_URL</code> set:{" "}
-            <code>npm run phase4:backfill-families --workspace @treemich/api -- --dry-run</code> then without{" "}
-            <code>--dry-run</code>, or create unions via <code>POST /families</code>. Disable auto-run with{" "}
-            <code>TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL=0</code>. Refresh this page after families exist.
-          </p>
-        ) : (
-          <p className="hint">
-            Create one with <code>POST /families</code> (parents + children + pedigree); parent/child lines on
-            the graph are then derived from those rows where applicable.
-          </p>
-        )}
+        <p className="hint">
+          Create one with <code>POST /families</code> (parents + children + pedigree); parent/child lines on
+          the graph are then derived from those rows where applicable.
+        </p>
       </div>
     );
   }
