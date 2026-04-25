@@ -32,6 +32,7 @@
   "devDependencies": {
     "@types/adm-zip": "^0.5.5",
     "@types/node": "^22.14.0",
+    "@vitest/coverage-v8": "^4.1.4",
     "nodemon": "^3.1.10",
     "prisma": "^6.19.3",
     "tsx": "^4.19.3",

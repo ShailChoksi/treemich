@@ -14,6 +14,7 @@ import {
   placeClusterIncludesImmichPerson,
   type GeoBounds
 } from "./mapPlaces/utils";
+import type { LatLngTuple, MapUiSnapshot } from "../lib/workspaceUiState";
 
 const clusterMarkerPathOptionsSelected = {
   color: "#166534",
@@ -42,6 +43,8 @@ type Props = {
   error?: string | null;
   /** Bumps when shell layout resizes; triggers Leaflet `invalidateSize` without window.resize. */
   layoutResizeSignal?: number;
+  initialUiState?: MapUiSnapshot;
+  onUiStateChange?: (next: MapUiSnapshot) => void;
 };
 
 const MapInvalidateOnLayout = ({ layoutResizeSignal }: { layoutResizeSignal: number }) => {
@@ -55,15 +58,17 @@ const MapInvalidateOnLayout = ({ layoutResizeSignal }: { layoutResizeSignal: num
 const AutoFitBounds = ({
   points,
   fitKey,
+  disabled = false,
   debounceMs = 180
 }: {
   points: PlacesMapPoint[];
   fitKey: string;
+  disabled?: boolean;
   debounceMs?: number;
 }) => {
   const map = useMap();
   useEffect(() => {
-    if (points.length === 0) {
+    if (disabled || points.length === 0) {
       return;
     }
     const timeout = window.setTimeout(() => {
@@ -73,21 +78,25 @@ const AutoFitBounds = ({
       map.fitBounds(bounds, { padding: [28, 28], maxZoom: points.length > 1 ? 7 : 10 });
     }, debounceMs);
     return () => window.clearTimeout(timeout);
-  }, [debounceMs, fitKey, map]);
+  }, [debounceMs, disabled, fitKey, map]);
   return null;
 };
 
 const MapViewportController = ({
   onZoomChange,
+  onCenterChange,
   onBoundsChange
 }: {
   onZoomChange: (zoom: number) => void;
+  onCenterChange: (center: LatLngTuple) => void;
   onBoundsChange: (bounds: GeoBounds) => void;
 }) => {
   const map = useMap();
   const updateViewport = () => {
     const bounds = map.getBounds();
+    const center = map.getCenter();
     onZoomChange(map.getZoom());
+    onCenterChange([center.lat, center.lng]);
     onBoundsChange({
       south: bounds.getSouth(),
       west: bounds.getWest(),
@@ -105,7 +114,7 @@ const MapViewportController = ({
   });
   useEffect(() => {
     updateViewport();
-  }, [map, onBoundsChange, onZoomChange]);
+  }, [map, onBoundsChange, onCenterChange, onZoomChange]);
   return null;
 };
 
@@ -122,12 +131,18 @@ export const MapPlacesPanel = ({
   getPersonLabel,
   selectedPersonId = null,
   error,
-  layoutResizeSignal = 0
+  layoutResizeSignal = 0,
+  initialUiState,
+  onUiStateChange
 }: Props) => {
-  const [search, setSearch] = useState("");
-  const [minEvents, setMinEvents] = useState(1);
-  const [baseClusterCellDegrees, setBaseClusterCellDegrees] = useState(1.2);
-  const [mapZoom, setMapZoom] = useState(2);
+  const [search, setSearch] = useState(initialUiState?.search ?? "");
+  const [minEvents, setMinEvents] = useState(initialUiState?.minEvents ?? 1);
+  const [baseClusterCellDegrees, setBaseClusterCellDegrees] = useState(
+    initialUiState?.baseClusterCellDegrees ?? 1.2
+  );
+  const [mapCenter, setMapCenter] = useState<LatLngTuple | null>(initialUiState?.center ?? null);
+  const [mapZoom, setMapZoom] = useState(initialUiState?.zoom ?? 2);
+  const [autoFitEnabled, setAutoFitEnabled] = useState(!initialUiState?.center);
   const [viewportBounds, setViewportBounds] = useState<GeoBounds | null>(null);
   const placesSafe = places ?? [];
   const hasGeocodedPlaces = placesSafe.length > 0;
@@ -154,12 +169,39 @@ export const MapPlacesPanel = ({
     placesSafe.length
   }`;
   const center: [number, number] =
-    fitPoints.length === 0
+    mapCenter ??
+    (fitPoints.length === 0
       ? [20, 0]
       : [
           fitPoints.reduce((sum, point) => sum + point.latitude, 0) / fitPoints.length,
           fitPoints.reduce((sum, point) => sum + point.longitude, 0) / fitPoints.length
-        ];
+        ]);
+
+  useEffect(() => {
+    onUiStateChange?.({
+      schemaVersion: 1,
+      search,
+      minEvents,
+      baseClusterCellDegrees,
+      center: mapCenter,
+      zoom: mapZoom
+    });
+  }, [baseClusterCellDegrees, mapCenter, mapZoom, minEvents, onUiStateChange, search]);
+
+  const handleSearchChange = (next: string) => {
+    setSearch(next);
+    setAutoFitEnabled(true);
+  };
+
+  const handleMinEventsChange = (next: number) => {
+    setMinEvents(next);
+    setAutoFitEnabled(true);
+  };
+
+  const handleBaseClusterCellDegreesChange = (next: number) => {
+    setBaseClusterCellDegrees(next);
+    setAutoFitEnabled(true);
+  };
 
   if (!mapUiEnabled) {
     return (
@@ -199,7 +241,7 @@ export const MapPlacesPanel = ({
         <input
           className="map-places-search"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => handleSearchChange(event.target.value)}
           placeholder="Filter place name"
         />
         <label className="map-places-control map-places-control--range">
@@ -210,7 +252,7 @@ export const MapPlacesPanel = ({
             min={1}
             max={20}
             value={minEvents}
-            onChange={(event) => setMinEvents(Number(event.target.value))}
+            onChange={(event) => handleMinEventsChange(Number(event.target.value))}
           />
         </label>
         <label className="map-places-control map-places-control--range">
@@ -224,7 +266,7 @@ export const MapPlacesPanel = ({
             max={5}
             step={0.2}
             value={baseClusterCellDegrees}
-            onChange={(event) => setBaseClusterCellDegrees(Number(event.target.value))}
+            onChange={(event) => handleBaseClusterCellDegreesChange(Number(event.target.value))}
           />
         </label>
         <label className="map-places-control map-places-control--checkbox">
@@ -247,10 +289,14 @@ export const MapPlacesPanel = ({
       </div>
       {hasGeocodedPlaces ? (
         <>
-          <MapContainer center={center} zoom={2} scrollWheelZoom className="map-places-canvas">
+          <MapContainer center={center} zoom={mapZoom} scrollWheelZoom className="map-places-canvas">
             <MapInvalidateOnLayout layoutResizeSignal={layoutResizeSignal} />
-            <MapViewportController onZoomChange={setMapZoom} onBoundsChange={setViewportBounds} />
-            <AutoFitBounds points={fitPoints} fitKey={fitKey} />
+            <MapViewportController
+              onZoomChange={setMapZoom}
+              onCenterChange={setMapCenter}
+              onBoundsChange={setViewportBounds}
+            />
+            <AutoFitBounds points={fitPoints} fitKey={fitKey} disabled={!autoFitEnabled} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

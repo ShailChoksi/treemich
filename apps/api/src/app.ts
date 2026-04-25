@@ -88,14 +88,14 @@ const sendAuthError = (reply: FastifyReply, error: TreemichAuthError | ImmichAut
   });
 
 export const buildApp = (options: BuildAppOptions = {}) => {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, trustProxy: env.TREEMICH_TRUST_PROXY });
   const services = options.services ?? buildServices();
 
   registerServices(app, services);
   app.decorateRequest("auth", null);
 
   app.register(cors, {
-    origin: env.NODE_ENV === "production" ? (env.WEB_ORIGIN ?? false) : true,
+    origin: env.NODE_ENV === "production" ? env.WEB_ORIGIN : true,
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   });
@@ -108,6 +108,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     const routePath = request.routeOptions.url;
     if (
       routePath === "/health" ||
+      routePath === "/ready" ||
       routePath === "/auth/login" ||
       routePath === "/auth/me" ||
       routePath === "/auth/logout" ||
@@ -148,7 +149,6 @@ export const buildApp = (options: BuildAppOptions = {}) => {
       return reply.code(statusCode).send({
         statusCode,
         error: "Database Error",
-        code: error.code,
         message: "Database operation failed"
       });
     }
@@ -171,12 +171,16 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     });
   });
 
-  app.get("/health", async (_request, reply) => {
+  app.get("/health", async () => {
+    return { ok: true };
+  });
+
+  app.get("/ready", async (_request, reply) => {
     try {
       await prisma.$queryRaw`SELECT 1`;
       return { ok: true };
     } catch (error) {
-      app.log.error(error, "Health check database probe failed");
+      app.log.error(error, "Readiness database probe failed");
       return reply.code(503).send({
         ok: false,
         error: "Database unavailable"

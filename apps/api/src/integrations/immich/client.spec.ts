@@ -15,6 +15,53 @@ const metadataResponse = (payload: MetadataPayload) =>
     json: async () => payload
   }) as Response;
 
+const jsonResponse = (payload: unknown, headers = new Headers()) =>
+  ({
+    ok: true,
+    status: 200,
+    headers,
+    json: async () => payload,
+    arrayBuffer: async () => new ArrayBuffer(0)
+  }) as Response;
+
+describe("ImmichClient.listPeople", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("paginates until the reported total is loaded", async () => {
+    const fetchMock = vi.fn(async (url: URL) => {
+      const page = url.searchParams.get("page");
+      if (page === "1") {
+        return jsonResponse({
+          total: 3,
+          people: [
+            { id: "p1", name: "One" },
+            { id: "p2", name: "Two" }
+          ]
+        });
+      }
+      return jsonResponse({
+        total: 3,
+        people: [{ id: "p3", name: "Three" }]
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ImmichClient({
+      baseUrl: "http://immich.local",
+      accessToken: "token",
+      peoplePageSize: 2
+    });
+
+    const people = await client.listPeople();
+
+    expect(people.map((person) => person.id)).toEqual(["p1", "p2", "p3"]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("ImmichClient.listAssetsWithPeople", () => {
   afterEach(() => {
     vi.restoreAllMocks();

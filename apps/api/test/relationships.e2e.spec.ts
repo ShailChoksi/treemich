@@ -48,6 +48,7 @@ const sourceFindManyMock = vi.fn();
 const mediaObjectFindManyMock = vi.fn();
 const mediaLinkFindManyMock = vi.fn();
 const familyFindManyMock = vi.fn();
+const countForExportMock = vi.fn();
 const findAdoptedChildImmichPersonIdsMock = vi.fn();
 const lifeEventServiceMock = {
   getSpouseMarriageDivorceIsoForPairs: vi.fn().mockResolvedValue(new Map()),
@@ -111,21 +112,21 @@ vi.mock("../src/db/client.js", () => ({
       findUnique: treemichUserFindUniqueMock,
       update: treemichUserUpdateMock
     },
-    personProfile: { findMany: personProfileFindManyMock },
-    relationship: { findMany: relationshipFindManyForExportMock },
-    place: { findMany: placeFindManyMock },
-    lifeEvent: { findMany: lifeEventFindManyForExportMock },
-    personName: { findMany: personNameFindManyMock },
-    family: { findMany: familyFindManyMock },
-    researchTask: { findMany: researchTaskFindManyMock },
-    repository: { findMany: repositoryFindManyMock },
-    source: { findMany: sourceFindManyMock },
-    mediaObject: { findMany: mediaObjectFindManyMock },
-    mediaLink: { findMany: mediaLinkFindManyMock },
-    treemichSession: { findMany: treemichSessionFindManyMock },
+    personProfile: { findMany: personProfileFindManyMock, count: countForExportMock },
+    relationship: { findMany: relationshipFindManyForExportMock, count: countForExportMock },
+    place: { findMany: placeFindManyMock, count: countForExportMock },
+    lifeEvent: { findMany: lifeEventFindManyForExportMock, count: countForExportMock },
+    personName: { findMany: personNameFindManyMock, count: countForExportMock },
+    family: { findMany: familyFindManyMock, count: countForExportMock },
+    researchTask: { findMany: researchTaskFindManyMock, count: countForExportMock },
+    repository: { findMany: repositoryFindManyMock, count: countForExportMock },
+    source: { findMany: sourceFindManyMock, count: countForExportMock },
+    mediaObject: { findMany: mediaObjectFindManyMock, count: countForExportMock },
+    mediaLink: { findMany: mediaLinkFindManyMock, count: countForExportMock },
+    treemichSession: { findMany: treemichSessionFindManyMock, count: countForExportMock },
     linkedImmichAccount: { findUnique: linkedImmichAccountFindUniqueMock },
-    cooccurrenceJob: { findMany: cooccurrenceJobFindManyMock },
-    cooccurrenceEdge: { findMany: cooccurrenceEdgeFindManyMock },
+    cooccurrenceJob: { findMany: cooccurrenceJobFindManyMock, count: countForExportMock },
+    cooccurrenceEdge: { findMany: cooccurrenceEdgeFindManyMock, count: countForExportMock },
     cooccurrenceSchedule: { findUnique: cooccurrenceScheduleFindUniqueMock }
   }
 }));
@@ -212,6 +213,7 @@ describe("Treemich API routes", () => {
     process.env.TREEMICH_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     process.env.TREEMICH_SESSION_COOKIE_NAME = "treemich_session";
     queryRawMock.mockResolvedValue([1]);
+    countForExportMock.mockResolvedValue(0);
     treemichUserFindUniqueMock.mockResolvedValue(null);
     personProfileFindManyMock.mockResolvedValue([]);
     relationshipFindManyForExportMock.mockResolvedValue([]);

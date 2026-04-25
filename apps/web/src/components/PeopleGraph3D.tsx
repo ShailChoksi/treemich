@@ -32,6 +32,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { GraphLayerControls } from "./graph/GraphLayerControls";
 import { useGraphKeyboardNavigation } from "./graph/useGraphKeyboardNavigation";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
+import type { GraphUiSnapshot } from "../lib/workspaceUiState";
 
 type Props = {
   people: ImmichPerson[];
@@ -64,6 +65,8 @@ type Props = {
   graphKeyboardEnabled?: boolean;
   /** Bumps when workspace layout resizes; triggers canvas/GL refresh without window.resize. */
   layoutResizeSignal?: number;
+  initialUiState?: GraphUiSnapshot;
+  onUiStateChange?: (next: GraphUiSnapshot) => void;
 };
 
 const DEFAULT_RENDER_LIMIT = 120;
@@ -121,11 +124,13 @@ const PeopleGraph3DComponent = ({
   onCreateRelationship,
   onPreferencesChange,
   graphKeyboardEnabled = true,
-  layoutResizeSignal = 0
+  layoutResizeSignal = 0,
+  initialUiState,
+  onUiStateChange
 }: Props) => {
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
-  const [focusPersonId, setFocusPersonId] = useState<string | null>(null);
-  const [pinnedPersonId, setPinnedPersonId] = useState<string | null>(null);
+  const [focusPersonId, setFocusPersonId] = useState<string | null>(initialUiState?.focusPersonId ?? null);
+  const [pinnedPersonId, setPinnedPersonId] = useState<string | null>(initialUiState?.pinnedPersonId ?? null);
   const [addRelativeIntent, setAddRelativeIntent] = useState<AddRelativeIntent | null>(null);
   const [graphViewPreferences, setGraphViewPreferences] = useState<GraphViewPreferencesState>(() =>
     resolveInitialGraphViewPreferences(
@@ -136,9 +141,9 @@ const PeopleGraph3DComponent = ({
   );
   const { filterVisibility, showSingleFamilyTree } = graphViewPreferences;
   const [singleFamilyTreeAnchorId, setSingleFamilyTreeAnchorId] = useState<string | null>(null);
-  const [cameraPositionForCulling, setCameraPositionForCulling] = useState<[number, number, number]>([
-    0, 2, 18
-  ]);
+  const [cameraPositionForCulling, setCameraPositionForCulling] = useState<[number, number, number]>(
+    initialUiState?.camera?.position ?? [0, 2, 18]
+  );
   const prefsAppliedRef = useRef(false);
   const lastCameraSampleRef = useRef(new Vector3(0, 2, 18));
   const hasInitializedCameraRef = useRef(false);
@@ -231,6 +236,8 @@ const PeopleGraph3DComponent = ({
     setFocusPersonId,
     setPinnedPersonId,
     setHoveredPersonId,
+    initialSearchTerm: initialUiState?.searchTerm ?? "",
+    initialHighlightedPersonIds: initialUiState?.highlightedPersonIds ?? [],
     onSearchFallback: handleSearchFallback
   });
   const { frameAllNodes, focusPersonById, focusActiveNode, topDownView, nudgeCamera } =
@@ -295,6 +302,10 @@ const PeopleGraph3DComponent = ({
     if (hasInitializedCameraRef.current) {
       return;
     }
+    if (initialUiState?.camera) {
+      hasInitializedCameraRef.current = true;
+      return;
+    }
 
     if (cameraFocusPersonRequest && visiblePositionsById.has(cameraFocusPersonRequest)) {
       setFocusPersonId(cameraFocusPersonRequest);
@@ -311,6 +322,40 @@ const PeopleGraph3DComponent = ({
     frameAllNodes,
     onCameraFocusPersonConsumed,
     visiblePositionsById
+  ]);
+
+  const handleCameraSample = useCallback((position: [number, number, number]) => {
+    setCameraPositionForCulling(position);
+  }, []);
+
+  useEffect(() => {
+    if (!onUiStateChange) {
+      return;
+    }
+    const camera = cameraRef.current;
+    const target = orbitControlsRef.current?.target;
+    onUiStateChange({
+      schemaVersion: 1,
+      searchTerm,
+      focusPersonId,
+      pinnedPersonId,
+      highlightedPersonIds: [...highlightedPersonIds],
+      camera:
+        camera && target
+          ? {
+              position: [camera.position.x, camera.position.y, camera.position.z],
+              target: [target.x, target.y, target.z]
+            }
+          : (initialUiState?.camera ?? null)
+    });
+  }, [
+    cameraPositionForCulling,
+    focusPersonId,
+    highlightedPersonIds,
+    initialUiState?.camera,
+    onUiStateChange,
+    pinnedPersonId,
+    searchTerm
   ]);
 
   useEffect(() => {
@@ -514,7 +559,8 @@ const PeopleGraph3DComponent = ({
             onNodeClick={handlePersonNodeClick}
             onNodeActionOpen={handleOpenAddRelative}
             onCanvasMissed={handleCanvasMissed}
-            onCameraSample={setCameraPositionForCulling}
+            onCameraSample={handleCameraSample}
+            initialCameraState={initialUiState?.camera ?? null}
             cameraRef={cameraRef}
             orbitControlsRef={orbitControlsRef}
             lastCameraSampleRef={lastCameraSampleRef}

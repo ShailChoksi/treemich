@@ -119,10 +119,8 @@ export const App = () => {
       <ErrorBoundary
         errorContext="Authenticated app"
         fallback={
-          <section className="card stack" style={{ margin: "1rem" }}>
-            <h2 className="app-title" style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>
-              Something went wrong
-            </h2>
+          <section className="card stack app-shell-fallback-card">
+            <h2 className="app-title app-shell-fallback-title">Something went wrong</h2>
             <p className="hint">
               The app hit an unexpected error. Reload the page to try again. If the problem persists, check
               the browser console for details.
@@ -132,7 +130,7 @@ export const App = () => {
       >
         <Suspense
           fallback={
-            <section className="card stack" style={{ margin: "1rem" }}>
+            <section className="card stack app-shell-fallback-card">
               <p className="hint">Loading graph…</p>
             </section>
           }

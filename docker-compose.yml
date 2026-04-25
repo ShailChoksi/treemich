@@ -36,9 +36,12 @@ services:
       TREEMICH_ENCRYPTION_KEY: ${TREEMICH_ENCRYPTION_KEY}
       TREEMICH_SESSION_COOKIE_NAME: ${TREEMICH_SESSION_COOKIE_NAME:-treemich_session}
       TREEMICH_SESSION_TTL_MS: ${TREEMICH_SESSION_TTL_MS:-2592000000}
+      TREEMICH_TRUST_PROXY: ${TREEMICH_TRUST_PROXY:-false}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
       RATE_LIMIT_TIME_WINDOW_MS: ${RATE_LIMIT_TIME_WINDOW_MS:-60000}
+      TREEMICH_GEDCOM_JOB_STALE_AFTER_MS: ${TREEMICH_GEDCOM_JOB_STALE_AFTER_MS:-86400000}
+      TREEMICH_EXPORT_MAX_ROWS: ${TREEMICH_EXPORT_MAX_ROWS:-100000}
       # Feature flags: must be passed explicitly; the API container does not read the host repo .env.
       TREEMICH_VALIDATION_ENGINE_ENABLED: ${TREEMICH_VALIDATION_ENGINE_ENABLED:-}
       MAP_UI_ENABLED: ${MAP_UI_ENABLED:-}
@@ -55,7 +58,7 @@ services:
     ports:
       - "4000:4000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/ready || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

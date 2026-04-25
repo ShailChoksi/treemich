@@ -6,7 +6,8 @@ body {
 }
 
 #root {
-  height: 100vh;
+  min-height: 100vh;
+  height: 100dvh;
 }
 
 .app-title {
@@ -17,12 +18,22 @@ body {
 }
 
 .app-shell {
-  height: 95vh;
+  height: 100%;
+  min-height: 0;
   box-sizing: border-box;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.app-shell-fallback-card {
+  margin: 1rem;
+}
+
+.app-shell-fallback-title {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
 }
 
 .app-shell > .people-layout {
@@ -114,6 +125,7 @@ body {
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
+  align-self: stretch;
 }
 
 .workspace-nav--expanded {
@@ -122,6 +134,21 @@ body {
 
 .workspace-nav--collapsed {
   width: 100%;
+  padding: 10px 8px;
+}
+
+.workspace-nav--collapsed .workspace-nav-list {
+  align-items: center;
+}
+
+.workspace-nav--collapsed .workspace-nav-item {
+  justify-content: center;
+  gap: 0;
+  padding: 9px 11px;
+}
+
+.workspace-nav--collapsed .workspace-nav-label {
+  display: none;
 }
 
 .workspace-nav-list {
@@ -131,6 +158,7 @@ body {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .workspace-nav-item {
@@ -138,7 +166,8 @@ body {
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 42px;
+  height: 44px;
+  min-height: 44px;
   background: transparent;
   border: 1px solid rgba(71, 85, 105, 0.65);
   color: #cbd5e1;
@@ -175,6 +204,9 @@ body {
   min-height: 0;
   display: flex;
   width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  align-self: stretch;
 }
 
 .workspace-main > * {
@@ -186,6 +218,7 @@ body {
   display: flex;
   flex-direction: column;
   width: 100%;
+  height: 100%;
   min-height: 0;
 }
 
@@ -202,14 +235,12 @@ body {
   flex-direction: column;
   gap: 12px;
   width: 100%;
+  min-width: 0;
   min-height: 0;
+  box-sizing: border-box;
   overflow-y: auto;
+  overflow-x: auto;
   align-items: stretch;
-}
-
-.workspace-placeholder {
-  width: 100%;
-  align-self: stretch;
 }
 
 .workspace-context-pane {
@@ -244,7 +275,8 @@ body {
 
 .workspace-main-stack--evidence,
 .workspace-main-stack--interchange,
-.workspace-main-stack--places {
+.workspace-main-stack--places,
+.workspace-main-stack--secondary {
   padding-right: 4px;
 }
 
@@ -420,6 +452,23 @@ body {
   box-shadow: 0 14px 30px rgba(2, 6, 23, 0.18);
 }
 
+.workspace-intro-card {
+  width: 100%;
+  box-sizing: border-box;
+  gap: 8px;
+}
+
+.workspace-intro-card h2 {
+  margin: 0;
+  font-size: 1.04rem;
+  line-height: 1.25;
+}
+
+.workspace-intro-card .hint {
+  margin: 0;
+  max-width: 72ch;
+}
+
 .graph-card {
   grid-column: auto;
   display: flex;
@@ -455,6 +504,7 @@ body {
     flex-direction: row;
     align-items: center;
     padding: 8px;
+    height: auto;
   }
 
   .workspace-column-toggle {
@@ -463,15 +513,30 @@ body {
 
   .workspace-nav-list {
     flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
+    flex-wrap: wrap;
+    overflow: visible;
     width: 100%;
+    align-content: flex-start;
   }
 
   .workspace-nav-item {
     width: auto;
-    min-width: 110px;
+    min-width: 120px;
     justify-content: center;
+    flex: 0 1 auto;
+  }
+
+  .workspace-nav--collapsed .workspace-nav-list {
+    align-items: stretch;
+  }
+
+  .workspace-nav--collapsed .workspace-nav-item {
+    gap: 10px;
+    padding: 9px 11px;
+  }
+
+  .workspace-nav--collapsed .workspace-nav-label {
+    display: inline;
   }
 
   .workspace-context-pane {
@@ -667,7 +732,7 @@ body {
 .person-names-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   margin-top: 6px;
 }
 
@@ -1267,7 +1332,7 @@ body {
 .add-relative-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
   margin-top: 2px;
 }
 
@@ -1751,7 +1816,15 @@ button {
     transform 0.16s ease;
 }
 
-button:hover:not(:disabled) {
+button:not(.icon-action-button):not(.text-link-button):not(.workspace-column-toggle):not(
+    .add-relative-backdrop
+  ):not(.workspace-action-button--compact) {
+  min-height: 38px;
+}
+
+button:hover:not(:disabled):not(.workspace-column-toggle):not(.add-relative-backdrop):not(
+    .icon-action-button
+  ):not(.text-link-button) {
   transform: translateY(-1px);
 }
 
@@ -1929,6 +2002,7 @@ textarea:disabled {
 .workspace-action-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
 }
 

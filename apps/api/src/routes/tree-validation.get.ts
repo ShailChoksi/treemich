@@ -23,7 +23,7 @@ export const registerTreeValidationGetRoute = (app: FastifyInstance) => {
     if (!isTreeValidationEngineEnabled()) {
       return { findings: [], engineDisabled: true as const, persist: false as const };
     }
-    const findings = await computeTreeValidationForUser(auth.user.id, app.services.lifeEventService);
+    const findings = await computeTreeValidationForUser(auth.user.id);
     return { findings, engineDisabled: false as const, persist: false as const };
   });
 };

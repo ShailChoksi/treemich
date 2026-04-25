@@ -63,6 +63,12 @@ import {
 } from "../lib/lifeEventUi";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { getLocalStorageItem, setLocalStorageItem } from "../lib/safeLocalStorage";
+import {
+  parseGraphUiSnapshot,
+  parseMapUiSnapshot,
+  type GraphUiSnapshot,
+  type MapUiSnapshot
+} from "../lib/workspaceUiState";
 import { EvidenceLibrariesSection } from "../components/EvidenceLibrariesSection";
 import { EvidenceMediaSection } from "../components/EvidenceMediaSection";
 import { GedcomInterchangeSection } from "../components/GedcomInterchangeSection";
@@ -76,6 +82,8 @@ const getErrorMessage = (error: unknown) => (error instanceof Error ? error.mess
 const WORKSPACE_STORAGE_KEY = "treemich.activeWorkspace";
 const LEFT_PANE_OPEN_STORAGE_KEY = "treemich.leftPaneOpen";
 const CONTEXT_OPEN_STORAGE_KEY = "treemich.contextOpen";
+const GRAPH_UI_STATE_STORAGE_KEY = "treemich.graph.uiState";
+const MAP_UI_STATE_STORAGE_KEY = "treemich.map.uiState";
 
 type WorkspaceId = "tree" | "research" | "evidence" | "interchange" | "places" | "reports" | "settings";
 
@@ -256,6 +264,12 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [mapLoading, setMapLoading] = useState(false);
   const [mapUiEnabled, setMapUiEnabled] = useState(true);
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
+  const [graphUiSnapshot, setGraphUiSnapshot] = useState<GraphUiSnapshot>(() =>
+    parseGraphUiSnapshot(getLocalStorageItem(GRAPH_UI_STATE_STORAGE_KEY))
+  );
+  const [mapUiSnapshot, setMapUiSnapshot] = useState<MapUiSnapshot>(() =>
+    parseMapUiSnapshot(getLocalStorageItem(MAP_UI_STATE_STORAGE_KEY))
+  );
   const selectedPersonIdRef = useRef<string | null>(null);
   const lastPersistedSelectionRef = useRef<string | null>(null);
   const layoutRequestIdRef = useRef(0);
@@ -265,6 +279,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const mapPlacesRequestIdRef = useRef(0);
   const layoutResizeRafRef = useRef<number | null>(null);
   const treeValidationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPersistedGraphUiSnapshotRef = useRef<string | null>(null);
+  const lastPersistedMapUiSnapshotRef = useRef<string | null>(null);
 
   const refreshPeopleOnly = useCallback(async () => {
     const peopleResponse = await getImmichPeople();
@@ -715,6 +731,30 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   useEffect(() => {
     setLocalStorageItem(CONTEXT_OPEN_STORAGE_KEY, contextPaneOpen ? "true" : "false");
   }, [contextPaneOpen]);
+
+  useEffect(() => {
+    const serialized = JSON.stringify(graphUiSnapshot);
+    if (lastPersistedGraphUiSnapshotRef.current === serialized) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      lastPersistedGraphUiSnapshotRef.current = serialized;
+      setLocalStorageItem(GRAPH_UI_STATE_STORAGE_KEY, serialized);
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [graphUiSnapshot]);
+
+  useEffect(() => {
+    const serialized = JSON.stringify(mapUiSnapshot);
+    if (lastPersistedMapUiSnapshotRef.current === serialized) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      lastPersistedMapUiSnapshotRef.current = serialized;
+      setLocalStorageItem(MAP_UI_STATE_STORAGE_KEY, serialized);
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [mapUiSnapshot]);
 
   useEffect(() => {
     const el = workspaceMainViewsRef.current;
@@ -1551,7 +1591,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     if (activeWorkspace === "evidence") {
       return (
         <section className="workspace-main-stack workspace-main-stack--evidence">
-          <section className="card stack">
+          <section className="card stack workspace-intro-card">
             <h2>Evidence workspace</h2>
             <p className="hint">
               Manage repositories, sources, and linked media outside of the person profile flow.
@@ -1563,7 +1603,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
               <EvidenceMediaSection />
             </>
           ) : (
-            <section className="card stack">
+            <section className="card stack workspace-intro-card">
               <p className="hint">Evidence workspace is disabled by feature flag.</p>
             </section>
           )}
@@ -1574,7 +1614,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     if (activeWorkspace === "interchange") {
       return (
         <section className="workspace-main-stack workspace-main-stack--interchange">
-          <section className="card stack">
+          <section className="card stack workspace-intro-card">
             <h2>Interchange workspace</h2>
             <p className="hint">Use this space for GEDCOM import/export without crowding person editing.</p>
           </section>
@@ -1585,30 +1625,36 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
 
     if (activeWorkspace === "research") {
       return (
-        <section className="card stack workspace-placeholder">
-          <h2>Research workspace</h2>
-          <p className="hint">
-            Research tasks and validation will land here as dedicated modules while remaining available in the
-            tree inspector for now.
-          </p>
+        <section className="workspace-main-stack workspace-main-stack--secondary">
+          <section className="card stack workspace-intro-card">
+            <h2>Research workspace</h2>
+            <p className="hint">
+              Research tasks and validation will land here as dedicated modules while remaining available in
+              the tree inspector for now.
+            </p>
+          </section>
         </section>
       );
     }
 
     if (activeWorkspace === "reports") {
       return (
-        <section className="card stack workspace-placeholder">
-          <h2>Reports workspace</h2>
-          <p className="hint">Reserved for lineage, completeness, and quality reports.</p>
+        <section className="workspace-main-stack workspace-main-stack--secondary">
+          <section className="card stack workspace-intro-card">
+            <h2>Reports workspace</h2>
+            <p className="hint">Reserved for lineage, completeness, and quality reports.</p>
+          </section>
         </section>
       );
     }
 
     if (activeWorkspace === "settings") {
       return (
-        <section className="card stack workspace-placeholder">
-          <h2>Settings workspace</h2>
-          <p className="hint">Reserved for global app and workspace preferences.</p>
+        <section className="workspace-main-stack workspace-main-stack--secondary">
+          <section className="card stack workspace-intro-card">
+            <h2>Settings workspace</h2>
+            <p className="hint">Reserved for global app and workspace preferences.</p>
+          </section>
         </section>
       );
     }
@@ -1619,7 +1665,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const workspaceLayoutStyle = useMemo(
     () =>
       ({
-        "--workspace-left-width": leftPaneOpen ? "206px" : "0px",
+        "--workspace-left-width": leftPaneOpen ? "206px" : "64px",
         "--workspace-right-width": contextPaneOpen ? "360px" : "0px"
       }) as CSSProperties,
     [contextPaneOpen, leftPaneOpen]
@@ -1632,7 +1678,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       aria-label="People workspace: navigation, main view, and context"
     >
       <aside
-        className={`workspace-nav workspace-nav--expanded ${leftPaneOpen ? "" : "workspace-pane--closed"}`}
+        className={`workspace-nav ${leftPaneOpen ? "workspace-nav--expanded" : "workspace-nav--collapsed"}`}
       >
         <nav aria-label="Workspace navigation" className="workspace-nav-list">
           {WORKSPACE_ITEMS.map((workspace, index) => {
@@ -1709,6 +1755,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
                 onPreferencesChange={onPreferencesChange}
                 graphKeyboardEnabled
                 layoutResizeSignal={layoutResizeSignal}
+                initialUiState={graphUiSnapshot}
+                onUiStateChange={setGraphUiSnapshot}
               />
             ) : null}
           </section>
@@ -1718,7 +1766,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
             }`}
             aria-hidden={activeWorkspace !== "places"}
           >
-            <section className="card stack">
+            <section className="card stack workspace-intro-card">
               <h2>Places workspace</h2>
               <p className="hint">Review mapped places and focus people from geographic context.</p>
             </section>
@@ -1734,6 +1782,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
                 selectedPersonId={selectedPersonId}
                 error={mapLoadError}
                 layoutResizeSignal={layoutResizeSignal}
+                initialUiState={mapUiSnapshot}
+                onUiStateChange={setMapUiSnapshot}
               />
             ) : null}
           </section>

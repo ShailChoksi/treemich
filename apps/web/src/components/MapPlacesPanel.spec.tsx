@@ -16,6 +16,7 @@ const leafletMocks = vi.hoisted(() => {
   const fitBounds = vi.fn();
   const map = {
     getZoom: vi.fn(() => 2),
+    getCenter: vi.fn(() => ({ lat: 20, lng: 0 })),
     getBounds: vi.fn(() => createBounds(-90, -180, 90, 180)),
     fitBounds,
     invalidateSize: vi.fn()
@@ -26,8 +27,22 @@ const leafletMocks = vi.hoisted(() => {
 });
 
 vi.mock("react-leaflet", () => ({
-  MapContainer: ({ children, className }: { children: ReactNode; className?: string }) =>
-    createElement("div", { className }, children),
+  MapContainer: ({
+    children,
+    className,
+    center,
+    zoom
+  }: {
+    children: ReactNode;
+    className?: string;
+    center?: [number, number];
+    zoom?: number;
+  }) =>
+    createElement(
+      "div",
+      { className, "data-center": center?.join(","), "data-zoom": String(zoom ?? "") },
+      children
+    ),
   TileLayer: () => createElement("div"),
   CircleMarker: ({ children, pathOptions }: { children: ReactNode; pathOptions?: { fillColor?: string } }) =>
     createElement("div", { "data-marker-fill": pathOptions?.fillColor ?? "" }, children),
@@ -51,6 +66,8 @@ describe("MapPlacesPanel", () => {
     leafletMocks.fitBounds.mockClear();
     leafletMocks.map.getZoom.mockReset();
     leafletMocks.map.getZoom.mockReturnValue(2);
+    leafletMocks.map.getCenter.mockReset();
+    leafletMocks.map.getCenter.mockReturnValue({ lat: 20, lng: 0 });
     leafletMocks.map.getBounds.mockReset();
     leafletMocks.map.getBounds.mockReturnValue(leafletMocks.createBounds(-90, -180, 90, 180));
     leafletMocks.zoomHandlers.splice(0, leafletMocks.zoomHandlers.length);
@@ -519,6 +536,70 @@ describe("MapPlacesPanel", () => {
       vi.advanceTimersByTime(220);
     });
     expect(leafletMocks.fitBounds).toHaveBeenCalledTimes(1);
+    root.unmount();
+  });
+
+  it("restores filter and viewport state from the initial snapshot", async () => {
+    vi.useFakeTimers();
+    const onUiStateChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    leafletMocks.map.getCenter.mockReturnValue({ lat: 42.36, lng: -71.05 });
+    leafletMocks.map.getZoom.mockReturnValue(8);
+    await act(async () => {
+      root.render(
+        createElement(MapPlacesPanel, {
+          mapUiEnabled: true,
+          places: [
+            {
+              id: "pl1",
+              name: "Boston",
+              latitude: 42.3601,
+              longitude: -71.0589,
+              eventCount: 4,
+              personCount: 1,
+              lastEventYear: 1980,
+              samplePersonIds: ["p1"]
+            }
+          ],
+          includeLiving: true,
+          onIncludeLivingChange: vi.fn(),
+          onFocusPerson: vi.fn(),
+          getPersonLabel: (id: string) => id,
+          initialUiState: {
+            schemaVersion: 1,
+            search: "bos",
+            minEvents: 3,
+            baseClusterCellDegrees: 2.4,
+            center: [42.36, -71.05],
+            zoom: 8
+          },
+          onUiStateChange
+        })
+      );
+    });
+
+    const canvas = container.querySelector(".map-places-canvas");
+    expect((container.querySelector(".map-places-search") as HTMLInputElement | null)?.value).toBe("bos");
+    expect(container.textContent).toContain("Min events: 3");
+    expect(container.textContent).toContain("Cluster base radius: 2.4");
+    expect(canvas?.getAttribute("data-center")).toBe("42.36,-71.05");
+    expect(canvas?.getAttribute("data-zoom")).toBe("8");
+
+    await act(async () => {
+      vi.advanceTimersByTime(220);
+    });
+    expect(leafletMocks.fitBounds).not.toHaveBeenCalled();
+    expect(onUiStateChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: "bos",
+        minEvents: 3,
+        baseClusterCellDegrees: 2.4,
+        center: expect.any(Array),
+        zoom: expect.any(Number)
+      })
+    );
     root.unmount();
   });
 });

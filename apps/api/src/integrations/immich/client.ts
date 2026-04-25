@@ -87,9 +87,13 @@ export class ImmichClient {
 
   private readonly cacheTtlMs = 30_000;
   private readonly thumbnailCacheTtlMs = 10 * 60_000;
-  private readonly maxThumbnailCacheEntries = 1000;
+  private readonly maxThumbnailCacheEntries = 250;
+  private readonly maxThumbnailCacheBytes = 25 * 1024 * 1024;
+  private readonly maxThumbnailBytes = 2 * 1024 * 1024;
   private readonly metadataPageSize = 1000;
-  private readonly metadataRequestConcurrency = 3;
+  private readonly metadataRequestConcurrency = 2;
+  private readonly defaultMaxAssetsWithPeople = 25_000;
+  private thumbnailCacheBytes = 0;
   private thumbnailCache = new Map<
     string,
     {
@@ -112,6 +116,7 @@ export class ImmichClient {
 
     for (const [personId, cached] of this.thumbnailCache.entries()) {
       if (cached.expiresAt <= now) {
+        this.thumbnailCacheBytes -= cached.data.byteLength;
         this.thumbnailCache.delete(personId);
       }
     }
@@ -120,6 +125,7 @@ export class ImmichClient {
   dispose() {
     this.peopleCache = undefined;
     this.thumbnailCache.clear();
+    this.thumbnailCacheBytes = 0;
   }
 
   private buildHeaders(extraHeaders?: Record<string, string>) {
@@ -146,13 +152,34 @@ export class ImmichClient {
       return this.peopleCache.people;
     }
 
-    const response = await fetch(`${this.baseUrl}/people?size=${this.peoplePageSize}`, {
-      headers: this.buildHeaders()
-    });
-    await this.ensureOk(response, "listPeople");
+    const people: ImmichPerson[] = [];
+    let page = 1;
+    let expectedTotal: number | null = null;
 
-    const json = (await response.json()) as ImmichPeopleResponse | ImmichPerson[];
-    const people = Array.isArray(json) ? json : (json.people ?? []);
+    while (expectedTotal === null || people.length < expectedTotal) {
+      const url = new URL(`${this.baseUrl}/people`);
+      url.searchParams.set("size", String(this.peoplePageSize));
+      url.searchParams.set("page", String(page));
+      const response = await fetch(url, {
+        headers: this.buildHeaders()
+      });
+      await this.ensureOk(response, "listPeople");
+
+      const json = (await response.json()) as ImmichPeopleResponse | ImmichPerson[];
+      if (Array.isArray(json)) {
+        people.push(...json);
+        break;
+      }
+
+      const pagePeople = json.people ?? [];
+      people.push(...pagePeople);
+      expectedTotal = Number.isFinite(json.total) ? json.total : people.length;
+      if (pagePeople.length === 0 || pagePeople.length < this.peoplePageSize) {
+        break;
+      }
+      page += 1;
+    }
+
     this.peopleCache = {
       expiresAt: Date.now() + this.cacheTtlMs,
       people
@@ -187,22 +214,33 @@ export class ImmichClient {
 
     const contentType = response.headers.get("content-type") ?? "image/jpeg";
     const data = Buffer.from(await response.arrayBuffer());
+    if (data.byteLength > this.maxThumbnailBytes) {
+      throw new Error(`Immich thumbnail exceeded ${this.maxThumbnailBytes} bytes`);
+    }
     this.thumbnailCache.set(personId, {
       expiresAt: Date.now() + this.thumbnailCacheTtlMs,
       contentType,
       data
     });
-    while (this.thumbnailCache.size > this.maxThumbnailCacheEntries) {
+    this.thumbnailCacheBytes += data.byteLength;
+    while (
+      this.thumbnailCache.size > this.maxThumbnailCacheEntries ||
+      this.thumbnailCacheBytes > this.maxThumbnailCacheBytes
+    ) {
       const oldestKey = this.thumbnailCache.keys().next().value;
       if (!oldestKey) {
         break;
+      }
+      const oldest = this.thumbnailCache.get(oldestKey);
+      if (oldest) {
+        this.thumbnailCacheBytes -= oldest.data.byteLength;
       }
       this.thumbnailCache.delete(oldestKey);
     }
     return { contentType, data };
   }
 
-  async listAssetsWithPeople(maxAssets = 50_000): Promise<ImmichAssetPeople[]> {
+  async listAssetsWithPeople(maxAssets = this.defaultMaxAssetsWithPeople): Promise<ImmichAssetPeople[]> {
     const itemsByPage = new Map<number, unknown[]>();
     const queuedPages = new Set<number>([1]);
     const fetchedPages = new Set<number>();

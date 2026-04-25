@@ -4,7 +4,7 @@
 
 import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, invalidate, type RootState, useThree } from "@react-three/fiber";
-import { useCallback, useLayoutEffect } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { MOUSE, PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { ImmichPerson } from "../../lib/api";
@@ -66,6 +66,7 @@ type Props = {
   onNodeActionOpen: (slot: AddRelativeSlot) => void;
   onCanvasMissed: () => void;
   onCameraSample: (position: NodePosition) => void;
+  initialCameraState?: { position: NodePosition; target: NodePosition } | null;
   cameraRef: React.MutableRefObject<PerspectiveCamera | null>;
   orbitControlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
   lastCameraSampleRef: React.MutableRefObject<Vector3>;
@@ -89,10 +90,12 @@ export const GraphCanvasScene = ({
   onNodeActionOpen,
   onCanvasMissed,
   onCameraSample,
+  initialCameraState = null,
   cameraRef,
   orbitControlsRef,
   lastCameraSampleRef
 }: Props) => {
+  const hasRestoredCameraRef = useRef(false);
   const handleNodeHover = useCallback(
     (personId: string, hovered: boolean) => {
       setHoveredPersonId((current) => {
@@ -138,9 +141,25 @@ export const GraphCanvasScene = ({
     cameraSampleRef: lastCameraSampleRef
   });
 
+  useEffect(() => {
+    if (hasRestoredCameraRef.current || !initialCameraState || !cameraRef.current) {
+      return;
+    }
+    hasRestoredCameraRef.current = true;
+    cameraRef.current.position.set(...initialCameraState.position);
+    lastCameraSampleRef.current.set(...initialCameraState.position);
+    const controls = orbitControlsRef.current;
+    if (controls) {
+      controls.target.set(...initialCameraState.target);
+      controls.update();
+    }
+    onCameraSample(initialCameraState.position);
+    invalidate();
+  }, [cameraRef, initialCameraState, lastCameraSampleRef, onCameraSample, orbitControlsRef]);
+
   return (
     <Canvas
-      camera={{ position: [0, 2, 18], fov: 55 }}
+      camera={{ position: initialCameraState?.position ?? [0, 2, 18], fov: 55 }}
       dpr={[1, 1.5]}
       frameloop="demand"
       onPointerMissed={onCanvasMissed}

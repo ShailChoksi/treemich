@@ -4,6 +4,7 @@
 
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
+import { env } from "../config/env.js";
 import { prisma } from "../db/client.js";
 import { lifeEventQueryInclude, lifeEventToJson } from "../lifeEvents/service.js";
 import { familyToJson } from "../families/service.js";
@@ -24,6 +25,26 @@ const serializeForExport = (value: unknown) =>
     }
     return v;
   });
+
+const countExportRows = async (userId: string) => {
+  const counts = await Promise.all([
+    prisma.personProfile.count({ where: { userId } }),
+    prisma.relationship.count({ where: { userId } }),
+    prisma.family.count({ where: { userId } }),
+    prisma.place.count({ where: { userId } }),
+    prisma.lifeEvent.count({ where: { userId } }),
+    prisma.personName.count({ where: { userId } }),
+    prisma.researchTask.count({ where: { userId } }),
+    prisma.repository.count({ where: { userId } }),
+    prisma.source.count({ where: { userId } }),
+    prisma.mediaObject.count({ where: { userId } }),
+    prisma.mediaLink.count({ where: { userId } }),
+    prisma.treemichSession.count({ where: { userId } }),
+    prisma.cooccurrenceJob.count({ where: { userId } }),
+    prisma.cooccurrenceEdge.count({ where: { userId } })
+  ]);
+  return counts.reduce((total, count) => total + count, 0);
+};
 
 export type AccountExportPayloadV1 = {
   exportVersion: 1;
@@ -63,6 +84,14 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
 
     const auth = getRequiredAuth(request);
     const userId = auth.user.id;
+    const exportRowCount = await countExportRows(userId);
+    if (exportRowCount > env.TREEMICH_EXPORT_MAX_ROWS) {
+      return reply.code(413).send({
+        statusCode: 413,
+        error: "Export Too Large",
+        message: `This account export contains ${exportRowCount} rows, exceeding TREEMICH_EXPORT_MAX_ROWS=${env.TREEMICH_EXPORT_MAX_ROWS}. Use a background export path or raise the limit.`
+      });
+    }
 
     const [
       user,
