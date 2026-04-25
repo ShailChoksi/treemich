@@ -55,6 +55,9 @@ const envSchema = z
     DATABASE_URL: z.string().min(1),
     IMMICH_BASE_URL: z.string().url(),
     IMMICH_PEOPLE_PAGE_SIZE: z.coerce.number().int().positive().default(1000),
+    IMMICH_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+    IMMICH_HTTP_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
+    IMMICH_HTTP_RETRY_BASE_DELAY_MS: z.coerce.number().int().positive().default(200),
     WEB_ORIGIN: z.string().url().optional(),
     TREEMICH_TRUST_PROXY: optionalBooleanString,
     TREEMICH_ENCRYPTION_KEY: z
@@ -76,6 +79,10 @@ const envSchema = z
       .default(24 * 60 * 60 * 1000),
     /** Maximum aggregate rows a synchronous account/GEDCOM export will load into memory. */
     TREEMICH_EXPORT_MAX_ROWS: z.coerce.number().int().positive().default(100_000),
+    /** Maximum profiles + relationships load allowed in full tree validation before rejecting request. */
+    TREEMICH_TREE_VALIDATION_MAX_ROWS: z.coerce.number().int().positive().default(50_000),
+    /** Maximum number of place aggregates returned by `GET /places/map`. */
+    TREEMICH_PLACES_MAP_MAX_POINTS: z.coerce.number().int().positive().default(2000),
     /** When "false" / "0" / "no" / "off", `GET /tree/validation` returns empty `findings` (omitted in omitted env). */
     TREEMICH_VALIDATION_ENGINE_ENABLED: z.string().optional(),
     /** When "false" / "0" / "no" / "off", `GET /places/map` returns no place points for map UI. */

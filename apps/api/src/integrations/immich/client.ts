@@ -5,6 +5,12 @@ type ImmichPeopleResponse = {
   total: number;
 };
 
+type ImmichPeoplePage = {
+  people: ImmichPerson[];
+  hasMore: boolean;
+  total: number | null;
+};
+
 type ImmichAssetPeoplePageResponse = {
   assets?: {
     items?: unknown[];
@@ -34,6 +40,9 @@ type ImmichClientOptions = {
   baseUrl: string;
   accessToken: string;
   peoplePageSize?: number;
+  timeoutMs?: number;
+  maxRetries?: number;
+  retryBaseDelayMs?: number;
 };
 
 export class ImmichAuthenticationError extends Error {
@@ -47,21 +56,49 @@ export class ImmichAuthenticationError extends Error {
 
 const normalizeBaseUrl = (baseUrl: string) => baseUrl.replace(/\/$/, "");
 
+const sleep = async (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const isRetriableStatus = (status: number) => status === 408 || status === 429 || status >= 500;
+
+const computeRetryDelayMs = (attempt: number, retryBaseDelayMs: number) => {
+  const exponentialBackoff = retryBaseDelayMs * 2 ** attempt;
+  const jitter = Math.floor(Math.random() * retryBaseDelayMs);
+  return exponentialBackoff + jitter;
+};
+
 export const loginToImmich = async (options: {
   baseUrl: string;
   email: string;
   password: string;
+  timeoutMs?: number;
 }): Promise<ImmichLoginResponse> => {
-  const response = await fetch(`${normalizeBaseUrl(options.baseUrl)}/auth/login`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      email: options.email,
-      password: options.password
-    })
-  });
+  const timeoutMs = options.timeoutMs ?? 8_000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(`${normalizeBaseUrl(options.baseUrl)}/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        email: options.email,
+        password: options.password
+      }),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Immich login timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (response.status === 401) {
     throw new ImmichAuthenticationError("Incorrect Immich email or password");
@@ -78,6 +115,9 @@ export class ImmichClient {
   private readonly baseUrl: string;
   private readonly accessToken: string;
   private readonly peoplePageSize: number;
+  private readonly timeoutMs: number;
+  private readonly maxRetries: number;
+  private readonly retryBaseDelayMs: number;
   private peopleCache:
     | {
         expiresAt: number;
@@ -107,6 +147,9 @@ export class ImmichClient {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
     this.accessToken = options.accessToken;
     this.peoplePageSize = options.peoplePageSize ?? 1000;
+    this.timeoutMs = options.timeoutMs ?? 8_000;
+    this.maxRetries = Math.max(0, options.maxRetries ?? 2);
+    this.retryBaseDelayMs = Math.max(25, options.retryBaseDelayMs ?? 200);
   }
 
   clearExpiredCacheEntries(now = Date.now()) {
@@ -145,6 +188,47 @@ export class ImmichClient {
     }
   }
 
+  private async request(
+    action: string,
+    pathOrUrl: string | URL,
+    init?: Omit<RequestInit, "signal"> & { skipRetries?: boolean }
+  ) {
+    const skipRetries = init?.skipRetries === true;
+    const attempts = skipRetries ? 0 : this.maxRetries;
+    const url = typeof pathOrUrl === "string" ? `${this.baseUrl}${pathOrUrl}` : pathOrUrl;
+    const requestInit = { ...init };
+    delete requestInit.skipRetries;
+
+    for (let attempt = 0; attempt <= attempts; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const response = await fetch(url, {
+          ...requestInit,
+          signal: controller.signal
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          return response;
+        }
+
+        if (response.ok || !isRetriableStatus(response.status) || attempt === attempts) {
+          return response;
+        }
+      } catch (error) {
+        if (!(error instanceof Error) || error.name !== "AbortError" || attempt === attempts) {
+          throw error;
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      await sleep(computeRetryDelayMs(attempt, this.retryBaseDelayMs));
+    }
+
+    throw new Error(`Immich ${action} failed after retries`);
+  }
+
   async listPeople(): Promise<ImmichPerson[]> {
     this.clearExpiredCacheEntries();
 
@@ -157,24 +241,10 @@ export class ImmichClient {
     let expectedTotal: number | null = null;
 
     while (expectedTotal === null || people.length < expectedTotal) {
-      const url = new URL(`${this.baseUrl}/people`);
-      url.searchParams.set("size", String(this.peoplePageSize));
-      url.searchParams.set("page", String(page));
-      const response = await fetch(url, {
-        headers: this.buildHeaders()
-      });
-      await this.ensureOk(response, "listPeople");
-
-      const json = (await response.json()) as ImmichPeopleResponse | ImmichPerson[];
-      if (Array.isArray(json)) {
-        people.push(...json);
-        break;
-      }
-
-      const pagePeople = json.people ?? [];
-      people.push(...pagePeople);
-      expectedTotal = Number.isFinite(json.total) ? json.total : people.length;
-      if (pagePeople.length === 0 || pagePeople.length < this.peoplePageSize) {
+      const pageResult = await this.listPeoplePage(page);
+      people.push(...pageResult.people);
+      expectedTotal = pageResult.total ?? expectedTotal;
+      if (!pageResult.hasMore) {
         break;
       }
       page += 1;
@@ -189,8 +259,53 @@ export class ImmichClient {
 
   async findPeopleByName(queryName: string): Promise<ImmichPerson[]> {
     const normalized = queryName.trim().toLowerCase();
-    const people = await this.listPeople();
-    return people.filter((person) => person.name.toLowerCase().includes(normalized));
+    if (!normalized) {
+      return [];
+    }
+
+    const matches: ImmichPerson[] = [];
+    let page = 1;
+    while (true) {
+      const pageResult = await this.listPeoplePage(page);
+      matches.push(...pageResult.people.filter((person) => person.name.toLowerCase().includes(normalized)));
+      if (!pageResult.hasMore) {
+        break;
+      }
+      page += 1;
+    }
+    return matches;
+  }
+
+  async getPeopleByIds(personIds: Iterable<string>): Promise<ImmichPerson[]> {
+    const missingIds = new Set([...personIds].filter((id) => id.length > 0));
+    if (missingIds.size === 0) {
+      return [];
+    }
+
+    this.clearExpiredCacheEntries();
+    if (this.peopleCache && this.peopleCache.expiresAt > Date.now()) {
+      return this.peopleCache.people.filter((person) => missingIds.has(person.id));
+    }
+
+    const found: ImmichPerson[] = [];
+    let page = 1;
+    while (missingIds.size > 0) {
+      const pageResult = await this.listPeoplePage(page);
+      for (const person of pageResult.people) {
+        if (!missingIds.has(person.id)) {
+          continue;
+        }
+        found.push(person);
+        missingIds.delete(person.id);
+      }
+
+      if (!pageResult.hasMore) {
+        break;
+      }
+      page += 1;
+    }
+
+    return found;
   }
 
   async getPersonThumbnail(personId: string): Promise<{
@@ -207,7 +322,7 @@ export class ImmichClient {
       return { contentType: cached.contentType, data: cached.data };
     }
 
-    const response = await fetch(`${this.baseUrl}/people/${personId}/thumbnail`, {
+    const response = await this.request("thumbnail", `/people/${personId}/thumbnail`, {
       headers: this.buildHeaders()
     });
     await this.ensureOk(response, "thumbnail");
@@ -274,7 +389,7 @@ export class ImmichClient {
         withPeople: true,
         type: "IMAGE"
       };
-      const response = await fetch(`${this.baseUrl}/search/metadata`, {
+      const response = await this.request("listAssetsWithPeople", "/search/metadata", {
         method: "POST",
         headers: this.buildHeaders({
           "content-type": "application/json"
@@ -397,5 +512,35 @@ export class ImmichClient {
       return value;
     }
     return null;
+  }
+
+  private async listPeoplePage(page: number): Promise<ImmichPeoplePage> {
+    const url = new URL(`${this.baseUrl}/people`);
+    url.searchParams.set("size", String(this.peoplePageSize));
+    url.searchParams.set("page", String(page));
+    const response = await this.request("listPeople", url, {
+      headers: this.buildHeaders()
+    });
+    await this.ensureOk(response, "listPeople");
+
+    const json = (await response.json()) as ImmichPeopleResponse | ImmichPerson[];
+    if (Array.isArray(json)) {
+      return {
+        people: json,
+        hasMore: json.length >= this.peoplePageSize,
+        total: null
+      };
+    }
+
+    const pagePeople = json.people ?? [];
+    const total = Number.isFinite(json.total) ? json.total : pagePeople.length;
+    const hasMore =
+      pagePeople.length > 0 &&
+      (pagePeople.length >= this.peoplePageSize || page * this.peoplePageSize < total);
+    return {
+      people: pagePeople,
+      hasMore,
+      total
+    };
   }
 }

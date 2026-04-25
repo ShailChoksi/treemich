@@ -19,6 +19,7 @@ import {
 } from "./cooccurrence.js";
 
 type DbClient = Prisma.TransactionClient | typeof prisma;
+const personIdChunkSize = 500;
 
 export class RelationshipService {
   constructor(private readonly lifeEventService: LifeEventService) {}
@@ -236,21 +237,28 @@ export class RelationshipService {
   }
 
   async getConnectedPersonIds(userId: string, personIds: string[]) {
-    const relationships = await prisma.relationship.findMany({
-      where: {
-        userId,
-        OR: [{ fromPersonId: { in: personIds } }, { toPersonId: { in: personIds } }]
-      },
-      select: {
-        fromPersonId: true,
-        toPersonId: true
-      }
-    });
-
     const connectedIds = new Set<string>();
-    for (const relationship of relationships) {
-      connectedIds.add(relationship.fromPersonId);
-      connectedIds.add(relationship.toPersonId);
+    if (personIds.length === 0) {
+      return connectedIds;
+    }
+
+    for (let offset = 0; offset < personIds.length; offset += personIdChunkSize) {
+      const chunk = personIds.slice(offset, offset + personIdChunkSize);
+      const relationships = await prisma.relationship.findMany({
+        where: {
+          userId,
+          OR: [{ fromPersonId: { in: chunk } }, { toPersonId: { in: chunk } }]
+        },
+        select: {
+          fromPersonId: true,
+          toPersonId: true
+        }
+      });
+
+      for (const relationship of relationships) {
+        connectedIds.add(relationship.fromPersonId);
+        connectedIds.add(relationship.toPersonId);
+      }
     }
 
     return connectedIds;

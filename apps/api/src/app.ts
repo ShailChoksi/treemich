@@ -4,6 +4,7 @@
  */
 
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyReply } from "fastify";
 import { ZodError } from "zod";
@@ -103,6 +104,16 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     max: env.RATE_LIMIT_MAX,
     timeWindow: env.RATE_LIMIT_TIME_WINDOW_MS
   });
+  app.register(helmet, {
+    global: true,
+    contentSecurityPolicy: false
+  });
+
+  if (env.NODE_ENV === "production" && !env.TREEMICH_TRUST_PROXY) {
+    app.log.warn(
+      "TREEMICH_TRUST_PROXY=false in production; verify reverse-proxy configuration for correct client IP and secure-cookie behavior"
+    );
+  }
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.routeOptions.url;

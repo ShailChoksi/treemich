@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { computeTreeValidationForUser, mergeTreeFindings } from "./treeValidationService.js";
+import { env } from "../config/env.js";
 
 const dbMocks = vi.hoisted(() => ({
   personProfileFindMany: vi.fn(),
@@ -25,8 +26,10 @@ describe("mergeTreeFindings", () => {
 
 describe("computeTreeValidationForUser", () => {
   const listPersonLifeEvents = vi.fn();
+  const originalTreeValidationMaxRows = env.TREEMICH_TREE_VALIDATION_MAX_ROWS;
   beforeEach(() => {
     vi.clearAllMocks();
+    env.TREEMICH_TREE_VALIDATION_MAX_ROWS = originalTreeValidationMaxRows;
     dbMocks.personProfileFindMany.mockResolvedValue([]);
     dbMocks.relationshipFindMany.mockResolvedValue([]);
     dbMocks.lifeEventFindMany.mockResolvedValue([]);
@@ -50,5 +53,15 @@ describe("computeTreeValidationForUser", () => {
     const out = await computeTreeValidationForUser("u1");
     expect(out.some((f) => f.code === "birth_after_death")).toBe(true);
     expect(listPersonLifeEvents).not.toHaveBeenCalled();
+  });
+
+  it("rejects validation when row scan exceeds configured cap", async () => {
+    env.TREEMICH_TREE_VALIDATION_MAX_ROWS = 1;
+    dbMocks.personProfileFindMany.mockResolvedValue([{ id: "pp1", immichPersonId: "p1" }]);
+    dbMocks.relationshipFindMany.mockResolvedValue([{ id: "r1", type: "SPOUSE_OF" }]);
+
+    await expect(computeTreeValidationForUser("u1")).rejects.toMatchObject({
+      statusCode: 413
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ImmichClient } from "./client.js";
+import { ImmichClient, ImmichAuthenticationError, loginToImmich } from "./client.js";
 
 type MetadataPayload = {
   assets: {
@@ -59,6 +59,50 @@ describe("ImmichClient.listPeople", () => {
 
     expect(people.map((person) => person.id)).toEqual(["p1", "p2", "p3"]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries transient failures before succeeding", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503
+      } as Response)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          total: 1,
+          people: [{ id: "p1", name: "One" }]
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ImmichClient({
+      baseUrl: "http://immich.local",
+      accessToken: "token",
+      maxRetries: 1,
+      retryBaseDelayMs: 1
+    });
+
+    const people = await client.listPeople();
+    expect(people.map((person) => person.id)).toEqual(["p1"]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry authentication failures", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ImmichClient({
+      baseUrl: "http://immich.local",
+      accessToken: "token",
+      maxRetries: 3
+    });
+
+    await expect(client.listPeople()).rejects.toBeInstanceOf(ImmichAuthenticationError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -149,5 +193,30 @@ describe("ImmichClient.listAssetsWithPeople", () => {
     const assets = await client.listAssetsWithPeople();
     expect(assets).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("loginToImmich", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("forwards auth failures without retries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401
+      } as Response)
+    );
+
+    await expect(
+      loginToImmich({
+        baseUrl: "http://immich.local",
+        email: "a@example.com",
+        password: "pw"
+      })
+    ).rejects.toBeInstanceOf(ImmichAuthenticationError);
   });
 });

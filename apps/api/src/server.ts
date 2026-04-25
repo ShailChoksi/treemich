@@ -15,6 +15,7 @@ const cooccurrenceRefreshIntervalMs = 5 * 60_000;
 let sessionCleanupTimer: NodeJS.Timeout | null = null;
 let cooccurrenceRefreshTimer: NodeJS.Timeout | null = null;
 let cooccurrenceRefreshInFlight = false;
+const cooccurrenceAdvisoryLockId = 74_001;
 
 const cleanupExpiredSessions = async () => {
   const deletedCount = await app.services.authService.cleanupExpiredSessions();
@@ -29,7 +30,22 @@ const refreshScheduledCooccurrence = async () => {
   }
 
   cooccurrenceRefreshInFlight = true;
+  let hasAdvisoryLock = false;
   try {
+    try {
+      const lockRows = await prisma.$queryRaw<{ locked: boolean }[]>`
+        SELECT pg_try_advisory_lock(${cooccurrenceAdvisoryLockId}) AS locked
+      `;
+      hasAdvisoryLock = lockRows[0]?.locked === true;
+    } catch (error) {
+      app.log.warn({ error }, "Unable to acquire advisory lock for co-occurrence refresh");
+    }
+
+    if (!hasAdvisoryLock) {
+      app.log.debug("Skipped co-occurrence refresh because another instance holds the lock");
+      return;
+    }
+
     const dueSchedules = await app.services.cooccurrenceService.getDueSchedules();
 
     for (const schedule of dueSchedules) {
@@ -56,6 +72,13 @@ const refreshScheduledCooccurrence = async () => {
       }
     }
   } finally {
+    if (hasAdvisoryLock) {
+      try {
+        await prisma.$queryRaw`SELECT pg_advisory_unlock(${cooccurrenceAdvisoryLockId})`;
+      } catch (error) {
+        app.log.warn({ error }, "Failed to release co-occurrence advisory lock");
+      }
+    }
     cooccurrenceRefreshInFlight = false;
   }
 };
@@ -84,14 +107,10 @@ const shutdown = async (signal: NodeJS.Signals) => {
 
 const start = async () => {
   try {
-    await maybeRunAutomaticPhase4FamilyBackfillOnBoot({
-      prisma,
-      familyService: app.services.familyService,
-      log: app.log,
-      enabled: isAutoPhase4FamilyBackfillEnabled()
-    });
-    await cleanupExpiredSessions();
-    await refreshScheduledCooccurrence();
+    await app.listen({ port: env.PORT, host: "::" });
+    app.log.info(`Treemich API listening on ${env.PORT}`);
+    app.log.info(`Treemich API booted at ${new Date().toISOString()}`);
+
     sessionCleanupTimer = setInterval(() => {
       void cleanupExpiredSessions().catch((error) => {
         app.log.error(error, "Failed to clean up expired sessions");
@@ -105,9 +124,19 @@ const start = async () => {
     }, cooccurrenceRefreshIntervalMs);
     cooccurrenceRefreshTimer.unref();
 
-    await app.listen({ port: env.PORT, host: "::" });
-    app.log.info(`Treemich API listening on ${env.PORT}`);
-    app.log.info(`Treemich API booted at ${new Date().toISOString()}`);
+    void (async () => {
+      await maybeRunAutomaticPhase4FamilyBackfillOnBoot({
+        prisma,
+        familyService: app.services.familyService,
+        log: app.log,
+        enabled: isAutoPhase4FamilyBackfillEnabled()
+      });
+      await cleanupExpiredSessions();
+      await refreshScheduledCooccurrence();
+    })().catch((error) => {
+      app.log.error(error, "Failed startup maintenance tasks");
+    });
+
     process.once("SIGINT", () => {
       void shutdown("SIGINT");
     });

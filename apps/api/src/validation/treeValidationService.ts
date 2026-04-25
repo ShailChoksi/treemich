@@ -1,4 +1,5 @@
 import { prisma } from "../db/client.js";
+import { env } from "../config/env.js";
 import {
   computePersonLifeEventFindings,
   type LifeEventValidationFinding
@@ -23,6 +24,13 @@ export async function computeTreeValidationForUser(userId: string): Promise<Life
       where: { userId }
     })
   ]);
+
+  if (profiles.length + relationships.length > env.TREEMICH_TREE_VALIDATION_MAX_ROWS) {
+    throw {
+      statusCode: 413,
+      message: `Tree validation requires scanning ${profiles.length + relationships.length} rows; maximum is ${env.TREEMICH_TREE_VALIDATION_MAX_ROWS}`
+    };
+  }
 
   const [personEvents, relationshipEvents] = await Promise.all([
     prisma.lifeEvent.findMany({

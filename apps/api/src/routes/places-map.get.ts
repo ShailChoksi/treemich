@@ -6,10 +6,11 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";
-import { isMapUiEnabled } from "../config/env.js";
+import { env, isMapUiEnabled } from "../config/env.js";
 
 const querySchema = z.object({
-  includeLiving: z.enum(["true", "false"]).optional()
+  includeLiving: z.enum(["true", "false"]).optional(),
+  limit: z.coerce.number().int().positive().max(10_000).optional()
 });
 
 type PlaceAggregate = {
@@ -25,7 +26,7 @@ type PlaceAggregate = {
 export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
   app.get("/places/map", async (request) => {
     const auth = getRequiredAuth(request);
-    const { includeLiving } = querySchema.parse(request.query);
+    const { includeLiving, limit } = querySchema.parse(request.query);
     const mapUiEnabled = isMapUiEnabled();
     if (!mapUiEnabled) {
       return { mapUiEnabled: false as const, places: [] as PlaceAggregate[] };
@@ -120,7 +121,8 @@ export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
         lastEventYear: entry.lastEventYear,
         samplePersonIds: [...entry.personIds].sort((left, right) => left.localeCompare(right)).slice(0, 5)
       }))
-      .sort((left, right) => right.eventCount - left.eventCount || left.name.localeCompare(right.name));
+      .sort((left, right) => right.eventCount - left.eventCount || left.name.localeCompare(right.name))
+      .slice(0, Math.min(limit ?? env.TREEMICH_PLACES_MAP_MAX_POINTS, env.TREEMICH_PLACES_MAP_MAX_POINTS));
 
     return { mapUiEnabled: true as const, places };
   });
