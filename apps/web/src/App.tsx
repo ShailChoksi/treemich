@@ -88,7 +88,9 @@ export const App = () => {
       <main className="auth-screen">
         <section className="card auth-card stack">
           <h1>Loading Treemich</h1>
-          <p className="hint">Checking your current session.</p>
+          <div className="skeleton-card auth-skeleton" aria-label="Checking your current session">
+            <span className="sr-only">Checking your current session.</span>
+          </div>
         </section>
       </main>
     );
@@ -100,6 +102,9 @@ export const App = () => {
 
   return (
     <main className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <header className="card session-bar">
         <div className="session-bar-left">
           <h1 className="app-title">Treemich</h1>
@@ -131,7 +136,7 @@ export const App = () => {
         <Suspense
           fallback={
             <section className="card stack app-shell-fallback-card">
-              <p className="hint">Loading graph…</p>
+              <div className="skeleton-card app-shell-skeleton" aria-label="Loading graph" />
             </section>
           }
         >

@@ -138,8 +138,12 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     }
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
+      app.log.warn(
+        { path: request.url, method: request.method, issues: error.issues },
+        "Request body validation failed"
+      );
       return reply.code(400).send({
         statusCode: 400,
         error: "Validation Error",

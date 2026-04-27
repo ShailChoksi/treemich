@@ -128,7 +128,11 @@ export const EvidenceLibrariesSection = () => {
     <section className="evidence-libraries-details">
       <div className="field-label">Sources &amp; repositories</div>
       {error ? <p className="hint hint--danger">{error}</p> : null}
-      {loading ? <p className="hint">Loading...</p> : null}
+      {loading ? (
+        <div className="skeleton-card sidebar-skeleton" aria-label="Loading sources and repositories">
+          <span className="sr-only">Loading...</span>
+        </div>
+      ) : null}
       {!loading ? (
         <div className="stack evidence-panel-stack">
           <div className="person-detail-form-grid person-detail-form-grid--limit">

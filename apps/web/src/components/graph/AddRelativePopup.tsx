@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { RelationshipType } from "../../lib/api";
+import { RELATIONSHIP_TYPES } from "../../lib/relationshipConstants";
 import type { AddRelativeSlot } from "./NodeActionButtons";
 
 const FOCUSABLE_SELECTOR =
@@ -28,7 +29,7 @@ const getFirstName = (fullName: string) => fullName.trim().split(/\s+/)[0] ?? fu
 
 export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCancel, onSubmit }: Props) => {
   const [personName, setPersonName] = useState("");
-  const [relationshipType, setRelationshipType] = useState<RelationshipType>("SIBLING_OF");
+  const [relationshipType, setRelationshipType] = useState<RelationshipType>(RELATIONSHIP_TYPES.siblingOf);
   const [error, setError] = useState<string | null>(null);
   const selectedPersonFirstName = getFirstName(selectedPersonName);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -71,43 +72,49 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
 
   useEffect(() => {
     setPersonName("");
-    setRelationshipType("SIBLING_OF");
+    setRelationshipType(RELATIONSHIP_TYPES.siblingOf);
     setError(null);
   }, [slot, selectedPersonName]);
 
-  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Tab" || !dialogRef.current) {
-      return;
-    }
-    const focusables = getFocusableElements();
-    if (focusables.length === 0) {
-      return;
-    }
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (first == null || last == null) {
-      return;
-    }
-    if (event.shiftKey) {
-      if (document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
+  const handleDialogKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Tab" || !dialogRef.current) {
+        return;
       }
-    } else if (document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
+      const focusables = getFocusableElements();
+      if (focusables.length === 0) {
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (first == null || last == null) {
+        return;
+      }
+      if (event.shiftKey) {
+        if (document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    },
+    [getFocusableElements]
+  );
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    try {
-      await onSubmit(personName, slot === "siblingOrSpouse" ? relationshipType : undefined);
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to add relationship");
-    }
-  };
+  const handleSubmit = useCallback(
+    async (event: React.FormEvent) => {
+      event.preventDefault();
+      setError(null);
+      try {
+        await onSubmit(personName, slot === "siblingOrSpouse" ? relationshipType : undefined);
+      } catch (submitError) {
+        setError(submitError instanceof Error ? submitError.message : "Failed to add relationship");
+      }
+    },
+    [onSubmit, personName, relationshipType, slot]
+  );
 
   return (
     <>
@@ -153,10 +160,10 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
                 value={relationshipType}
                 onChange={(event) => setRelationshipType(event.target.value as RelationshipType)}
               >
-                <option value="SIBLING_OF">Sibling</option>
-                <option value="SPOUSE_OF">Spouse</option>
-                <option value="FRIEND_OF">Friend</option>
-                <option value="PET_OF">Pet</option>
+                <option value={RELATIONSHIP_TYPES.siblingOf}>Sibling</option>
+                <option value={RELATIONSHIP_TYPES.spouseOf}>Spouse</option>
+                <option value={RELATIONSHIP_TYPES.friendOf}>Friend</option>
+                <option value={RELATIONSHIP_TYPES.petOf}>Pet</option>
               </select>
             </label>
           ) : null}

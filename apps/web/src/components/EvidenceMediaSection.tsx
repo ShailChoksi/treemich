@@ -66,7 +66,11 @@ export const EvidenceMediaSection = () => {
     <section className="evidence-media-details">
       <div className="field-label">Evidence media</div>
       {error ? <p className="hint hint--danger">{error}</p> : null}
-      {loading ? <p className="hint">Loading...</p> : null}
+      {loading ? (
+        <div className="skeleton-card sidebar-skeleton" aria-label="Loading evidence media">
+          <span className="sr-only">Loading...</span>
+        </div>
+      ) : null}
       {!loading ? (
         <div className="stack evidence-panel-stack">
           <p className="hint hint--tight-below">

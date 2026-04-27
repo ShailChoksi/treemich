@@ -83,6 +83,10 @@ const treemichApi = import.meta.env.VITE_TREEMICH_API_URL ?? "/api";
 const startupRetryDelayMs = 800;
 const startupRetryAttempts = 5;
 
+type RequestOptions = {
+  signal?: AbortSignal;
+};
+
 /** Non-OK API response mapped to an `Error` with HTTP status for UI handling. */
 export class ApiHttpError extends Error {
   readonly statusCode: number;
@@ -150,11 +154,36 @@ const fetchWithRetry = async (
   throw lastError instanceof Error ? lastError : new Error("Request failed");
 };
 
+type ZodIssueLike = { path?: (string | number)[]; message?: string };
+
+const formatZodIssueSummary = (issues: ZodIssueLike[]) => {
+  if (issues.length === 0) {
+    return "";
+  }
+  const [first, ...rest] = issues;
+  const path = first && first.path && first.path.length > 0 ? first.path.join(".") : "request";
+  const detail = first?.message ? `${path}: ${first.message}` : path;
+  return rest.length > 0 ? `${detail} (+${String(rest.length)} more)` : detail;
+};
+
 const getErrorMessage = async (response: Response, fallbackMessage: string) => {
   try {
-    const json = (await response.json()) as { statusCode?: number; error?: string; message?: string };
+    const json = (await response.json()) as {
+      statusCode?: number;
+      error?: string;
+      message?: string;
+      issues?: ZodIssueLike[];
+    };
+    const base = json.error ?? json.message ?? fallbackMessage;
+    if (Array.isArray(json.issues) && json.issues.length > 0) {
+      const detail = formatZodIssueSummary(json.issues);
+      return {
+        message: detail ? `${base} — ${detail}` : base,
+        statusCode: typeof json.statusCode === "number" ? json.statusCode : response.status
+      };
+    }
     return {
-      message: json.error ?? json.message ?? fallbackMessage,
+      message: base,
       statusCode: typeof json.statusCode === "number" ? json.statusCode : response.status
     };
   } catch {
@@ -434,11 +463,11 @@ const lifeEventsIncludeQuery = (includeCitations?: boolean) => (includeCitations
 /** `GET /people/:id/life-events` — optional `?include=citations`. */
 export const getPersonLifeEvents = async (
   personId: string,
-  options?: { includeCitations?: boolean }
+  options?: { includeCitations?: boolean } & RequestOptions
 ): Promise<LifeEventRecord[]> => {
   const response = await fetchWithRetry(
     `${treemichApi}/people/${encodeURIComponent(personId)}/life-events${lifeEventsIncludeQuery(options?.includeCitations)}`,
-    { cache: "no-store" }
+    { cache: "no-store", signal: options?.signal }
   );
   await ensureOk(response, "Failed to load person life events");
   const json = (await response.json()) as LifeEventListResponse;
@@ -618,11 +647,11 @@ export const getPersonLifeEventValidation = async (
 /** `GET /relationships/:id/life-events` — marriage/divorce etc. */
 export const getRelationshipLifeEvents = async (
   relationshipId: string,
-  options?: { includeCitations?: boolean }
+  options?: { includeCitations?: boolean } & RequestOptions
 ): Promise<LifeEventRecord[]> => {
   const response = await fetchWithRetry(
     `${treemichApi}/relationships/${encodeURIComponent(relationshipId)}/life-events${lifeEventsIncludeQuery(options?.includeCitations)}`,
-    { cache: "no-store" }
+    { cache: "no-store", signal: options?.signal }
   );
   await ensureOk(response, "Failed to load relationship life events");
   const json = (await response.json()) as LifeEventListResponse;
@@ -690,9 +719,13 @@ export type PersonTimelineResponse = {
 };
 
 /** `GET /people/:id/timeline` — merged chronology for sidebar. */
-export const getPersonTimeline = async (personId: string): Promise<PersonTimelineResponse> => {
+export const getPersonTimeline = async (
+  personId: string,
+  options?: RequestOptions
+): Promise<PersonTimelineResponse> => {
   const response = await fetchWithRetry(`${treemichApi}/people/${encodeURIComponent(personId)}/timeline`, {
-    cache: "no-store"
+    cache: "no-store",
+    signal: options?.signal
   });
   await ensureOk(response, "Failed to load person timeline");
   return (await response.json()) as PersonTimelineResponse;
@@ -717,23 +750,31 @@ export type PlacesMapResponse = {
 };
 
 /** `GET /places/map` — optional `includeLiving=false` excludes likely-living people's points. */
-export const getPlacesMap = async (options?: { includeLiving?: boolean }): Promise<PlacesMapResponse> => {
+export const getPlacesMap = async (
+  options?: { includeLiving?: boolean } & RequestOptions
+): Promise<PlacesMapResponse> => {
   const params = new URLSearchParams();
   if (options?.includeLiving === false) {
     params.set("includeLiving", "false");
   }
   const suffix = params.size > 0 ? `?${params.toString()}` : "";
-  const response = await fetchWithRetry(`${treemichApi}/places/map${suffix}`, { cache: "no-store" });
+  const response = await fetchWithRetry(`${treemichApi}/places/map${suffix}`, {
+    cache: "no-store",
+    signal: options?.signal
+  });
   await ensureOk(response, "Failed to load map places");
   return (await response.json()) as PlacesMapResponse;
 };
 
 /** `GET /research/tasks` — optional `personId` filters to person-linked tasks. */
 /** `GET /people/:immichPersonId/families` — family units this person appears in (read-only list in UI). */
-export const getFamiliesForPerson = async (immichPersonId: string): Promise<FamilyRecord[]> => {
+export const getFamiliesForPerson = async (
+  immichPersonId: string,
+  options?: RequestOptions
+): Promise<FamilyRecord[]> => {
   const response = await fetchWithRetry(
     `${treemichApi}/people/${encodeURIComponent(immichPersonId)}/families`,
-    { cache: "no-store" }
+    { cache: "no-store", signal: options?.signal }
   );
   await ensureOk(response, "Failed to load families");
   const body = (await response.json()) as { families: FamilyRecord[] };
@@ -779,11 +820,11 @@ export const deleteFamily = async (familyId: string): Promise<void> => {
 /** `GET /families/:familyId/life-events`. */
 export const getFamilyLifeEvents = async (
   familyId: string,
-  options?: { includeCitations?: boolean }
+  options?: { includeCitations?: boolean } & RequestOptions
 ): Promise<LifeEventRecord[]> => {
   const response = await fetchWithRetry(
     `${treemichApi}/families/${encodeURIComponent(familyId)}/life-events${lifeEventsIncludeQuery(options?.includeCitations)}`,
-    { cache: "no-store" }
+    { cache: "no-store", signal: options?.signal }
   );
   await ensureOk(response, "Failed to load family life events");
   const json = (await response.json()) as LifeEventListResponse;
@@ -834,9 +875,15 @@ export const deleteFamilyLifeEvent = async (familyId: string, eventId: string): 
   await ensureOk(response, "Failed to delete family life event");
 };
 
-export const getResearchTasks = async (personId?: string): Promise<ResearchTaskRecord[]> => {
+export const getResearchTasks = async (
+  personId?: string,
+  options?: RequestOptions
+): Promise<ResearchTaskRecord[]> => {
   const query = personId ? `?personId=${encodeURIComponent(personId)}` : "";
-  const response = await fetchWithRetry(`${treemichApi}/research/tasks${query}`, { cache: "no-store" });
+  const response = await fetchWithRetry(`${treemichApi}/research/tasks${query}`, {
+    cache: "no-store",
+    signal: options?.signal
+  });
   await ensureOk(response, "Failed to load research tasks");
   const body = (await response.json()) as { tasks: ResearchTaskRecord[] };
   return body.tasks ?? [];

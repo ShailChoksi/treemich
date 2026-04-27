@@ -27,6 +27,23 @@ body {
   gap: 16px;
 }
 
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  transform: translateY(-160%);
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #e0f2fe;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
 .app-shell-fallback-card {
   margin: 1rem;
 }
@@ -82,6 +99,77 @@ body {
 .auth-error {
   margin: 0;
   color: #fecaca;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.toast-viewport {
+  position: absolute;
+  top: 16px;
+  right: calc(var(--workspace-right-width, 360px) + 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 40;
+  max-width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast-message {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  background: rgba(15, 23, 42, 0.95);
+  color: #e0f2fe;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+
+.skeleton-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(51, 65, 85, 0.75), rgba(71, 85, 105, 0.95), rgba(51, 65, 85, 0.75));
+  background-size: 220% 100%;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.graph-skeleton {
+  width: min(520px, 72%);
+  height: min(320px, 55%);
+}
+
+.map-skeleton {
+  height: 280px;
+  margin-top: 10px;
+}
+
+.sidebar-skeleton {
+  height: 72px;
+}
+
+.app-shell-skeleton,
+.auth-skeleton {
+  height: 44px;
+}
+
+@keyframes skeleton-pulse {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
 }
 
 .layout,
@@ -1315,6 +1403,62 @@ body {
   letter-spacing: -0.02em;
 }
 
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.confirm-dialog-backdrop:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.confirm-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  width: min(380px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(30, 41, 59, 0.98);
+  border: 1px solid rgba(100, 116, 139, 0.75);
+  border-radius: 14px;
+  padding: 16px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.58);
+}
+
+.confirm-dialog h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.confirm-dialog-submit {
+  min-width: 76px;
+  padding: 8px 12px;
+}
+
 .add-relative-form {
   gap: 10px;
 }
@@ -1534,6 +1678,20 @@ body {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+}
+
+.field-group--full {
+  grid-column: 1 / -1;
+}
+
+.input-error {
+  border-color: #f87171;
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.35);
+}
+
+.citation-row {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  padding-bottom: 0.5rem;
 }
 
 .field-label {
@@ -1818,13 +1976,13 @@ button {
 
 button:not(.icon-action-button):not(.text-link-button):not(.workspace-column-toggle):not(
     .add-relative-backdrop
-  ):not(.workspace-action-button--compact) {
+  ):not(.confirm-dialog-backdrop):not(.workspace-action-button--compact) {
   min-height: 38px;
 }
 
 button:hover:not(:disabled):not(.workspace-column-toggle):not(.add-relative-backdrop):not(
-    .icon-action-button
-  ):not(.text-link-button) {
+    .confirm-dialog-backdrop
+  ):not(.icon-action-button):not(.text-link-button) {
   transform: translateY(-1px);
 }
 
@@ -1848,8 +2006,8 @@ textarea:disabled {
 }
 
 .icon-action-button {
-  width: 34px;
-  height: 34px;
+  min-width: 44px;
+  min-height: 44px;
   display: inline-grid;
   place-items: center;
   padding: 0;
@@ -1919,7 +2077,7 @@ textarea:disabled {
   }
 
   .suggestion-actions .icon-action-button {
-    width: 34px;
+    min-width: 44px;
     flex: 0 0 auto;
   }
 
@@ -2024,6 +2182,8 @@ textarea:disabled {
   .secondary-button,
   .person-detail-section-toggle,
   .add-relative-backdrop,
+  .confirm-dialog-backdrop,
+  .confirm-dialog,
   .add-relative-popup,
   .node-action-btn {
     transition: none;

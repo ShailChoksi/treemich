@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ApiHttpError,
+  computeGraphLayout,
   createFamily,
   createFamilyLifeEvent,
   createResearchTask,
@@ -123,6 +124,44 @@ describe("immichPersonUrl", () => {
     expect(immichPersonUrl("person-abc", undefined)).toBeNull();
     expect(immichPersonUrl("person-abc", null)).toBeNull();
     expect(immichPersonUrl("person-abc", "   ")).toBeNull();
+  });
+});
+
+describe("computeGraphLayout", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("throws ApiHttpError with Zod issue path when the API returns validation details", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          statusCode: 400,
+          error: "Validation Error",
+          issues: [{ path: ["people", 0, "name"], message: "String must contain at least 1 character(s)" }]
+        }),
+        { status: 400, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    await expect(
+      computeGraphLayout({
+        people: [{ id: "p1", name: "x" }],
+        relationships: [],
+        viewMode: "family"
+      })
+    ).rejects.toMatchObject({
+      name: "ApiHttpError",
+      statusCode: 400,
+      message: expect.stringContaining("people.0.name")
+    });
   });
 });
 

@@ -110,7 +110,7 @@ export const DestructiveConfirmDialog = ({
     <>
       <button
         type="button"
-        className="add-relative-backdrop confirm-dialog-backdrop"
+        className="confirm-dialog-backdrop"
         aria-label={cancelLabel}
         onClick={() => {
           if (!busy) {
@@ -121,7 +121,7 @@ export const DestructiveConfirmDialog = ({
       />
       <div
         ref={dialogRef}
-        className="add-relative-popup confirm-dialog"
+        className="confirm-dialog"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -132,7 +132,7 @@ export const DestructiveConfirmDialog = ({
         <p id={descriptionId} className="hint confirm-dialog-description">
           {description}
         </p>
-        <div className="add-relative-actions confirm-dialog-actions">
+        <div className="confirm-dialog-actions">
           <button
             ref={cancelButtonRef}
             type="button"
@@ -144,7 +144,7 @@ export const DestructiveConfirmDialog = ({
           </button>
           <button
             type="button"
-            className="add-relative-submit danger-button"
+            className="confirm-dialog-submit danger-button"
             disabled={busy}
             onClick={() => void onConfirm()}
           >

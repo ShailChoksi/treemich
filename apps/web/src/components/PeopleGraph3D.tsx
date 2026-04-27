@@ -32,6 +32,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { GraphLayerControls } from "./graph/GraphLayerControls";
 import { useGraphKeyboardNavigation } from "./graph/useGraphKeyboardNavigation";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
+import { RELATIONSHIP_TYPES } from "../lib/relationshipConstants";
 import type { GraphUiSnapshot } from "../lib/workspaceUiState";
 
 type Props = {
@@ -45,6 +46,7 @@ type Props = {
   isLoading: boolean;
   isSavingRelationship: boolean;
   loadError: string | null;
+  layoutError?: string | null;
   focusPersonRequest: string | null;
   cameraFocusPersonRequest: string | null;
   defaultToNoRelationshipsGraphState: boolean;
@@ -61,12 +63,16 @@ type Props = {
     relationshipType: RelationshipType
   ) => Promise<void>;
   onPreferencesChange: (prefs: Partial<UserPreferences>) => void;
+  onRetryGraphLoad?: () => void;
+  onRetryLayout?: () => void;
   /** When false, global graph camera/arrow shortcuts do not run (e.g. other workspaces). */
   graphKeyboardEnabled?: boolean;
   /** Bumps when workspace layout resizes; triggers canvas/GL refresh without window.resize. */
   layoutResizeSignal?: number;
   initialUiState?: GraphUiSnapshot;
   onUiStateChange?: (next: GraphUiSnapshot) => void;
+  /** When false, the graph canvas is hidden but still mounted (preserving WebGL context and state). */
+  isVisible?: boolean;
 };
 
 const DEFAULT_RENDER_LIMIT = 120;
@@ -111,6 +117,7 @@ const PeopleGraph3DComponent = ({
   isLoading,
   isSavingRelationship,
   loadError,
+  layoutError = null,
   focusPersonRequest,
   cameraFocusPersonRequest,
   defaultToNoRelationshipsGraphState,
@@ -123,15 +130,19 @@ const PeopleGraph3DComponent = ({
   onSelectedPersonChange,
   onCreateRelationship,
   onPreferencesChange,
+  onRetryGraphLoad,
+  onRetryLayout,
   graphKeyboardEnabled = true,
   layoutResizeSignal = 0,
   initialUiState,
-  onUiStateChange
+  onUiStateChange,
+  isVisible = true
 }: Props) => {
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
   const [focusPersonId, setFocusPersonId] = useState<string | null>(initialUiState?.focusPersonId ?? null);
   const [pinnedPersonId, setPinnedPersonId] = useState<string | null>(initialUiState?.pinnedPersonId ?? null);
   const [addRelativeIntent, setAddRelativeIntent] = useState<AddRelativeIntent | null>(null);
+  const [thumbnailProgress, setThumbnailProgress] = useState<{ loaded: number; total: number } | null>(null);
   const [graphViewPreferences, setGraphViewPreferences] = useState<GraphViewPreferencesState>(() =>
     resolveInitialGraphViewPreferences(
       savedPreferences ?? null,
@@ -442,11 +453,11 @@ const PeopleGraph3DComponent = ({
 
     let nextRelationshipType: RelationshipType;
     if (addRelativeIntent.slot === "parent") {
-      nextRelationshipType = "CHILD_OF";
+      nextRelationshipType = RELATIONSHIP_TYPES.childOf;
     } else if (addRelativeIntent.slot === "child") {
-      nextRelationshipType = "PARENT_OF";
+      nextRelationshipType = RELATIONSHIP_TYPES.parentOf;
     } else {
-      nextRelationshipType = relationshipType ?? "SIBLING_OF";
+      nextRelationshipType = relationshipType ?? RELATIONSHIP_TYPES.siblingOf;
     }
 
     await onCreateRelationship(addRelativeIntent.selectedPersonId, match.id, nextRelationshipType);
@@ -459,6 +470,10 @@ const PeopleGraph3DComponent = ({
     setSearchFeedback(null);
     clearHighlights();
   };
+
+  const handleThumbnailProgress = useCallback((progress: { loaded: number; total: number }) => {
+    setThumbnailProgress(progress);
+  }, []);
 
   const handleToggleFilter = (filter: GraphFilter) => {
     setGraphViewPreferences((current) => {
@@ -494,10 +509,16 @@ const PeopleGraph3DComponent = ({
     () => people.map((p) => ({ id: p.id, name: getPersonDisplayLabel(p) })),
     [people]
   );
+  const graphSelectionSummary = selectedPerson
+    ? `Selected person: ${getPersonDisplayLabel(selectedPerson)}. ${renderVisiblePeople.length} people and ${renderVisibleRelationshipLines.length} relationships are currently visible in the graph.`
+    : `No person selected. ${renderVisiblePeople.length} people and ${renderVisibleRelationshipLines.length} relationships are currently visible in the graph.`;
 
   return (
     <section className="card graph-card">
       <div className="graph-surface">
+        <p className="sr-only" aria-live="polite">
+          {graphSelectionSummary}
+        </p>
         <GraphSearchOverlay
           searchTerm={searchTerm}
           onSearchTermChange={setSearchTerm}
@@ -522,7 +543,10 @@ const PeopleGraph3DComponent = ({
         <GraphSurfaceOverlays
           isLoading={isLoading}
           loadError={loadError}
+          layoutError={layoutError}
           isLayoutWorkerPending={isWorkerLayoutPending}
+          onRetryGraphLoad={onRetryGraphLoad}
+          onRetryLayout={onRetryLayout}
         />
         {addRelativeIntent && selectedPerson ? (
           <AddRelativePopup
@@ -564,10 +588,12 @@ const PeopleGraph3DComponent = ({
             cameraRef={cameraRef}
             orbitControlsRef={orbitControlsRef}
             lastCameraSampleRef={lastCameraSampleRef}
+            isVisible={isVisible}
+            onThumbnailProgress={handleThumbnailProgress}
           />
         </ErrorBoundary>
       </div>
-      <GraphFooterStatus status={status} busy={isSavingRelationship} />
+      <GraphFooterStatus status={status} busy={isSavingRelationship} thumbnailProgress={thumbnailProgress} />
     </section>
   );
 };

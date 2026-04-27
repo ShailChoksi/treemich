@@ -15,7 +15,7 @@ import type { RelationshipKind } from "./relationshipStyles";
 import { AnimatedNodes } from "./scene/AnimatedNodes";
 import { createWebGlRenderer } from "./scene/createWebGlRenderer";
 import { useOrbitPositionSync } from "./scene/useOrbitPositionSync";
-import { useThumbnailLoader } from "./useThumbnailLoader";
+import { InvalidateOnThumbnailUpdate, useThumbnailLoader } from "./useThumbnailLoader";
 
 type VisibleLine = {
   key: string;
@@ -61,6 +61,8 @@ type Props = {
   prioritizedNodeIds: Set<string>;
   renderVisibilityBucketByPersonId: Map<string, GraphVisibilityBucket>;
   renderNearPersonIds: string[];
+  /** When false, the graph is not visible (e.g. another workspace active) */
+  isVisible: boolean;
   setHoveredPersonId: (updater: (current: string | null) => string | null) => void;
   onNodeClick: (personId: string) => void;
   onNodeActionOpen: (slot: AddRelativeSlot) => void;
@@ -70,6 +72,8 @@ type Props = {
   cameraRef: React.MutableRefObject<PerspectiveCamera | null>;
   orbitControlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
   lastCameraSampleRef: React.MutableRefObject<Vector3>;
+  /** Reports thumbnail loading progress (loaded/total). */
+  onThumbnailProgress?: (progress: { loaded: number; total: number }) => void;
 };
 
 export const GraphCanvasScene = ({
@@ -85,6 +89,7 @@ export const GraphCanvasScene = ({
   prioritizedNodeIds,
   renderVisibilityBucketByPersonId,
   renderNearPersonIds,
+  isVisible,
   setHoveredPersonId,
   onNodeClick,
   onNodeActionOpen,
@@ -93,7 +98,8 @@ export const GraphCanvasScene = ({
   initialCameraState = null,
   cameraRef,
   orbitControlsRef,
-  lastCameraSampleRef
+  lastCameraSampleRef,
+  onThumbnailProgress
 }: Props) => {
   const hasRestoredCameraRef = useRef(false);
   const handleNodeHover = useCallback(
@@ -133,13 +139,19 @@ export const GraphCanvasScene = ({
     lastCameraSampleRef,
     onSampledPosition: handleCameraSample
   });
-  const { thumbnailNodeIds, thumbnailTextures } = useThumbnailLoader({
+  const { thumbnailNodeIds, thumbnailTextures, thumbnailProgress } = useThumbnailLoader({
     peopleIds,
     prioritizedNodeIds,
     renderNearPersonIds,
     displayVisiblePeople,
-    cameraSampleRef: lastCameraSampleRef
+    cameraSampleRef: lastCameraSampleRef,
+    visible: isVisible
   });
+
+  // Report thumbnail progress to parent (PeopleGraph3D) for the progress indicator.
+  useEffect(() => {
+    onThumbnailProgress?.(thumbnailProgress);
+  }, [thumbnailProgress, onThumbnailProgress]);
 
   useEffect(() => {
     if (hasRestoredCameraRef.current || !initialCameraState || !cameraRef.current) {
@@ -159,14 +171,18 @@ export const GraphCanvasScene = ({
 
   return (
     <Canvas
+      role="img"
+      aria-label="Family relationship graph"
       camera={{ position: initialCameraState?.position ?? [0, 2, 18], fov: 55 }}
       dpr={[1, 1.5]}
       frameloop="demand"
       onPointerMissed={onCanvasMissed}
       onCreated={handleCanvasCreated}
       gl={createWebGlRenderer}
+      style={{ visibility: isVisible ? "visible" : "hidden" }}
     >
       <CanvasResizeNudge layoutResizeSignal={layoutResizeSignal} />
+      <InvalidateOnThumbnailUpdate thumbnailTextures={thumbnailTextures} visible={isVisible} />
       <ambientLight intensity={1.1} />
       <pointLight position={[15, 15, 10]} intensity={1.2} />
       <OrbitControls

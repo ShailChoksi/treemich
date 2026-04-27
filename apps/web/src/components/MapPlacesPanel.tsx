@@ -3,7 +3,7 @@
  */
 
 import type { PlacesMapPoint } from "../lib/api";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { latLngBounds } from "leaflet";
 import {
@@ -41,6 +41,7 @@ type Props = {
   /** When set, clusters that include this Immich person id (via map `samplePersonIds`) render green. */
   selectedPersonId?: string | null;
   error?: string | null;
+  onRetry?: () => void;
   /** Bumps when shell layout resizes; triggers Leaflet `invalidateSize` without window.resize. */
   layoutResizeSignal?: number;
   initialUiState?: MapUiSnapshot;
@@ -131,6 +132,7 @@ export const MapPlacesPanel = ({
   getPersonLabel,
   selectedPersonId = null,
   error,
+  onRetry,
   layoutResizeSignal = 0,
   initialUiState,
   onUiStateChange
@@ -188,20 +190,20 @@ export const MapPlacesPanel = ({
     });
   }, [baseClusterCellDegrees, mapCenter, mapZoom, minEvents, onUiStateChange, search]);
 
-  const handleSearchChange = (next: string) => {
+  const handleSearchChange = useCallback((next: string) => {
     setSearch(next);
     setAutoFitEnabled(true);
-  };
+  }, []);
 
-  const handleMinEventsChange = (next: number) => {
+  const handleMinEventsChange = useCallback((next: number) => {
     setMinEvents(next);
     setAutoFitEnabled(true);
-  };
+  }, []);
 
-  const handleBaseClusterCellDegreesChange = (next: number) => {
+  const handleBaseClusterCellDegreesChange = useCallback((next: number) => {
     setBaseClusterCellDegrees(next);
     setAutoFitEnabled(true);
-  };
+  }, []);
 
   if (!mapUiEnabled) {
     return (
@@ -216,6 +218,11 @@ export const MapPlacesPanel = ({
       <section className="card">
         <h3>Map</h3>
         <p className="hint person-names-error">{error}</p>
+        {onRetry ? (
+          <button type="button" className="secondary-button" onClick={onRetry}>
+            Retry map load
+          </button>
+        ) : null}
       </section>
     );
   }
@@ -223,7 +230,9 @@ export const MapPlacesPanel = ({
     return (
       <section className="card">
         <h3>Map</h3>
-        <p className="hint">Loading geocoded places…</p>
+        <div className="skeleton-card map-skeleton" aria-label="Loading geocoded places">
+          <span className="sr-only">Loading geocoded places</span>
+        </div>
       </section>
     );
   }

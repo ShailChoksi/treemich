@@ -602,4 +602,38 @@ describe("MapPlacesPanel", () => {
     );
     root.unmount();
   });
+
+  it("renders an explicit retry action for map load failures", async () => {
+    const onRetry = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(MapPlacesPanel, {
+          mapUiEnabled: true,
+          places: null,
+          includeLiving: true,
+          onIncludeLivingChange: vi.fn(),
+          onFocusPerson: vi.fn(),
+          getPersonLabel: (id: string) => id,
+          error: "Map feed failed",
+          onRetry
+        })
+      );
+    });
+
+    const retryButton = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Retry map load")
+    );
+    expect(container.textContent).toContain("Map feed failed");
+    expect(retryButton).toBeTruthy();
+
+    await act(async () => {
+      retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    root.unmount();
+  });
 });
