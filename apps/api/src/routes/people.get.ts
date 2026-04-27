@@ -4,6 +4,7 @@
 
 import type { FastifyInstance } from "fastify";
 import type { PersonName } from "@prisma/client";
+import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";
 import { effectiveBirthIsoFromLifeEvent } from "../lifeEvents/service.js";
 import { resolveDisplayNameForPerson } from "../personNames/service.js";
@@ -16,10 +17,23 @@ type ProfileRow = {
   surname: string | null;
 };
 
+const querySchema = z.object({
+  q: z.string().trim().min(1).optional()
+});
+
 export const registerPeopleGetRoute = (app: FastifyInstance) => {
   app.get("/people", async (request) => {
     const auth = getRequiredAuth(request);
-    const people = await (await getImmichClientForRequest(request)).listPeople();
+    const { q } = querySchema.parse(request.query);
+    const immichClient = await getImmichClientForRequest(request);
+    const people =
+      q && "findPeopleByName" in immichClient && typeof immichClient.findPeopleByName === "function"
+        ? await immichClient.findPeopleByName(q)
+        : q
+          ? (await immichClient.listPeople()).filter((person) =>
+              person.name.toLowerCase().includes(q.toLowerCase())
+            )
+          : await immichClient.listPeople();
     const personIds = people.map((person) => person.id);
     const [profilesById, connectedIds] = await Promise.all([
       app.services.relationshipService.getProfilesForPersonIds(auth.user.id, personIds),

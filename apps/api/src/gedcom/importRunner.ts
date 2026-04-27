@@ -9,7 +9,7 @@ import type { CreateFamilyBody, CreateFamilyLifeEventBody, CreateLifeEventBody }
 import { prisma } from "../db/client.js";
 import type { AppServices } from "../services.js";
 import { HttpConflictError } from "../lifeEvents/errors.js";
-import { maxGedcomImportLines } from "../config/env.js";
+import { env, maxGedcomImportLines } from "../config/env.js";
 import { parseGedcomDate } from "./gedcomDateParse.js";
 import {
   chunkByLevel1,
@@ -409,9 +409,30 @@ const mergeExternalIds = (existing: unknown, patch: Record<string, unknown>): Re
   return { ...base, ...patch };
 };
 
+type JobLogger = {
+  error: (payload: unknown, message?: string) => void;
+};
+
+async function claimGedcomImportJob(jobId: string) {
+  const staleBefore = new Date(Date.now() - env.TREEMICH_GEDCOM_JOB_STALE_AFTER_MS);
+  const claimed = await prisma.gedcomImportJob.updateMany({
+    where: {
+      id: jobId,
+      OR: [{ status: "PENDING" }, { status: "RUNNING", startedAt: { lt: staleBefore } }]
+    },
+    data: { status: "RUNNING", startedAt: new Date(), completedAt: null, errorMessage: null }
+  });
+
+  if (claimed.count !== 1) {
+    return null;
+  }
+
+  return prisma.gedcomImportJob.findUnique({ where: { id: jobId } });
+}
+
 export async function processGedcomImportJob(jobId: string, services: AppServices): Promise<void> {
-  const job = await prisma.gedcomImportJob.findFirst({ where: { id: jobId } });
-  if (!job || job.status !== "PENDING") {
+  const job = await claimGedcomImportJob(jobId);
+  if (!job) {
     return;
   }
 
@@ -427,11 +448,6 @@ export async function processGedcomImportJob(jobId: string, services: AppService
   const dryRun = options.dryRun === true;
   const skipAlreadyImportedIndis = options.skipAlreadyImportedIndis === true;
   const allowPartialMatches = options.allowPartialMatches === true;
-
-  await prisma.gedcomImportJob.update({
-    where: { id: jobId },
-    data: { status: "RUNNING", startedAt: new Date() }
-  });
 
   const userMatches = (job.indiMatches ?? {}) as Record<string, string>;
   const { records, lineLog: parseLog } = parseGedcomDocument(job.gedcomUtf8, {
@@ -863,8 +879,8 @@ export async function processGedcomImportJob(jobId: string, services: AppService
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Import failed";
-    await prisma.gedcomImportJob.update({
-      where: { id: jobId },
+    await prisma.gedcomImportJob.updateMany({
+      where: { id: jobId, status: "RUNNING" },
       data: {
         status: "FAILED",
         completedAt: new Date(),
@@ -875,10 +891,10 @@ export async function processGedcomImportJob(jobId: string, services: AppService
   }
 }
 
-export const scheduleGedcomImportJob = (jobId: string, services: AppServices) => {
+export const scheduleGedcomImportJob = (jobId: string, services: AppServices, logger?: JobLogger) => {
   setImmediate(() => {
     void processGedcomImportJob(jobId, services).catch((err) => {
-      console.error("GEDCOM import job failed", jobId, err);
+      logger?.error({ err, jobId }, "GEDCOM import job failed");
     });
   });
 };

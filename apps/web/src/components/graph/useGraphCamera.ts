@@ -5,22 +5,46 @@
 import { useEffect } from "react";
 
 type UseGraphCameraOptions = {
+  enabled: boolean;
   frameAllNodes: () => void;
   focusActiveNode: () => void;
   topDownView: () => void;
 };
 
-export const useGraphCamera = ({ frameAllNodes, focusActiveNode, topDownView }: UseGraphCameraOptions) => {
+const isGraphBackgroundTarget = (target: EventTarget | null) => {
+  const el = target as HTMLElement | null;
+  if (!el) {
+    return true;
+  }
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable) {
+    return false;
+  }
+  const role = el.getAttribute("role");
+  if (role === "combobox" || role === "listbox" || role === "searchbox" || role === "textbox") {
+    return false;
+  }
+  return true;
+};
+
+export const useGraphCamera = ({
+  enabled,
+  frameAllNodes,
+  focusActiveNode,
+  topDownView
+}: UseGraphCameraOptions) => {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (!enabled) {
+        return;
+      }
+      if (event.defaultPrevented) {
+        return;
+      }
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
         return;
       }
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
-      ) {
+      if (!isGraphBackgroundTarget(event.target)) {
         return;
       }
       if (event.key === "f" || event.key === "F") {
@@ -36,5 +60,5 @@ export const useGraphCamera = ({ frameAllNodes, focusActiveNode, topDownView }: 
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusActiveNode, frameAllNodes, topDownView]);
+  }, [enabled, focusActiveNode, frameAllNodes, topDownView]);
 };

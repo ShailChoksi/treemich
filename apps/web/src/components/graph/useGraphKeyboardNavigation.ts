@@ -38,11 +38,21 @@ type NextTraversalOptions = {
   previousCycle: TraversalCycleState | null;
 };
 
-const isTypingTarget = (target: EventTarget | null) => {
+/** True when focus is in a control where graph navigation/camera hotkeys should not run. Exported for tests. */
+export const isGraphKeyboardSuppressedTarget = (target: EventTarget | null) => {
   const element = target as HTMLElement | null;
-  return Boolean(
-    element && (element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.isContentEditable)
-  );
+  if (!element) {
+    return false;
+  }
+  const tag = element.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || element.isContentEditable) {
+    return true;
+  }
+  const role = element.getAttribute("role");
+  if (role === "combobox" || role === "listbox" || role === "searchbox" || role === "textbox") {
+    return true;
+  }
+  return false;
 };
 
 const getPersonName = (peopleById: Map<string, ImmichPerson>, personId: string) =>
@@ -210,7 +220,10 @@ export const useGraphKeyboardNavigation = ({
       if (!enabled || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
         return;
       }
-      if (isTypingTarget(event.target)) {
+      if (event.defaultPrevented) {
+        return;
+      }
+      if (isGraphKeyboardSuppressedTarget(event.target)) {
         return;
       }
 

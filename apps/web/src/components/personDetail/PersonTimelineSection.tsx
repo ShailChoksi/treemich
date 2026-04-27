@@ -15,7 +15,11 @@ export const PersonTimelineSection = ({ timeline }: Props) => {
   const [search, setSearch] = useState("");
 
   if (timeline === undefined) {
-    return <p className="hint">Loading timeline…</p>;
+    return (
+      <div className="skeleton-card sidebar-skeleton" aria-label="Loading timeline">
+        <span className="sr-only">Loading timeline…</span>
+      </div>
+    );
   }
   if (timeline.length === 0) {
     return <p className="hint">No dated life events yet.</p>;

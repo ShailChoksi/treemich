@@ -15,6 +15,8 @@ import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
 
 const CACHE_MAX_ENTRIES = 32;
+const MAX_GRAPH_LAYOUT_PEOPLE = 5_000;
+const MAX_GRAPH_LAYOUT_RELATIONSHIPS = 10_000;
 const ALGORITHM_VERSION = "server-hybrid-v1";
 const TOPOLOGY_TYPES = new Set<RelationshipType>([
   relationshipTypeSchema.enum.PARENT_OF,
@@ -236,9 +238,19 @@ const computePositionsByPersonId = (request: GraphLayoutRequest) => {
 };
 
 export const registerGraphLayoutPostRoute = (app: FastifyInstance) => {
-  app.post("/graph/layout", async (request) => {
+  app.post("/graph/layout", async (request, reply) => {
     const auth = getRequiredAuth(request);
     const body = graphLayoutRequestSchema.parse(request.body);
+    if (
+      body.people.length > MAX_GRAPH_LAYOUT_PEOPLE ||
+      body.relationships.length > MAX_GRAPH_LAYOUT_RELATIONSHIPS
+    ) {
+      return reply.code(413).send({
+        statusCode: 413,
+        error: "Graph Too Large",
+        message: `Graph layout supports up to ${MAX_GRAPH_LAYOUT_PEOPLE} people and ${MAX_GRAPH_LAYOUT_RELATIONSHIPS} relationships per request.`
+      });
+    }
     const layoutRevision = buildGraphLayoutRevision(body);
     const cacheKey = `${auth.user.id}:${layoutRevision}:${ALGORITHM_VERSION}`;
     const cacheEntry = layoutCache.get(cacheKey);

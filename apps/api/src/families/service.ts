@@ -63,16 +63,29 @@ export class FamilyService {
       await this.relationshipService.upsertRelationship(userId, lo, hi, "SPOUSE_OF", { db: tx });
     }
 
-    for (const child of row.children) {
-      for (const parentId of parents) {
-        await this.relationshipService.upsertRelationship(
+    const relationshipRows = row.children.flatMap((child) =>
+      parents.flatMap((parentId) => [
+        {
           userId,
-          parentId,
-          child.childImmichPersonId,
-          "PARENT_OF",
-          { db: tx, familyId }
-        );
-      }
+          fromPersonId: parentId,
+          toPersonId: child.childImmichPersonId,
+          type: "PARENT_OF" as const,
+          familyId
+        },
+        {
+          userId,
+          fromPersonId: child.childImmichPersonId,
+          toPersonId: parentId,
+          type: "CHILD_OF" as const,
+          familyId
+        }
+      ])
+    );
+    if (relationshipRows.length > 0) {
+      await tx.relationship.createMany({
+        data: relationshipRows,
+        skipDuplicates: true
+      });
     }
   }
 

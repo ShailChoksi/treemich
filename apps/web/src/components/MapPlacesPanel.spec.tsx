@@ -16,8 +16,10 @@ const leafletMocks = vi.hoisted(() => {
   const fitBounds = vi.fn();
   const map = {
     getZoom: vi.fn(() => 2),
+    getCenter: vi.fn(() => ({ lat: 20, lng: 0 })),
     getBounds: vi.fn(() => createBounds(-90, -180, 90, 180)),
-    fitBounds
+    fitBounds,
+    invalidateSize: vi.fn()
   };
   const zoomHandlers: Array<() => void> = [];
   const moveHandlers: Array<() => void> = [];
@@ -25,7 +27,22 @@ const leafletMocks = vi.hoisted(() => {
 });
 
 vi.mock("react-leaflet", () => ({
-  MapContainer: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
+  MapContainer: ({
+    children,
+    className,
+    center,
+    zoom
+  }: {
+    children: ReactNode;
+    className?: string;
+    center?: [number, number];
+    zoom?: number;
+  }) =>
+    createElement(
+      "div",
+      { className, "data-center": center?.join(","), "data-zoom": String(zoom ?? "") },
+      children
+    ),
   TileLayer: () => createElement("div"),
   CircleMarker: ({ children, pathOptions }: { children: ReactNode; pathOptions?: { fillColor?: string } }) =>
     createElement("div", { "data-marker-fill": pathOptions?.fillColor ?? "" }, children),
@@ -43,22 +60,14 @@ vi.mock("react-leaflet", () => ({
 }));
 
 describe("MapPlacesPanel", () => {
-  const expandMap = async (container: HTMLDivElement) => {
-    const toggle = [...container.querySelectorAll("button")].find((node) =>
-      node.textContent?.includes("Show map")
-    ) as HTMLButtonElement | undefined;
-    expect(toggle).toBeDefined();
-    await act(async () => {
-      toggle?.click();
-    });
-  };
-
   afterEach(() => {
     document.body.innerHTML = "";
     vi.restoreAllMocks();
     leafletMocks.fitBounds.mockClear();
     leafletMocks.map.getZoom.mockReset();
     leafletMocks.map.getZoom.mockReturnValue(2);
+    leafletMocks.map.getCenter.mockReset();
+    leafletMocks.map.getCenter.mockReturnValue({ lat: 20, lng: 0 });
     leafletMocks.map.getBounds.mockReset();
     leafletMocks.map.getBounds.mockReturnValue(leafletMocks.createBounds(-90, -180, 90, 180));
     leafletMocks.zoomHandlers.splice(0, leafletMocks.zoomHandlers.length);
@@ -135,7 +144,7 @@ describe("MapPlacesPanel", () => {
     root.unmount();
   });
 
-  it("starts collapsed to keep sidebar compact", async () => {
+  it("shows the map canvas when geocoded places are available", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -162,12 +171,12 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    expect(container.textContent).toContain("Map is collapsed");
-    expect(container.textContent).toContain("Show map");
+    expect(container.querySelector(".map-places-panel")).toBeTruthy();
+    expect(container.querySelector(".map-places-canvas")).toBeTruthy();
     root.unmount();
   });
 
-  it("renders expanded content inside the map popout container", async () => {
+  it("renders the map in the main panel container", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -194,13 +203,7 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    const toggle = [...container.querySelectorAll("button")].find((node) =>
-      node.textContent?.includes("Show map")
-    ) as HTMLButtonElement | undefined;
-    await act(async () => {
-      toggle?.click();
-    });
-    expect(container.querySelector(".map-places-popout")).toBeTruthy();
+    expect(container.querySelector(".map-places-canvas")).toBeTruthy();
     root.unmount();
   });
 
@@ -232,7 +235,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     await act(async () => {
       checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -279,7 +281,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     const fills = [...container.querySelectorAll("[data-marker-fill]")].map((el) =>
       el.getAttribute("data-marker-fill")
     );
@@ -317,7 +318,6 @@ describe("MapPlacesPanel", () => {
     await act(async () => {
       root.render(createElement(Harness));
     });
-    await expandMap(container);
     let checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
     expect(checkbox).toBeTruthy();
     await act(async () => {
@@ -358,7 +358,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     const focusButtons = [...container.querySelectorAll("button")].filter((node) =>
       node.textContent?.includes("Focus Person")
     );
@@ -398,7 +397,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     expect(leafletMocks.fitBounds.mock.calls.length).toBe(0);
     await act(async () => {
       vi.advanceTimersByTime(200);
@@ -435,7 +433,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     expect(container.textContent).toContain("at zoom 2.0");
     leafletMocks.map.getZoom.mockReturnValue(8);
     await act(async () => {
@@ -485,7 +482,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
     expect(container.textContent).toContain("2 in view");
 
     leafletMocks.map.getBounds.mockReturnValue(leafletMocks.createBounds(40, -10, 55, 10));
@@ -526,8 +522,6 @@ describe("MapPlacesPanel", () => {
         })
       );
     });
-    await expandMap(container);
-
     await act(async () => {
       vi.advanceTimersByTime(220);
     });
@@ -542,6 +536,104 @@ describe("MapPlacesPanel", () => {
       vi.advanceTimersByTime(220);
     });
     expect(leafletMocks.fitBounds).toHaveBeenCalledTimes(1);
+    root.unmount();
+  });
+
+  it("restores filter and viewport state from the initial snapshot", async () => {
+    vi.useFakeTimers();
+    const onUiStateChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    leafletMocks.map.getCenter.mockReturnValue({ lat: 42.36, lng: -71.05 });
+    leafletMocks.map.getZoom.mockReturnValue(8);
+    await act(async () => {
+      root.render(
+        createElement(MapPlacesPanel, {
+          mapUiEnabled: true,
+          places: [
+            {
+              id: "pl1",
+              name: "Boston",
+              latitude: 42.3601,
+              longitude: -71.0589,
+              eventCount: 4,
+              personCount: 1,
+              lastEventYear: 1980,
+              samplePersonIds: ["p1"]
+            }
+          ],
+          includeLiving: true,
+          onIncludeLivingChange: vi.fn(),
+          onFocusPerson: vi.fn(),
+          getPersonLabel: (id: string) => id,
+          initialUiState: {
+            schemaVersion: 1,
+            search: "bos",
+            minEvents: 3,
+            baseClusterCellDegrees: 2.4,
+            center: [42.36, -71.05],
+            zoom: 8
+          },
+          onUiStateChange
+        })
+      );
+    });
+
+    const canvas = container.querySelector(".map-places-canvas");
+    expect((container.querySelector(".map-places-search") as HTMLInputElement | null)?.value).toBe("bos");
+    expect(container.textContent).toContain("Min events: 3");
+    expect(container.textContent).toContain("Cluster base radius: 2.4");
+    expect(canvas?.getAttribute("data-center")).toBe("42.36,-71.05");
+    expect(canvas?.getAttribute("data-zoom")).toBe("8");
+
+    await act(async () => {
+      vi.advanceTimersByTime(220);
+    });
+    expect(leafletMocks.fitBounds).not.toHaveBeenCalled();
+    expect(onUiStateChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: "bos",
+        minEvents: 3,
+        baseClusterCellDegrees: 2.4,
+        center: expect.any(Array),
+        zoom: expect.any(Number)
+      })
+    );
+    root.unmount();
+  });
+
+  it("renders an explicit retry action for map load failures", async () => {
+    const onRetry = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(MapPlacesPanel, {
+          mapUiEnabled: true,
+          places: null,
+          includeLiving: true,
+          onIncludeLivingChange: vi.fn(),
+          onFocusPerson: vi.fn(),
+          getPersonLabel: (id: string) => id,
+          error: "Map feed failed",
+          onRetry
+        })
+      );
+    });
+
+    const retryButton = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Retry map load")
+    );
+    expect(container.textContent).toContain("Map feed failed");
+    expect(retryButton).toBeTruthy();
+
+    await act(async () => {
+      retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onRetry).toHaveBeenCalledTimes(1);
     root.unmount();
   });
 });

@@ -49,7 +49,11 @@ export const ResearchTasksSection = ({ personId, tasks, disabled, onCreate, onUp
   };
 
   if (tasks === undefined) {
-    return <p className="hint">Loading research tasks…</p>;
+    return (
+      <div className="skeleton-card sidebar-skeleton" aria-label="Loading research tasks">
+        <span className="sr-only">Loading research tasks…</span>
+      </div>
+    );
   }
 
   return (

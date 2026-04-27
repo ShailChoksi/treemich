@@ -109,7 +109,11 @@ export const LifeEventsSection = ({
   };
 
   if (personLifeEvents === undefined) {
-    return <p className="hint">Loading life events…</p>;
+    return (
+      <div className="skeleton-card sidebar-skeleton" aria-label="Loading life events">
+        <span className="sr-only">Loading life events…</span>
+      </div>
+    );
   }
 
   return (

@@ -104,7 +104,7 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
           lineLog: preview.lineLog.slice(0, maxGedcomImportLineLogEntries())
         }
       });
-      scheduleGedcomImportJob(job.id, app.services);
+      scheduleGedcomImportJob(job.id, app.services, app.log);
       return {
         id: job.id,
         status: job.status,

@@ -55,7 +55,7 @@ describe("export GEDCOM job routes", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(scheduleGedcomExportJobMock).toHaveBeenCalledWith("job-1");
+    expect(scheduleGedcomExportJobMock).toHaveBeenCalledWith("job-1", expect.anything());
     const body = JSON.parse(res.body) as { id: string; status: string };
     expect(body.id).toBe("job-1");
     expect(body.status).toBe("PENDING");

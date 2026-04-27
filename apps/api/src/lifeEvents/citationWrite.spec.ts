@@ -6,19 +6,23 @@ const buildTx = () => {
   const citationDeleteMany = vi.fn().mockResolvedValue({ count: 0 });
   const citationCreate = vi.fn().mockResolvedValue({});
   const sourceFindFirst = vi.fn();
+  const sourceFindMany = vi.fn().mockResolvedValue([]);
   const repositoryFindFirst = vi.fn();
+  const repositoryFindMany = vi.fn().mockResolvedValue([]);
   const repositoryCreate = vi.fn();
   const sourceCreate = vi.fn();
 
   return {
     citation: { deleteMany: citationDeleteMany, create: citationCreate },
-    source: { findFirst: sourceFindFirst, create: sourceCreate },
-    repository: { findFirst: repositoryFindFirst, create: repositoryCreate },
+    source: { findFirst: sourceFindFirst, findMany: sourceFindMany, create: sourceCreate },
+    repository: { findFirst: repositoryFindFirst, findMany: repositoryFindMany, create: repositoryCreate },
     _mocks: {
       citationDeleteMany,
       citationCreate,
       sourceFindFirst,
+      sourceFindMany,
       repositoryFindFirst,
+      repositoryFindMany,
       repositoryCreate,
       sourceCreate
     }
@@ -34,7 +38,7 @@ describe("replaceLifeEventCitations", () => {
 
   it("creates citation rows for an existing sourceId", async () => {
     const tx = buildTx();
-    tx.source.findFirst.mockResolvedValueOnce({ id: "src-99", userId: "user-1" });
+    tx.source.findMany.mockResolvedValueOnce([{ id: "src-99", userId: "user-1" }]);
 
     await replaceLifeEventCitations(tx as never, "user-1", "le-1", [
       {
@@ -61,11 +65,18 @@ describe("replaceLifeEventCitations", () => {
       }
     });
     expect(tx._mocks.sourceCreate).not.toHaveBeenCalled();
+    expect(tx._mocks.sourceFindMany).toHaveBeenCalledWith({
+      where: {
+        userId: "user-1",
+        id: { in: ["src-99"] }
+      },
+      select: { id: true }
+    });
   });
 
   it("throws when sourceId is unknown for this user", async () => {
     const tx = buildTx();
-    tx.source.findFirst.mockResolvedValueOnce(null);
+    tx.source.findMany.mockResolvedValueOnce([]);
 
     await expect(
       replaceLifeEventCitations(tx as never, "user-1", "le-1", [
@@ -78,7 +89,7 @@ describe("replaceLifeEventCitations", () => {
 
   it("creates repository+source+citation for inline citation", async () => {
     const tx = buildTx();
-    tx.repository.findFirst.mockResolvedValueOnce(null);
+    tx.repository.findMany.mockResolvedValueOnce([]);
     tx.repository.create.mockResolvedValueOnce({ id: "repo-1", userId: "user-1", name: "NARA" });
     tx.source.create.mockResolvedValueOnce({ id: "src-new", userId: "user-1" });
 
@@ -122,7 +133,7 @@ describe("replaceLifeEventCitations", () => {
 
   it("reuses existing repository by name when present", async () => {
     const tx = buildTx();
-    tx.repository.findFirst.mockResolvedValueOnce({ id: "repo-existing", name: "NARA" });
+    tx.repository.findMany.mockResolvedValueOnce([{ id: "repo-existing", name: "NARA" }]);
     tx.source.create.mockResolvedValueOnce({ id: "src-2" });
 
     await replaceLifeEventCitations(tx as never, "user-1", "le-3", [

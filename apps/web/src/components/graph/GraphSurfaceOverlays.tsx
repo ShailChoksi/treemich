@@ -5,20 +5,49 @@
 type Props = {
   isLoading: boolean;
   loadError: string | null;
+  layoutError?: string | null;
   isLayoutWorkerPending?: boolean;
+  onRetryGraphLoad?: () => void;
+  onRetryLayout?: () => void;
 };
 
-export const GraphSurfaceOverlays = ({ isLoading, loadError, isLayoutWorkerPending }: Props) => {
+export const GraphSurfaceOverlays = ({
+  isLoading,
+  loadError,
+  layoutError,
+  isLayoutWorkerPending,
+  onRetryGraphLoad,
+  onRetryLayout
+}: Props) => {
   return (
     <>
       {isLoading ? (
         <div className="graph-overlay">
-          <p>Loading family graph...</p>
+          <div className="skeleton-card graph-skeleton" aria-label="Loading family graph" />
         </div>
       ) : null}
       {loadError ? (
         <div className="graph-overlay graph-overlay-error">
           <p>Failed to load graph: {loadError}</p>
+          {onRetryGraphLoad ? (
+            <button type="button" className="secondary-button" onClick={onRetryGraphLoad}>
+              Retry graph load
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {!loadError && layoutError ? (
+        <div className="graph-layout-error-banner" role="status" aria-live="polite">
+          <span>{layoutError}</span>
+          {onRetryLayout ? (
+            <button
+              type="button"
+              className="secondary-button workspace-action-button--compact"
+              onClick={onRetryLayout}
+            >
+              Retry layout
+            </button>
+          ) : null}
         </div>
       ) : null}
       {isLayoutWorkerPending ? (

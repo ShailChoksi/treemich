@@ -4,6 +4,7 @@
  */
 
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyReply } from "fastify";
 import { ZodError } from "zod";
@@ -88,14 +89,14 @@ const sendAuthError = (reply: FastifyReply, error: TreemichAuthError | ImmichAut
   });
 
 export const buildApp = (options: BuildAppOptions = {}) => {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, trustProxy: env.TREEMICH_TRUST_PROXY });
   const services = options.services ?? buildServices();
 
   registerServices(app, services);
   app.decorateRequest("auth", null);
 
   app.register(cors, {
-    origin: env.NODE_ENV === "production" ? (env.WEB_ORIGIN ?? false) : true,
+    origin: env.NODE_ENV === "production" ? env.WEB_ORIGIN : true,
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   });
@@ -103,11 +104,22 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     max: env.RATE_LIMIT_MAX,
     timeWindow: env.RATE_LIMIT_TIME_WINDOW_MS
   });
+  app.register(helmet, {
+    global: true,
+    contentSecurityPolicy: false
+  });
+
+  if (env.NODE_ENV === "production" && !env.TREEMICH_TRUST_PROXY) {
+    app.log.warn(
+      "TREEMICH_TRUST_PROXY=false in production; verify reverse-proxy configuration for correct client IP and secure-cookie behavior"
+    );
+  }
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.routeOptions.url;
     if (
       routePath === "/health" ||
+      routePath === "/ready" ||
       routePath === "/auth/login" ||
       routePath === "/auth/me" ||
       routePath === "/auth/logout" ||
@@ -126,8 +138,12 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     }
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
+      app.log.warn(
+        { path: request.url, method: request.method, issues: error.issues },
+        "Request body validation failed"
+      );
       return reply.code(400).send({
         statusCode: 400,
         error: "Validation Error",
@@ -148,7 +164,6 @@ export const buildApp = (options: BuildAppOptions = {}) => {
       return reply.code(statusCode).send({
         statusCode,
         error: "Database Error",
-        code: error.code,
         message: "Database operation failed"
       });
     }
@@ -171,12 +186,16 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     });
   });
 
-  app.get("/health", async (_request, reply) => {
+  app.get("/health", async () => {
+    return { ok: true };
+  });
+
+  app.get("/ready", async (_request, reply) => {
     try {
       await prisma.$queryRaw`SELECT 1`;
       return { ok: true };
     } catch (error) {
-      app.log.error(error, "Health check database probe failed");
+      app.log.error(error, "Readiness database probe failed");
       return reply.code(503).send({
         ok: false,
         error: "Database unavailable"

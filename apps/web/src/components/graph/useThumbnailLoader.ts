@@ -1,14 +1,28 @@
 /**
  * @file Graph-related React hook: useThumbnailLoader.
+ *
+ * Loads person thumbnails via a web worker, seeds from a module-level texture
+ * cache so cached textures are instantly available on mount, and writes back
+ * to the cache so they survive component unmounts (workspace switches).
+ * Calls invalidate() on the R3F canvas after new textures arrive so they
+ * appear immediately without a user interaction.
  */
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { SRGBColorSpace, Texture } from "three";
 import type { Vector3 } from "three";
+import { useThree } from "@react-three/fiber";
 import { personThumbnailUrl } from "../../lib/api";
 import { loadThumbnailBatch } from "./thumbnailWorkerClient";
 import type { NodePosition } from "./layout";
 import { distanceSquared } from "./layout";
+import {
+  getCachedTexture,
+  setCachedTexture,
+  setCachedBitmap,
+  hasCachedValue,
+  evictToCap
+} from "./thumbnailCache";
 
 const CAMERA_THUMBNAIL_BATCH = 10;
 const THUMBNAIL_BATCH_SIZE = 5;
@@ -106,7 +120,8 @@ export const pickThumbnailBatch = ({
     if (nextBatch.length >= batchSize) {
       break;
     }
-    if (!id || loadedIds.has(id) || inFlightIds.has(id)) {
+    // Skip IDs that are already loaded in React state or in the module-level cache.
+    if (!id || loadedIds.has(id) || inFlightIds.has(id) || hasCachedValue(id)) {
       continue;
     }
     nextBatch.push(id);
@@ -163,20 +178,46 @@ const pickNearestIds = (items: PositionedPerson[], origin: NodePosition, limit: 
   return nearest.map((item) => item.id);
 };
 
+/**
+ * React hook that manages progressive thumbnail loading for the 3D graph.
+ *
+ * Seeds from the module-level texture cache on mount so previously-loaded
+ * thumbnails appear instantly. Writes new textures back to the cache so they
+ * survive workspace switches. Also calls invalidate() on new textures so they
+ * immediately render on the canvas.
+ */
 export const useThumbnailLoader = ({
   peopleIds,
   prioritizedNodeIds,
   renderNearPersonIds,
   displayVisiblePeople,
-  cameraSampleRef
+  cameraSampleRef,
+  visible
 }: {
   peopleIds: string[];
   prioritizedNodeIds: Set<string>;
   renderNearPersonIds: string[];
   displayVisiblePeople: PositionedPerson[];
   cameraSampleRef: MutableRefObject<Vector3>;
+  /** When false, the thumbnail loading loop is paused (graph not visible). */
+  visible?: boolean;
 }) => {
-  const [thumbnailTextures, setThumbnailTextures] = useState<Map<string, Texture>>(() => new Map());
+  // Seed the React state from the module-level cache on every mount so cached
+  // textures are immediately available.
+  const [thumbnailTextures, setThumbnailTextures] = useState<Map<string, Texture>>(() => {
+    const initial = new Map<string, Texture>();
+    for (const id of peopleIds) {
+      const cached = getCachedTexture(id);
+      if (cached) {
+        initial.set(id, cached);
+      }
+    }
+    return initial;
+  });
+
+  /** Always latest map for queue drain without listing `thumbnailTextures` in effect deps. */
+  const thumbnailTexturesRef = useRef(thumbnailTextures);
+  thumbnailTexturesRef.current = thumbnailTextures;
   const [nearCameraNodeIds, setNearCameraNodeIds] = useState<string[]>([]);
   const [backoffUntilMs, setBackoffUntilMs] = useState(0);
   const inFlightIdsRef = useRef(new Set<string>());
@@ -184,7 +225,7 @@ export const useThumbnailLoader = ({
   const failureStreakRef = useRef(0);
 
   useEffect(() => {
-    if (displayVisiblePeople.length === 0) {
+    if (displayVisiblePeople.length === 0 || visible === false) {
       setNearCameraNodeIds((current) => (current.length === 0 ? current : []));
       return;
     }
@@ -210,11 +251,9 @@ export const useThumbnailLoader = ({
     updateNearest();
     const interval = window.setInterval(updateNearest, CAMERA_SAMPLE_INTERVAL_MS);
     return () => window.clearInterval(interval);
-  }, [cameraSampleRef, displayVisiblePeople]);
+  }, [cameraSampleRef, displayVisiblePeople, visible]);
 
   const visibleIdsByDistance = useMemo(() => {
-    // Keep progressive thumbnail loading stable for the currently visible set.
-    // Camera-driven reprioritization already happens through nearCameraNodeIds.
     return displayVisiblePeople.map((item) => item.person.id);
   }, [displayVisiblePeople]);
 
@@ -235,6 +274,8 @@ export const useThumbnailLoader = ({
   }, [nearCameraNodeIds, prioritizedNodeIds, renderNearPersonIds, visibleIdsByDistance]);
 
   // Dispose textures for people that have been removed from the graph.
+  // Do NOT dispose textures for people still in the module cache — they'll
+  // be reused when the person re-enters the visible set on a workspace switch.
   useEffect(() => {
     const existingPeopleIds = new Set(peopleIds);
     inFlightIdsRef.current.forEach((id) => {
@@ -246,7 +287,8 @@ export const useThumbnailLoader = ({
       let changed = false;
       const next = new Map<string, Texture>();
       for (const [id, texture] of current) {
-        if (!existingPeopleIds.has(id)) {
+        if (!existingPeopleIds.has(id) && !getCachedTexture(id)) {
+          // Only dispose if not in the module cache (which retains it for remounts).
           texture.dispose();
           changed = true;
           continue;
@@ -257,8 +299,10 @@ export const useThumbnailLoader = ({
     });
   }, [peopleIds]);
 
+  const isPaused = visible === false;
+
   useEffect(() => {
-    if (thumbnailLoadOrder.length === 0) {
+    if (isPaused || thumbnailLoadOrder.length === 0) {
       return;
     }
     let isDisposed = false;
@@ -272,7 +316,7 @@ export const useThumbnailLoader = ({
       }
       const batch = pickThumbnailBatch({
         loadOrder: thumbnailLoadOrder,
-        loadedIds: new Set(thumbnailTextures.keys()),
+        loadedIds: new Set(thumbnailTexturesRef.current.keys()),
         inFlightIds: inFlightIdsRef.current,
         batchSize: THUMBNAIL_BATCH_SIZE
       });
@@ -295,7 +339,12 @@ export const useThumbnailLoader = ({
 
           for (const result of results) {
             if (result.status === "fulfilled") {
-              newTextures.push([result.personId, createTextureFromBitmap(result.bitmap)]);
+              // Store bitmap in the module-level cache.
+              setCachedBitmap(result.personId, result.bitmap);
+              const texture = createTextureFromBitmap(result.bitmap);
+              // Store texture in the module-level cache.
+              setCachedTexture(result.personId, texture);
+              newTextures.push([result.personId, texture]);
             } else {
               hasFailure = true;
             }
@@ -309,6 +358,8 @@ export const useThumbnailLoader = ({
               }
               return next;
             });
+            // Evict oldest entries when cache exceeds limit.
+            evictToCap();
           }
 
           if (hasFailure) {
@@ -336,12 +387,48 @@ export const useThumbnailLoader = ({
       isDisposed = true;
       window.clearInterval(interval);
     };
-  }, [backoffUntilMs, thumbnailTextures, thumbnailLoadOrder]);
+  }, [backoffUntilMs, thumbnailLoadOrder, isPaused]);
 
   const thumbnailNodeIds = useMemo(() => new Set(thumbnailTextures.keys()), [thumbnailTextures]);
 
+  // Compute loading progress for the progress indicator.
+  // totalCount = number of currently visible people that need thumbnails;
+  // loadedCount = how many have textures (from state or module cache).
+  const thumbnailProgress = useMemo(() => {
+    const total = thumbnailLoadOrder.length;
+    const loaded = thumbnailLoadOrder.filter((id) => thumbnailNodeIds.has(id) || hasCachedValue(id)).length;
+    return { loaded, total };
+  }, [thumbnailLoadOrder, thumbnailNodeIds]);
+
   return {
     thumbnailNodeIds,
-    thumbnailTextures
+    thumbnailTextures,
+    thumbnailProgress
   };
+};
+
+/**
+ * Component placed inside the R3F Canvas that calls invalidate()
+ * whenever the thumbnail texture count grows, ensuring newly-loaded
+ * thumbnails render immediately without requiring a user interaction.
+ */
+export const InvalidateOnThumbnailUpdate = ({
+  thumbnailTextures,
+  visible
+}: {
+  thumbnailTextures: Map<string, unknown>;
+  visible: boolean;
+}) => {
+  const invalidate = useThree(({ invalidate: inv }) => inv);
+  const prevSizeRef = useRef(thumbnailTextures.size);
+
+  useEffect(() => {
+    // Only invalidate when size grows (new textures arrived) and the graph is visible.
+    if (thumbnailTextures.size > prevSizeRef.current && visible) {
+      invalidate();
+    }
+    prevSizeRef.current = thumbnailTextures.size;
+  }, [thumbnailTextures.size, invalidate, visible]);
+
+  return null;
 };

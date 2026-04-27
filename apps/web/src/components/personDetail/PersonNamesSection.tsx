@@ -59,7 +59,11 @@ export const PersonNamesSection = ({ personId, disabled, onNamesChanged }: Props
   };
 
   if (names === null && !loadError) {
-    return <p className="hint">Loading names…</p>;
+    return (
+      <div className="skeleton-card sidebar-skeleton" aria-label="Loading names">
+        <span className="sr-only">Loading names…</span>
+      </div>
+    );
   }
 
   if (loadError) {

@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AuthScreen } from "./components/AuthScreen";
 import { getCurrentUser, getLinkStatus, login, logout, type AuthState } from "./lib/api";
 
@@ -82,20 +83,14 @@ export const App = () => {
     }
   };
 
-  const headerSummary = useMemo(() => {
-    if (!currentUser) {
-      return null;
-    }
-
-    return linkStatus?.immichEmail ? `${currentUser.name} · ${linkStatus.immichEmail}` : currentUser.name;
-  }, [currentUser, linkStatus?.immichEmail]);
-
   if (isBooting) {
     return (
       <main className="auth-screen">
         <section className="card auth-card stack">
           <h1>Loading Treemich</h1>
-          <p className="hint">Checking your current session.</p>
+          <div className="skeleton-card auth-skeleton" aria-label="Checking your current session">
+            <span className="sr-only">Checking your current session.</span>
+          </div>
         </section>
       </main>
     );
@@ -107,34 +102,50 @@ export const App = () => {
 
   return (
     <main className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <header className="card session-bar">
-        <div className="stack">
-          <strong>{headerSummary}</strong>
-          <span className="hint">
-            {linkStatus?.linked ? "Linked to Immich" : "Immich account not linked"}
-          </span>
+        <div className="session-bar-left">
+          <h1 className="app-title">Treemich</h1>
         </div>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => void handleLogout()}
-          disabled={isSubmittingAuth}
-        >
-          {isSubmittingAuth ? "Signing out..." : "Sign out"}
-        </button>
+        <div className="session-bar-right">
+          <strong className="session-user-name">{currentUser.name}</strong>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void handleLogout()}
+            disabled={isSubmittingAuth}
+          >
+            {isSubmittingAuth ? "Signing out..." : "Sign out"}
+          </button>
+        </div>
       </header>
-      <Suspense
+      <ErrorBoundary
+        errorContext="Authenticated app"
         fallback={
-          <section className="card stack" style={{ margin: "1rem" }}>
-            <p className="hint">Loading graph…</p>
+          <section className="card stack app-shell-fallback-card">
+            <h2 className="app-title app-shell-fallback-title">Something went wrong</h2>
+            <p className="hint">
+              The app hit an unexpected error. Reload the page to try again. If the problem persists, check
+              the browser console for details.
+            </p>
           </section>
         }
       >
-        <PeoplePage
-          immichBaseUrl={linkStatus?.immichBaseUrl ?? null}
-          currentUserName={linkStatus?.immichName ?? currentUser.name}
-        />
-      </Suspense>
+        <Suspense
+          fallback={
+            <section className="card stack app-shell-fallback-card">
+              <div className="skeleton-card app-shell-skeleton" aria-label="Loading graph" />
+            </section>
+          }
+        >
+          <PeoplePage
+            immichBaseUrl={linkStatus?.immichBaseUrl ?? null}
+            currentUserName={linkStatus?.immichName ?? currentUser.name}
+          />
+        </Suspense>
+      </ErrorBoundary>
     </main>
   );
 };

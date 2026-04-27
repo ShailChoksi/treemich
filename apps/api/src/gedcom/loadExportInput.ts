@@ -4,6 +4,7 @@
  */
 
 import { prisma } from "../db/client.js";
+import { env } from "../config/env.js";
 import { lifeEventQueryInclude } from "../lifeEvents/service.js";
 import type { GedcomExportInput } from "./writer.js";
 
@@ -42,6 +43,25 @@ const mapPlace = (
 };
 
 export const loadGedcomExportInput = async (userId: string): Promise<GedcomExportInput> => {
+  const exportRowCount = (
+    await Promise.all([
+      prisma.personProfile.count({ where: { userId } }),
+      prisma.relationship.count({ where: { userId } }),
+      prisma.family.count({ where: { userId } }),
+      prisma.lifeEvent.count({ where: { userId } }),
+      prisma.personName.count({ where: { userId } }),
+      prisma.repository.count({ where: { userId } }),
+      prisma.source.count({ where: { userId } }),
+      prisma.mediaObject.count({ where: { userId } }),
+      prisma.mediaLink.count({ where: { userId } })
+    ])
+  ).reduce((total, count) => total + count, 0);
+  if (exportRowCount > env.TREEMICH_EXPORT_MAX_ROWS) {
+    throw new Error(
+      `GEDCOM export contains ${exportRowCount} rows, exceeding TREEMICH_EXPORT_MAX_ROWS=${env.TREEMICH_EXPORT_MAX_ROWS}. Use a filtered export or raise the limit.`
+    );
+  }
+
   const [
     personProfiles,
     relationships,

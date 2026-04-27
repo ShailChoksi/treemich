@@ -11,7 +11,22 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: treemich_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d treemich_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/treemich_ci
       IMMICH_BASE_URL: http://host.docker.internal:2283/api
       TREEMICH_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
     steps:
@@ -22,8 +37,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run prisma:generate -w @treemich/api
+      - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
       - run: npm run lint
       - run: npm run test
+      - run: npm run test:coverage -w @treemich/api
       - run: npm run build
+      - run: npm audit --omit=dev
       - run: docker compose config
       - run: docker compose build

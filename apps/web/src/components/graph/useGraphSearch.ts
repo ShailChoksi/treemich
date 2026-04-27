@@ -24,6 +24,8 @@ type UseGraphSearchOptions = {
   setFocusPersonId: (personId: string | null) => void;
   setPinnedPersonId: (personId: string | null) => void;
   setHoveredPersonId: (personId: string | null) => void;
+  initialSearchTerm?: string;
+  initialHighlightedPersonIds?: string[];
   onSearchFallback?: (query: string) => Promise<SearchFallbackResult | null>;
 };
 
@@ -55,11 +57,15 @@ export const useGraphSearch = ({
   setFocusPersonId,
   setPinnedPersonId,
   setHoveredPersonId,
+  initialSearchTerm = "",
+  initialHighlightedPersonIds = [],
   onSearchFallback
 }: UseGraphSearchOptions) => {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
-  const [highlightedPersonIds, setHighlightedPersonIds] = useState<Set<string>>(new Set());
+  const [highlightedPersonIds, setHighlightedPersonIds] = useState<Set<string>>(
+    () => new Set(initialHighlightedPersonIds)
+  );
 
   const clearHighlights = useCallback(() => {
     setHighlightedPersonIds(new Set());

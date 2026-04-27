@@ -25,6 +25,7 @@ import {
   type GraphVisibilityThresholds
 } from "./graphVisibility";
 import { pickNearest } from "./pickNearest";
+import { getLocalStorageItem } from "../../lib/safeLocalStorage";
 
 type UseGraphLayoutStateOptions = {
   people: ImmichPerson[];
@@ -49,7 +50,7 @@ type UseGraphLayoutStateOptions = {
 };
 
 const shouldMeasureGraphLayout =
-  typeof window !== "undefined" && window.localStorage.getItem("treemich:profile-graph-layout") === "1";
+  typeof window !== "undefined" && getLocalStorageItem("treemich:profile-graph-layout") === "1";
 const PROGRESSIVE_RENDER_BATCH_INTERVAL_MS = 150;
 const MIN_CAMERA_CULLED_VISIBLE_COUNT = 180;
 

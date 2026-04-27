@@ -51,7 +51,8 @@ vi.mock("../gedcom/importRunner.js", () => ({
   mergeIndiMatches: (matches: Record<string, string>, records: unknown[]) =>
     mergeIndiMatchesMock(matches, records),
   validateFamMatches: (preview: unknown, merged: unknown) => validateFamMatchesMock(preview, merged),
-  scheduleGedcomImportJob: (jobId: string, services: unknown) => scheduleGedcomImportJobMock(jobId, services)
+  scheduleGedcomImportJob: (jobId: string, services: unknown, logger: unknown) =>
+    scheduleGedcomImportJobMock(jobId, services, logger)
 }));
 
 describe("import GEDCOM subset matching", () => {
@@ -102,7 +103,7 @@ describe("import GEDCOM subset matching", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(gedcomImportJobCreateMock).toHaveBeenCalledTimes(1);
-    expect(scheduleGedcomImportJobMock).toHaveBeenCalledWith("job-1", expect.anything());
+    expect(scheduleGedcomImportJobMock).toHaveBeenCalledWith("job-1", expect.anything(), expect.anything());
     await app.close();
   });
 });

@@ -15,7 +15,21 @@ vi.mock("./thumbnailWorkerClient", () => ({
   loadThumbnailBatch: vi.fn()
 }));
 
+// Mock the thumbnailCache so its module-level state doesn't leak across tests.
+vi.mock("./thumbnailCache", async () => {
+  const actual = await vi.importActual<typeof import("./thumbnailCache")>("./thumbnailCache");
+  return {
+    ...actual,
+    getCachedTexture: vi.fn(() => undefined),
+    getCachedBitmap: vi.fn(() => undefined),
+    hasCachedValue: vi.fn(() => false),
+    setCachedTexture: vi.fn(),
+    setCachedBitmap: vi.fn()
+  };
+});
+
 import { loadThumbnailBatch } from "./thumbnailWorkerClient";
+import { hasCachedValue } from "./thumbnailCache";
 
 const reactTestEnv = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnv.IS_REACT_ACT_ENVIRONMENT = true;
@@ -25,6 +39,7 @@ const makeFakeBitmap = (): ImageBitmap => ({ width: 1, height: 1, close: vi.fn()
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
+  vi.mocked(hasCachedValue).mockImplementation(() => false);
 });
 
 describe("useThumbnailLoader hook", () => {
@@ -89,6 +104,66 @@ describe("useThumbnailLoader hook", () => {
       expect(capturedIds.has("b")).toBe(true);
       expect(capturedTextures.has("a")).toBe(true);
       expect(capturedTextures.has("b")).toBe(true);
+    } finally {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("pickThumbnailBatch skips IDs when hasCachedValue is true", () => {
+    vi.mocked(hasCachedValue).mockImplementation((id: string) => id === "a");
+    const batch = pickThumbnailBatch({
+      loadOrder: ["a", "b", "c"],
+      loadedIds: new Set(),
+      inFlightIds: new Set(),
+      batchSize: 5
+    });
+    expect(batch).toEqual(["b", "c"]);
+  });
+
+  it("reports thumbnail progress via thumbnailProgress", async () => {
+    vi.mocked(loadThumbnailBatch).mockResolvedValue([
+      { personId: "a", status: "fulfilled", bitmap: makeFakeBitmap() },
+      { personId: "b", status: "fulfilled", bitmap: makeFakeBitmap() }
+    ]);
+
+    let capturedProgress: { loaded: number; total: number } | null = null;
+
+    const Probe = () => {
+      const { thumbnailProgress } = useThumbnailLoader({
+        peopleIds: ["a", "b"],
+        prioritizedNodeIds: new Set<string>(),
+        renderNearPersonIds: ["a", "b"],
+        displayVisiblePeople: ["a", "b"].map((id, i) => ({
+          person: { id },
+          displayPosition: [i * 2, 0, 0] as [number, number, number]
+        })),
+        cameraSampleRef: { current: { x: 0, y: 0, z: 0 } } as unknown as MutableRefObject<Vector3>
+      });
+      capturedProgress = thumbnailProgress;
+      return null;
+    };
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+      act(() => {
+        root.render(createElement(Probe));
+      });
+
+      // Initially, progress shows loaded=0 (not in React state yet)
+      expect(capturedProgress).toEqual({ loaded: 0, total: 2 });
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(capturedProgress).toEqual({ loaded: 2, total: 2 });
     } finally {
       act(() => {
         root.unmount();

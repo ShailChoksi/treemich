@@ -18,6 +18,7 @@ export const AuthScreen = ({ busy, error, onSubmit }: Props) => {
     event.preventDefault();
     await onSubmit(email, password);
   };
+  const errorId = error ? "auth-screen-error" : undefined;
 
   return (
     <main className="auth-screen">
@@ -28,29 +29,39 @@ export const AuthScreen = ({ busy, error, onSubmit }: Props) => {
             Use the same Immich email and password for the server configured in Treemich.
           </p>
         </div>
-        <form className="stack" onSubmit={(event) => void handleSubmit(event)}>
+        <form className="stack" onSubmit={(event) => void handleSubmit(event)} aria-describedby={errorId}>
           <label className="field-group">
             <span className="field-label">Email</span>
             <input
+              name="email"
               autoComplete="username"
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="name@example.com"
               required
+              aria-invalid={error ? true : undefined}
+              aria-describedby={errorId}
             />
           </label>
           <label className="field-group">
             <span className="field-label">Password</span>
             <input
+              name="password"
               autoComplete="current-password"
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
+              aria-invalid={error ? true : undefined}
+              aria-describedby={errorId}
             />
           </label>
-          {error ? <p className="auth-error">{error}</p> : null}
+          {error ? (
+            <p id={errorId} className="auth-error" aria-live="polite">
+              {error}
+            </p>
+          ) : null}
           <button type="submit" disabled={busy}>
             {busy ? "Signing in..." : "Sign in"}
           </button>

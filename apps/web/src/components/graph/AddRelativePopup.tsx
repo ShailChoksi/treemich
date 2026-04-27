@@ -2,9 +2,13 @@
  * @file Popup flow to pick relative type and target when adding an edge from the graph.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { RelationshipType } from "../../lib/api";
+import { RELATIONSHIP_TYPES } from "../../lib/relationshipConstants";
 import type { AddRelativeSlot } from "./NodeActionButtons";
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 type Props = {
   slot: AddRelativeSlot;
@@ -25,9 +29,35 @@ const getFirstName = (fullName: string) => fullName.trim().split(/\s+/)[0] ?? fu
 
 export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCancel, onSubmit }: Props) => {
   const [personName, setPersonName] = useState("");
-  const [relationshipType, setRelationshipType] = useState<RelationshipType>("SIBLING_OF");
+  const [relationshipType, setRelationshipType] = useState<RelationshipType>(RELATIONSHIP_TYPES.siblingOf);
   const [error, setError] = useState<string | null>(null);
   const selectedPersonFirstName = getFirstName(selectedPersonName);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const errorId = useId();
+  const titleId = useId();
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  const getFocusableElements = useCallback(() => {
+    const root = dialogRef.current;
+    if (!root) {
+      return [] as HTMLElement[];
+    }
+    return [...root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
+      (el) => el.offsetParent !== null || el.getClientRects().length > 0
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const t = window.setTimeout(() => {
+      const el = getFocusableElements()[0];
+      el?.focus();
+    }, 0);
+    return () => {
+      window.clearTimeout(t);
+      previousFocusRef.current?.focus?.();
+    };
+  }, [getFocusableElements]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -42,25 +72,69 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
 
   useEffect(() => {
     setPersonName("");
-    setRelationshipType("SIBLING_OF");
+    setRelationshipType(RELATIONSHIP_TYPES.siblingOf);
     setError(null);
   }, [slot, selectedPersonName]);
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    try {
-      await onSubmit(personName, slot === "siblingOrSpouse" ? relationshipType : undefined);
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to add relationship");
-    }
-  };
+  const handleDialogKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Tab" || !dialogRef.current) {
+        return;
+      }
+      const focusables = getFocusableElements();
+      if (focusables.length === 0) {
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (first == null || last == null) {
+        return;
+      }
+      if (event.shiftKey) {
+        if (document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    },
+    [getFocusableElements]
+  );
+
+  const handleSubmit = useCallback(
+    async (event: React.FormEvent) => {
+      event.preventDefault();
+      setError(null);
+      try {
+        await onSubmit(personName, slot === "siblingOrSpouse" ? relationshipType : undefined);
+      } catch (submitError) {
+        setError(submitError instanceof Error ? submitError.message : "Failed to add relationship");
+      }
+    },
+    [onSubmit, personName, relationshipType, slot]
+  );
 
   return (
     <>
-      <div className="add-relative-backdrop" onClick={onCancel} />
-      <div className="add-relative-popup" role="dialog" aria-modal="true" aria-label={slotTitle[slot]}>
-        <h3>
+      <button
+        type="button"
+        className="add-relative-backdrop"
+        aria-label="Close add relative dialog"
+        onClick={() => onCancel()}
+        disabled={busy}
+      />
+      <div
+        ref={dialogRef}
+        className="add-relative-popup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={error ? errorId : undefined}
+        onKeyDown={handleDialogKeyDown}
+      >
+        <h3 id={titleId}>
           {slotTitle[slot]} of {selectedPersonFirstName}
         </h3>
         <form className="stack add-relative-form" onSubmit={handleSubmit}>
@@ -86,14 +160,18 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
                 value={relationshipType}
                 onChange={(event) => setRelationshipType(event.target.value as RelationshipType)}
               >
-                <option value="SIBLING_OF">Sibling</option>
-                <option value="SPOUSE_OF">Spouse</option>
-                <option value="FRIEND_OF">Friend</option>
-                <option value="PET_OF">Pet</option>
+                <option value={RELATIONSHIP_TYPES.siblingOf}>Sibling</option>
+                <option value={RELATIONSHIP_TYPES.spouseOf}>Spouse</option>
+                <option value={RELATIONSHIP_TYPES.friendOf}>Friend</option>
+                <option value={RELATIONSHIP_TYPES.petOf}>Pet</option>
               </select>
             </label>
           ) : null}
-          {error ? <p className="hint add-relative-error">{error}</p> : null}
+          {error ? (
+            <p id={errorId} className="hint add-relative-error" role="alert">
+              {error}
+            </p>
+          ) : null}
           <div className="add-relative-actions">
             <button type="submit" className="add-relative-submit" disabled={busy || !personName.trim()}>
               {busy ? "Adding..." : "Add"}

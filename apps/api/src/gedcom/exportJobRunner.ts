@@ -3,21 +3,37 @@
  * Phase 5a: async GEDCOM export job processor (stores UTF-8 result for download).
  */
 
-import { maxGedcomImportBytes } from "../config/env.js";
+import { env, maxGedcomImportBytes } from "../config/env.js";
 import { prisma } from "../db/client.js";
 import { loadGedcomExportInput } from "./loadExportInput.js";
 import { buildGedcomDocument } from "./writer.js";
 
-export async function processGedcomExportJob(jobId: string): Promise<void> {
-  const job = await prisma.gedcomExportJob.findFirst({ where: { id: jobId } });
-  if (!job || job.status !== "PENDING") {
-    return;
+type JobLogger = {
+  error: (payload: unknown, message?: string) => void;
+};
+
+async function claimGedcomExportJob(jobId: string) {
+  const staleBefore = new Date(Date.now() - env.TREEMICH_GEDCOM_JOB_STALE_AFTER_MS);
+  const claimed = await prisma.gedcomExportJob.updateMany({
+    where: {
+      id: jobId,
+      OR: [{ status: "PENDING" }, { status: "RUNNING", startedAt: { lt: staleBefore } }]
+    },
+    data: { status: "RUNNING", startedAt: new Date(), completedAt: null, errorMessage: null }
+  });
+
+  if (claimed.count !== 1) {
+    return null;
   }
 
-  await prisma.gedcomExportJob.update({
-    where: { id: jobId },
-    data: { status: "RUNNING", startedAt: new Date() }
-  });
+  return prisma.gedcomExportJob.findUnique({ where: { id: jobId } });
+}
+
+export async function processGedcomExportJob(jobId: string): Promise<void> {
+  const job = await claimGedcomExportJob(jobId);
+  if (!job) {
+    return;
+  }
 
   try {
     const input = await loadGedcomExportInput(job.userId);
@@ -43,8 +59,8 @@ export async function processGedcomExportJob(jobId: string): Promise<void> {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Export failed";
-    await prisma.gedcomExportJob.update({
-      where: { id: jobId },
+    await prisma.gedcomExportJob.updateMany({
+      where: { id: jobId, status: "RUNNING" },
       data: {
         status: "FAILED",
         completedAt: new Date(),
@@ -54,10 +70,10 @@ export async function processGedcomExportJob(jobId: string): Promise<void> {
   }
 }
 
-export const scheduleGedcomExportJob = (jobId: string) => {
+export const scheduleGedcomExportJob = (jobId: string, logger?: JobLogger) => {
   setImmediate(() => {
     void processGedcomExportJob(jobId).catch((err) => {
-      console.error("GEDCOM export job failed", jobId, err);
+      logger?.error({ err, jobId }, "GEDCOM export job failed");
     });
   });
 };

@@ -2,14 +2,13 @@ import { useState } from "react";
 import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
 import type { FamilyRecord, ImmichPerson, LifeEventRecord, PatchFamilyBody } from "../../lib/api";
 import { getPersonDisplayLabel } from "../../lib/personDisplay";
+import { DestructiveConfirmDialog } from "../DestructiveConfirmDialog";
 import { FamilyLifeEventsBlock } from "./FamilyLifeEventsBlock";
 
 type Props = {
   person: ImmichPerson;
   people: ImmichPerson[];
   families: FamilyRecord[];
-  /** True when the person already has parent/child/spouse/sibling edges — family units are still a separate layer. */
-  graphHasFamilyRelatives?: boolean;
   onPatchFamily?: (familyId: string, body: PatchFamilyBody) => Promise<void>;
   onDeleteFamily?: (familyId: string) => Promise<void>;
   savingFamilyId?: string | null;
@@ -31,7 +30,6 @@ export const FamiliesSection = ({
   person,
   people,
   families,
-  graphHasFamilyRelatives = false,
   onPatchFamily,
   onDeleteFamily,
   savingFamilyId,
@@ -43,6 +41,8 @@ export const FamiliesSection = ({
   const [editingFamilyId, setEditingFamilyId] = useState<string | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingDeleteFamilyId, setPendingDeleteFamilyId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const beginEditNotes = (family: FamilyRecord) => {
     setErrorMessage(null);
@@ -69,20 +69,34 @@ export const FamiliesSection = ({
     }
   };
 
-  const removeFamily = async (familyId: string) => {
+  const requestRemoveFamily = (familyId: string) => {
     if (!onDeleteFamily) {
       return;
     }
-    if (
-      !window.confirm("Delete this family unit? Derived parent/child edges for this union will be removed.")
-    ) {
+    setErrorMessage(null);
+    setPendingDeleteFamilyId(familyId);
+  };
+
+  const cancelRemoveFamily = () => {
+    if (deleteBusy) {
       return;
     }
+    setPendingDeleteFamilyId(null);
+  };
+
+  const confirmRemoveFamily = async () => {
+    if (!onDeleteFamily || !pendingDeleteFamilyId) {
+      return;
+    }
+    setDeleteBusy(true);
     setErrorMessage(null);
     try {
-      await onDeleteFamily(familyId);
+      await onDeleteFamily(pendingDeleteFamilyId);
+      setPendingDeleteFamilyId(null);
     } catch (e: unknown) {
       setErrorMessage(e instanceof Error ? e.message : "Could not delete family");
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -95,28 +109,26 @@ export const FamiliesSection = ({
           <strong>not created automatically</strong> from the spouse/parent edges in{" "}
           <strong>Relatives</strong>.
         </p>
-        {graphHasFamilyRelatives ? (
-          <p className="hint">
-            You already have family-type relationships in the graph. After upgrading the API and running{" "}
-            <code>prisma migrate deploy</code>, Treemich normally infers families <strong>once</strong> on the
-            first process start (see server logs). To run manually instead, on the server with{" "}
-            <code>DATABASE_URL</code> set:{" "}
-            <code>npm run phase4:backfill-families --workspace @treemich/api -- --dry-run</code> then without{" "}
-            <code>--dry-run</code>, or create unions via <code>POST /families</code>. Disable auto-run with{" "}
-            <code>TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL=0</code>. Refresh this page after families exist.
-          </p>
-        ) : (
-          <p className="hint">
-            Create one with <code>POST /families</code> (parents + children + pedigree); parent/child lines on
-            the graph are then derived from those rows where applicable.
-          </p>
-        )}
+        <p className="hint">
+          Create one with <code>POST /families</code> (parents + children + pedigree); parent/child lines on
+          the graph are then derived from those rows where applicable.
+        </p>
       </div>
     );
   }
 
   return (
     <>
+      <DestructiveConfirmDialog
+        open={pendingDeleteFamilyId !== null}
+        title="Delete family unit?"
+        description="Derived parent/child edges for this union will be removed. This cannot be undone from the UI."
+        confirmLabel="Delete family"
+        cancelLabel="Keep family"
+        busy={deleteBusy}
+        onCancel={cancelRemoveFamily}
+        onConfirm={confirmRemoveFamily}
+      />
       {errorMessage ? <p className="hint hint--danger">{errorMessage}</p> : null}
       <p className="hint family-units-intro">
         Unions involving {getPersonDisplayLabel(person)}. Notes can be edited here; changing parents or
@@ -140,7 +152,7 @@ export const FamiliesSection = ({
                       type="button"
                       className="secondary-button danger-button"
                       disabled={busy}
-                      onClick={() => removeFamily(family.id)}
+                      onClick={() => requestRemoveFamily(family.id)}
                     >
                       Delete family
                     </button>

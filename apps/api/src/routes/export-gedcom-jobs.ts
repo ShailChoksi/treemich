@@ -42,7 +42,7 @@ export const registerExportGedcomJobRoutes = (app: FastifyInstance) => {
         includeTreemichCustomTags
       }
     });
-    scheduleGedcomExportJob(job.id);
+    scheduleGedcomExportJob(job.id, app.log);
 
     app.log.info(
       { userId: auth.user.id, event: "gedcom_export_job", jobId: job.id },

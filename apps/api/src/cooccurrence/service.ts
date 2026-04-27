@@ -20,6 +20,8 @@ import { getCooccurrencePreferences, parseUserPreferences } from "../preferences
 const insertBatchSize = 1000;
 const defaultPageSize = 100;
 const maxPageSize = 2000;
+const maxClusterEdges = 10_000;
+const maxPersistedResponseEdges = 5_000;
 const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
 type CooccurrenceServiceOptions = {
@@ -224,33 +226,31 @@ export class CooccurrenceService {
       const computedAt = this.now();
       const rows = this.buildPersistedEdges(userId, stats, computedAt);
 
-      await this.prismaClient.$transaction(async (tx) => {
-        await tx.cooccurrenceEdge.deleteMany({
-          where: { userId }
-        });
+      await this.prismaClient.cooccurrenceEdge.deleteMany({
+        where: { userId }
+      });
 
-        for (let index = 0; index < rows.length; index += insertBatchSize) {
-          const batch = rows.slice(index, index + insertBatchSize);
-          if (batch.length === 0) {
-            continue;
-          }
-
-          await tx.cooccurrenceEdge.createMany({
-            data: batch
-          });
+      for (let index = 0; index < rows.length; index += insertBatchSize) {
+        const batch = rows.slice(index, index + insertBatchSize);
+        if (batch.length === 0) {
+          continue;
         }
 
-        await tx.cooccurrenceJob.update({
-          where: { id: jobId },
-          data: {
-            status: CooccurrenceJobStatus.COMPLETED,
-            sourcePhotoCount: stats.sourcePhotoCount,
-            edgeCount: rows.length,
-            progress: 1,
-            completedAt: computedAt,
-            errorMessage: null
-          }
+        await this.prismaClient.cooccurrenceEdge.createMany({
+          data: batch
         });
+      }
+
+      await this.prismaClient.cooccurrenceJob.update({
+        where: { id: jobId },
+        data: {
+          status: CooccurrenceJobStatus.COMPLETED,
+          sourcePhotoCount: stats.sourcePhotoCount,
+          edgeCount: rows.length,
+          progress: 1,
+          completedAt: computedAt,
+          errorMessage: null
+        }
       });
     } catch (error) {
       await this.prismaClient.cooccurrenceJob.update({
@@ -494,7 +494,9 @@ export class CooccurrenceService {
               OR: [{ personAId: options.personId }, { personBId: options.personId }]
             }
           : {})
-      }
+      },
+      orderBy: [{ sharedPhotos: "desc" }, { score: "desc" }, { id: "asc" }],
+      take: maxClusterEdges
     });
 
     return buildClustersFromEdges(rows);
@@ -518,8 +520,12 @@ export class CooccurrenceService {
 
     const rows = await this.prismaClient.cooccurrenceEdge.findMany({
       where: {
-        userId
-      }
+        userId,
+        sharedPhotos: { gte: Math.max(1, Math.trunc(options.minSharedPhotos)) },
+        score: { gte: Math.max(0, Math.min(1, options.minScore)) }
+      },
+      orderBy: [{ sharedPhotos: "desc" }, { score: "desc" }, { id: "asc" }],
+      take: maxPersistedResponseEdges
     });
 
     const personPhotoCounts = new Map<string, number>();

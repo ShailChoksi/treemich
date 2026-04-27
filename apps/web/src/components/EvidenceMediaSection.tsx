@@ -7,7 +7,6 @@ import { createEvidenceMediaObject, listEvidenceMediaObjects } from "../lib/api"
 import type { MediaObjectRecord } from "../lib/api";
 
 export const EvidenceMediaSection = () => {
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<MediaObjectRecord[]>([]);
@@ -30,12 +29,12 @@ export const EvidenceMediaSection = () => {
   }, []);
 
   useEffect(() => {
-    if (!open || loadAttempted.current) {
+    if (loadAttempted.current) {
       return;
     }
     loadAttempted.current = true;
     void load();
-  }, [open, load]);
+  }, [load]);
 
   const onAdd = async () => {
     const url = storageUrl.trim();
@@ -64,11 +63,15 @@ export const EvidenceMediaSection = () => {
   };
 
   return (
-    <details className="evidence-media-details" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary className="field-label person-detail-details-summary">Evidence media</summary>
+    <section className="evidence-media-details">
+      <div className="field-label">Evidence media</div>
       {error ? <p className="hint hint--danger">{error}</p> : null}
-      {open && loading ? <p className="hint">Loading…</p> : null}
-      {open && !loading ? (
+      {loading ? (
+        <div className="skeleton-card sidebar-skeleton" aria-label="Loading evidence media">
+          <span className="sr-only">Loading...</span>
+        </div>
+      ) : null}
+      {!loading ? (
         <div className="stack evidence-panel-stack">
           <p className="hint hint--tight-below">
             Register a stable URL (e.g. PDF or image in your archive). Open links in a new tab to verify
@@ -96,9 +99,16 @@ export const EvidenceMediaSection = () => {
               />
             </label>
           </div>
-          <button type="button" className="secondary-button" onClick={() => void onAdd()} disabled={saving}>
-            {saving ? "Saving…" : "Add media URL"}
-          </button>
+          <div className="workspace-action-row">
+            <button
+              type="button"
+              className="secondary-button workspace-action-button"
+              onClick={() => void onAdd()}
+              disabled={saving}
+            >
+              {saving ? "Saving..." : "Add media URL"}
+            </button>
+          </div>
           <div className="evidence-panel-divider">
             <div className="field-label field-label--spaced">Registered media</div>
             {items.length === 0 ? (
@@ -117,19 +127,21 @@ export const EvidenceMediaSection = () => {
               </ul>
             )}
           </div>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              loadAttempted.current = true;
-              void load();
-            }}
-            disabled={loading}
-          >
-            Refresh
-          </button>
+          <div className="workspace-action-row">
+            <button
+              type="button"
+              className="secondary-button workspace-action-button"
+              onClick={() => {
+                loadAttempted.current = true;
+                void load();
+              }}
+              disabled={loading}
+            >
+              Refresh
+            </button>
+          </div>
         </div>
       ) : null}
-    </details>
+    </section>
   );
 };

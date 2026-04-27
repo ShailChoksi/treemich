@@ -123,7 +123,8 @@ export class AuthService {
     const login = await loginToImmich({
       baseUrl: env.IMMICH_BASE_URL,
       email,
-      password
+      password,
+      timeoutMs: env.IMMICH_HTTP_TIMEOUT_MS
     });
 
     const encryptedToken = encryptSecret(login.accessToken);
