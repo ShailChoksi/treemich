@@ -28,4 +28,23 @@ describe("buildGedcomImportPreview", () => {
     const m2 = mergeIndiMatches({ I2: "person-b" }, p.records);
     expect(validateFamMatches(p, m2)).toBeNull();
   });
+
+  it("summarizes top-level OBJE media records", () => {
+    const ged = `0 HEAD
+0 @O1@ OBJE
+1 FILE media/photo.jpg
+1 FORM image/jpeg
+1 TITL Portrait
+0 TRLR
+`;
+    const p = buildGedcomImportPreview(ged);
+    expect(p.media).toEqual([
+      {
+        xref: "@O1@",
+        file: "media/photo.jpg",
+        form: "image/jpeg",
+        title: "Portrait"
+      }
+    ]);
+  });
 });

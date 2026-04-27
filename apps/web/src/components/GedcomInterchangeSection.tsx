@@ -10,8 +10,11 @@ import {
   getGedcomExportJob,
   getGedcomImportJob,
   postGedcomExportJob,
+  postGedcomImportArchiveJob,
+  postGedcomImportArchivePreview,
   postGedcomImportJob,
   postGedcomImportPreview,
+  type GedcomDryRunDiff,
   type GedcomImportPreviewResponse
 } from "../lib/api";
 import type { ImmichPerson } from "../lib/api";
@@ -36,10 +39,45 @@ const triggerBlobDownload = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
+const isDryRunDiff = (value: unknown): value is GedcomDryRunDiff => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const obj = value as Partial<GedcomDryRunDiff>;
+  return (
+    typeof obj.creates === "object" &&
+    typeof obj.updates === "object" &&
+    typeof obj.reuses === "object" &&
+    typeof obj.skips === "object" &&
+    typeof obj.conflicts === "object"
+  );
+};
+
+const formatDryRunDiff = (diff: GedcomDryRunDiff) => {
+  const rows = [
+    ["Creates", diff.creates],
+    ["Updates", diff.updates],
+    ["Reuses", diff.reuses],
+    ["Skips", diff.skips],
+    ["Conflicts", diff.conflicts]
+  ] as const;
+  return rows
+    .map(([label, counts]) => {
+      const parts = Object.entries(counts)
+        .filter(([, count]) => count > 0)
+        .map(([key, count]) => `${key}: ${count}`)
+        .join(", ");
+      return parts ? `${label}: ${parts}` : null;
+    })
+    .filter(Boolean)
+    .join(" | ");
+};
+
 export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
   const [importApiAvailable, setImportApiAvailable] = useState<boolean | null>(null);
 
   const [gedcomUtf8, setGedcomUtf8] = useState<string | null>(null);
+  const [archiveFile, setArchiveFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string>("import.ged");
   const [preview, setPreview] = useState<GedcomImportPreviewResponse | null>(null);
   const [matchByXref, setMatchByXref] = useState<Record<string, string>>({});
@@ -87,15 +125,15 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
     setError(null);
     setPreview(null);
     setGedcomUtf8(null);
+    setArchiveFile(null);
     setStatusNote(null);
     if (!file) {
       return;
     }
     const name = file.name.toLowerCase();
     if (name.endsWith(".zip")) {
-      setError(
-        "ZIP archives are not read in the browser. Extract the .ged file from the export ZIP and upload that UTF-8 file."
-      );
+      setArchiveFile(file);
+      setFileName(file.name || "import.zip");
       return;
     }
     if (!name.endsWith(".ged")) {
@@ -115,15 +153,17 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
   };
 
   const runPreview = async () => {
-    if (!gedcomUtf8) {
-      setError("Choose a .ged file first.");
+    if (!gedcomUtf8 && !archiveFile) {
+      setError("Choose a .ged file or GEDCOM media .zip first.");
       return;
     }
     setBusy(true);
     setError(null);
     setStatusNote(null);
     try {
-      const p = await postGedcomImportPreview(gedcomUtf8);
+      const p = archiveFile
+        ? await postGedcomImportArchivePreview(archiveFile)
+        : await postGedcomImportPreview(gedcomUtf8!);
       setPreview(p);
       initMatchesFromPreview(p);
       if (p.famMatchError) {
@@ -156,7 +196,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
     showOnlyUnmatched ? p.indis.filter((row) => !(matchByXref[row.xref] ?? "").trim()) : p.indis;
 
   const submitImport = async () => {
-    if (!gedcomUtf8 || !preview) {
+    if ((!gedcomUtf8 && !archiveFile) || !preview) {
       setError("Run preview after choosing a file.");
       return;
     }
@@ -180,12 +220,20 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
           indiMatches[row.xref] = v;
         }
       }
-      const job = await postGedcomImportJob({
-        gedcomUtf8,
-        fileName,
-        indiMatches,
-        importOptions: { dryRun, skipAlreadyImportedIndis: skipImported, allowPartialMatches }
-      });
+      const importOptions = {
+        dryRun,
+        skipAlreadyImportedIndis: skipImported,
+        allowPartialMatches,
+        unmatchedIndiPolicy: "MATCH_ONLY" as const
+      };
+      const job = archiveFile
+        ? await postGedcomImportArchiveJob({ archive: archiveFile, indiMatches, importOptions })
+        : await postGedcomImportJob({
+            gedcomUtf8: gedcomUtf8!,
+            fileName,
+            indiMatches,
+            importOptions
+          });
       let state = await getGedcomImportJob(job.id);
       for (let i = 0; i < 120 && state.status !== "COMPLETED" && state.status !== "FAILED"; i += 1) {
         await sleep(250);
@@ -195,7 +243,12 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
         setError(state.errorMessage ?? "Import job failed");
         return;
       }
-      setStatusNote(`Job completed. Summary: ${JSON.stringify(state.summary ?? {})}`);
+      const dryRunDiff = isDryRunDiff(state.summary?.dryRunDiff) ? state.summary.dryRunDiff : null;
+      setStatusNote(
+        dryRunDiff
+          ? `Dry-run complete. ${formatDryRunDiff(dryRunDiff)}`
+          : `Job completed. Summary: ${JSON.stringify(state.summary ?? {})}`
+      );
       if (!dryRun) {
         onTreeChanged?.();
       }
@@ -234,9 +287,13 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
         setError(state.errorMessage ?? "Export job failed");
         return;
       }
-      const blob = await downloadGedcomExportJobResult(job.id);
+      const blob = await downloadGedcomExportJobResult(job.id, state.downloadUrl);
       triggerBlobDownload(blob, `treemich-export-${job.id}.ged`);
-      setStatusNote(`Async export ready (${state.byteSize ?? blob.size} bytes).`);
+      setStatusNote(
+        `Async export ready (${state.byteSize ?? blob.size} bytes).${
+          state.downloadTokenExpiresAt ? ` Link expires ${state.downloadTokenExpiresAt}.` : ""
+        }`
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Async export failed");
     } finally {
@@ -259,10 +316,10 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
         ) : (
           <>
             <label className="field-group">
-              <span className="field-label">GEDCOM file (.ged, UTF-8)</span>
+              <span className="field-label">GEDCOM file (.ged) or media bundle (.zip)</span>
               <input
                 type="file"
-                accept=".ged,text/plain"
+                accept=".ged,.zip,text/plain,application/zip"
                 disabled={busy}
                 onChange={(ev) => void onFileChosen(ev.target.files?.[0] ?? null)}
               />
@@ -271,7 +328,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
               <button
                 type="button"
                 className="secondary-button workspace-action-button"
-                disabled={busy || !gedcomUtf8}
+                disabled={busy || (!gedcomUtf8 && !archiveFile)}
                 onClick={() => void runPreview()}
               >
                 {busy ? "Working..." : "Preview"}
@@ -315,6 +372,14 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
             {preview ? (
               <div className="stack evidence-panel-divider">
                 <div className="field-label">Match each INDI to an Immich person</div>
+                {preview.media.length > 0 || preview.archiveMediaFiles.length > 0 ? (
+                  <p className="hint hint--tight-below">
+                    Media in GEDCOM: {preview.media.length} OBJE records
+                    {preview.archiveMediaFiles.length > 0
+                      ? `; archive contains ${preview.archiveMediaFiles.length} candidate media files.`
+                      : "."}
+                  </p>
+                ) : null}
                 <label className="field-group inline-checkbox-row">
                   <input
                     type="checkbox"
@@ -370,6 +435,12 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                 {allowPartialMatches ? (
                   <p className="hint hint--tight-below">
                     Unmatched INDI/FAM rows are skipped during import and logged as warnings.
+                  </p>
+                ) : null}
+                {preview.unmatchedIndiPolicy === "MATCH_ONLY" ? (
+                  <p className="hint hint--tight-below">
+                    Unmatched GEDCOM people remain match-only in Phase 5; Treemich will not create Immich
+                    people.
                   </p>
                 ) : null}
                 {preview.lineLog.length > 0 ? (

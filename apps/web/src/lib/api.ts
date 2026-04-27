@@ -1019,9 +1019,25 @@ export type GedcomImportPreviewIndiRow = {
 export type GedcomImportPreviewResponse = {
   indis: GedcomImportPreviewIndiRow[];
   fams: { xref: string; husbXref: string | null; wifeXref: string | null; childXrefs: string[] }[];
+  media: { xref: string; file: string | null; title: string | null; form: string | null }[];
+  archiveMediaFiles: { path: string; byteSize: number; mimeType: string | null }[];
   unmatchedIndis: GedcomImportPreviewIndiRow[];
+  unmatchedIndiPolicy?: "MATCH_ONLY";
   famMatchError: string | null;
   lineLog: unknown[];
+};
+
+export type GedcomDryRunDiff = {
+  creates: Record<string, number>;
+  updates: Record<string, number>;
+  reuses: Record<string, number>;
+  skips: Record<string, number>;
+  conflicts: Record<string, number>;
+  warnings: number;
+};
+
+export type GedcomImportSummary = Record<string, unknown> & {
+  dryRunDiff?: GedcomDryRunDiff;
 };
 
 export const postGedcomImportPreview = async (gedcomUtf8: string): Promise<GedcomImportPreviewResponse> => {
@@ -1037,11 +1053,30 @@ export const postGedcomImportPreview = async (gedcomUtf8: string): Promise<Gedco
   return (await response.json()) as GedcomImportPreviewResponse;
 };
 
+export const postGedcomImportArchivePreview = async (archive: File): Promise<GedcomImportPreviewResponse> => {
+  const form = new FormData();
+  form.append("archive", archive, archive.name);
+  const response = await fetch(
+    `${treemichApi}/import/gedcom/preview/archive`,
+    withSession({
+      method: "POST",
+      body: form
+    })
+  );
+  await ensureOk(response, "GEDCOM archive preview failed");
+  return (await response.json()) as GedcomImportPreviewResponse;
+};
+
 export type GedcomImportJobCreateBody = {
   gedcomUtf8: string;
   fileName?: string;
   indiMatches: Record<string, string>;
-  importOptions?: { dryRun?: boolean; skipAlreadyImportedIndis?: boolean; allowPartialMatches?: boolean };
+  importOptions?: {
+    dryRun?: boolean;
+    skipAlreadyImportedIndis?: boolean;
+    allowPartialMatches?: boolean;
+    unmatchedIndiPolicy?: "MATCH_ONLY";
+  };
 };
 
 export const postGedcomImportJob = async (
@@ -1059,6 +1094,31 @@ export const postGedcomImportJob = async (
   return (await response.json()) as { id: string; status: string; createdAt: string };
 };
 
+export const postGedcomImportArchiveJob = async (body: {
+  archive: File;
+  indiMatches: Record<string, string>;
+  importOptions?: {
+    dryRun?: boolean;
+    skipAlreadyImportedIndis?: boolean;
+    allowPartialMatches?: boolean;
+    unmatchedIndiPolicy?: "MATCH_ONLY";
+  };
+}): Promise<{ id: string; status: string; createdAt: string }> => {
+  const form = new FormData();
+  form.append("archive", body.archive, body.archive.name);
+  form.append("indiMatches", JSON.stringify(body.indiMatches));
+  form.append("importOptions", JSON.stringify(body.importOptions ?? {}));
+  const response = await fetch(
+    `${treemichApi}/import/gedcom/jobs/archive`,
+    withSession({
+      method: "POST",
+      body: form
+    })
+  );
+  await ensureOk(response, "GEDCOM archive import job failed to start");
+  return (await response.json()) as { id: string; status: string; createdAt: string };
+};
+
 export type GedcomImportJobStatusResponse = {
   id: string;
   status: string;
@@ -1069,7 +1129,7 @@ export type GedcomImportJobStatusResponse = {
   startedAt: string | null;
   completedAt: string | null;
   errorMessage: string | null;
-  summary: unknown;
+  summary: GedcomImportSummary | null;
   lineLog: unknown[];
 };
 
@@ -1111,6 +1171,8 @@ export type GedcomExportJobStatusResponse = {
   completedAt: string | null;
   errorMessage: string | null;
   resultPath: string | null;
+  downloadUrl?: string | null;
+  downloadTokenExpiresAt?: string | null;
 };
 
 export const getGedcomExportJob = async (jobId: string): Promise<GedcomExportJobStatusResponse> => {
@@ -1122,11 +1184,16 @@ export const getGedcomExportJob = async (jobId: string): Promise<GedcomExportJob
   return (await response.json()) as GedcomExportJobStatusResponse;
 };
 
-/** Download completed async export (same session as API). */
-export const downloadGedcomExportJobResult = async (jobId: string): Promise<Blob> => {
+/** Download completed async export. A signed URL can be used without the original browser session. */
+export const downloadGedcomExportJobResult = async (
+  jobId: string,
+  downloadUrl?: string | null
+): Promise<Blob> => {
   const response = await fetch(
-    `${treemichApi}/export/gedcom/jobs/${encodeURIComponent(jobId)}/ged`,
-    withSession({ cache: "no-store" })
+    downloadUrl
+      ? `${treemichApi}${downloadUrl}`
+      : `${treemichApi}/export/gedcom/jobs/${encodeURIComponent(jobId)}/ged`,
+    downloadUrl ? { cache: "no-store" } : withSession({ cache: "no-store" })
   );
   await ensureOk(response, "Failed to download GEDCOM export result");
   return response.blob();

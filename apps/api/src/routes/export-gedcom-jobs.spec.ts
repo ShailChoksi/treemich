@@ -86,9 +86,16 @@ describe("export GEDCOM job routes", () => {
 
     const res = await app.inject({ method: "GET", url: "/export/gedcom/jobs/job-1" });
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { resultPath: string | null; status: string };
+    const body = JSON.parse(res.body) as {
+      resultPath: string | null;
+      downloadUrl: string | null;
+      downloadTokenExpiresAt: string | null;
+      status: string;
+    };
     expect(body.status).toBe("COMPLETED");
     expect(body.resultPath).toBe("/export/gedcom/jobs/job-1/ged");
+    expect(body.downloadUrl).toMatch(/^\/export\/gedcom\/jobs\/job-1\/ged\//);
+    expect(body.downloadTokenExpiresAt).toBeTruthy();
   });
 
   it("GET /export/gedcom/jobs/:jobId/ged returns attachment when complete", async () => {
@@ -100,6 +107,33 @@ describe("export GEDCOM job routes", () => {
     const res = await app.inject({ method: "GET", url: "/export/gedcom/jobs/job-1/ged" });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toMatch(/text\/plain/);
+    expect(res.body).toContain("HEAD");
+  });
+
+  it("GET signed async export URL returns attachment without session lookup", async () => {
+    gedcomExportJobFindFirstMock
+      .mockResolvedValueOnce({
+        id: "job-1",
+        status: "COMPLETED",
+        redactLiving: false,
+        includeTreemichCustomTags: true,
+        byteSize: 120,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:01.000Z"),
+        startedAt: new Date("2026-01-01T00:00:00.100Z"),
+        completedAt: new Date("2026-01-01T00:00:00.200Z"),
+        errorMessage: null
+      })
+      .mockResolvedValueOnce({
+        status: "COMPLETED",
+        gedcomUtf8: "0 HEAD\n0 TRLR\n"
+      });
+
+    const meta = await app.inject({ method: "GET", url: "/export/gedcom/jobs/job-1" });
+    const body = JSON.parse(meta.body) as { downloadUrl: string };
+    const res = await app.inject({ method: "GET", url: body.downloadUrl });
+
+    expect(res.statusCode).toBe(200);
     expect(res.body).toContain("HEAD");
   });
 });

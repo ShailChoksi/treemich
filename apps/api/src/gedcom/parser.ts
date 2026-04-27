@@ -97,6 +97,111 @@ export const splitPhysicalLines = (gedcomUtf8: string): string[] => {
   return bomStripped.split(/\r\n|\n|\r/);
 };
 
+const ANSEL_SINGLE_BYTE_TO_UNICODE: Record<string, string> = {
+  "\xA1": "Ł",
+  "\xA2": "Ø",
+  "\xA3": "Đ",
+  "\xA4": "Þ",
+  "\xA5": "Æ",
+  "\xA6": "Œ",
+  "\xA7": "ʹ",
+  "\xA8": "·",
+  "\xA9": "♭",
+  "\xAA": "®",
+  "\xAB": "±",
+  "\xAC": "Ơ",
+  "\xAD": "Ư",
+  "\xAE": "ʾ",
+  "\xB0": "°",
+  "\xB1": "ł",
+  "\xB2": "ø",
+  "\xB3": "đ",
+  "\xB4": "þ",
+  "\xB5": "æ",
+  "\xB6": "œ",
+  "\xB7": "ʺ",
+  "\xB8": "ı",
+  "\xB9": "£",
+  "\xBA": "ð",
+  "\xBC": "ơ",
+  "\xBD": "ư",
+  "\xC0": "˚",
+  "\xC1": "̀",
+  "\xC2": "́",
+  "\xC3": "̂",
+  "\xC4": "̃",
+  "\xC5": "̄",
+  "\xC6": "̆",
+  "\xC7": "̇",
+  "\xC8": "̈",
+  "\xC9": "̌",
+  "\xCA": "̊",
+  "\xCB": "̧",
+  "\xCC": "̷",
+  "\xCD": "̋",
+  "\xCE": "̨",
+  "\xCF": "̌",
+  "\xE0": "Ω",
+  "\xE1": "¶",
+  "\xE2": "☞",
+  "\xE3": "ƀ",
+  "\xE4": "©",
+  "\xE5": "ɛ",
+  "\xE6": "ɲ",
+  "\xE7": "ʀ",
+  "\xE8": "¿",
+  "\xE9": "¡",
+  "\xEA": "β",
+  "\xEB": "€"
+};
+
+const isCombiningMark = (value: string): boolean => /^\p{Mark}$/u.test(value);
+
+const transcodeAnselText = (gedcomText: string): string => {
+  let pendingMark = "";
+  let out = "";
+  for (const ch of gedcomText) {
+    const mapped = ANSEL_SINGLE_BYTE_TO_UNICODE[ch] ?? ch;
+    if (isCombiningMark(mapped)) {
+      pendingMark += mapped;
+      continue;
+    }
+    out += mapped + pendingMark;
+    pendingMark = "";
+  }
+  return (out + pendingMark).normalize("NFC");
+};
+
+export const normalizeGedcomDeclaredCharset = (
+  gedcomText: string,
+  log?: GedcomLineLogEntry[]
+): { gedcomUtf8: string; charset: "UTF-8" | "ANSEL" | "UNKNOWN" } => {
+  const physical = splitPhysicalLines(gedcomText);
+  for (let i = 0; i < Math.min(physical.length, 500); i++) {
+    const line = physical[i]!.replace(/\r$/, "");
+    const m = /^(\d+)\s+CHAR\s+(.+)$/i.exec(line);
+    if (!m) {
+      continue;
+    }
+    const raw = m[2]!.trim();
+    const u = raw.toUpperCase();
+    if (u === "UTF-8" || u === "UTF8") {
+      return { gedcomUtf8: gedcomText, charset: "UTF-8" };
+    }
+    if (u === "ANSEL") {
+      const converted = transcodeAnselText(gedcomText).replace(/^(\d+\s+CHAR\s+)ANSEL\b/im, "$1UTF-8");
+      log?.push({
+        severity: "warn",
+        lineNo: i + 1,
+        message: "GEDCOM declared CHAR ANSEL; transcoded supported ANSEL characters to UTF-8"
+      });
+      return { gedcomUtf8: converted, charset: "ANSEL" };
+    }
+    return { gedcomUtf8: gedcomText, charset: "UNKNOWN" };
+  }
+  return { gedcomUtf8: gedcomText, charset: "UTF-8" };
+};
+
 export const parseTopLevelRecords = (
   mergedLines: string[],
   log: GedcomLineLogEntry[]
@@ -162,7 +267,7 @@ export const findSubValue = (chunk: GedcomPlainLine[], tag: string, subLevel = 2
 
 /**
  * If the HEAD declares a charset Treemich does not support as UTF-8 text, returns a user-facing message.
- * Only **ANSEL** is rejected here (common Gramps export); other CHAR values are ignored at this layer.
+ * ANSEL is transcoded by `normalizeGedcomDeclaredCharset`; other CHAR values are ignored at this layer.
  */
 export const gedcomDeclaredCharsetUnsupportedMessage = (gedcomUtf8: string): string | null => {
   const physical = splitPhysicalLines(gedcomUtf8);
@@ -174,11 +279,8 @@ export const gedcomDeclaredCharsetUnsupportedMessage = (gedcomUtf8: string): str
     }
     const raw = m[2]!.trim();
     const u = raw.toUpperCase();
-    if (u === "UTF-8" || u === "UTF8") {
+    if (u === "UTF-8" || u === "UTF8" || u === "ANSEL") {
       return null;
-    }
-    if (u === "ANSEL") {
-      return `GEDCOM declares CHAR ${raw}, which is not supported. Re-export as UTF-8 (CHAR UTF-8) or convert the file before import.`;
     }
   }
   return null;
@@ -190,12 +292,13 @@ export const parseGedcomDocument = (
 ): { records: GedcomRecordBlock[]; lineLog: GedcomLineLogEntry[] } => {
   const maxLines = options?.maxLines ?? 250_000;
   const lineLog: GedcomLineLogEntry[] = [];
-  const charsetMsg = gedcomDeclaredCharsetUnsupportedMessage(gedcomUtf8);
+  const normalized = normalizeGedcomDeclaredCharset(gedcomUtf8, lineLog);
+  const charsetMsg = gedcomDeclaredCharsetUnsupportedMessage(normalized.gedcomUtf8);
   if (charsetMsg) {
     lineLog.push({ severity: "error", lineNo: 0, message: charsetMsg });
     return { records: [], lineLog };
   }
-  const physical = splitPhysicalLines(gedcomUtf8);
+  const physical = splitPhysicalLines(normalized.gedcomUtf8);
   if (physical.length > maxLines) {
     lineLog.push({
       severity: "error",

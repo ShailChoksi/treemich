@@ -2,11 +2,17 @@
  * @file Phase 5b: GEDCOM import preview, job creation, and job status polling (`/import/gedcom/*`).
  */
 
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";
-import { isGedcomImportEnabled, maxGedcomImportBytes, maxGedcomImportLineLogEntries } from "../config/env.js";
+import {
+  isGedcomImportEnabled,
+  maxGedcomImportBytes,
+  maxGedcomImportLineLogEntries,
+  maxGedcomMediaArchiveBytes
+} from "../config/env.js";
 import { prisma } from "../db/client.js";
+import { parseGedcomArchive, stageGedcomArchiveMediaFiles } from "../gedcom/archiveImport.js";
 import {
   buildGedcomImportPreview,
   mergeIndiMatches,
@@ -33,7 +39,12 @@ const createJobBodySchema = z.object({
       dryRun: z.boolean().optional(),
       skipAlreadyImportedIndis: z.boolean().optional(),
       /** When true, allows importing only a matched INDI subset; FAM rows with missing matches are skipped. */
-      allowPartialMatches: z.boolean().optional()
+      allowPartialMatches: z.boolean().optional(),
+      /**
+       * Phase 5 intentionally remains match-only: unmatched INDI rows are skipped unless the operator later adds
+       * a shadow-person or Immich-create policy.
+       */
+      unmatchedIndiPolicy: z.literal("MATCH_ONLY").optional()
     })
     .optional()
 });
@@ -41,6 +52,50 @@ const createJobBodySchema = z.object({
 const jobIdParamsSchema = z.object({
   jobId: z.string().min(1)
 });
+
+const multipartFieldValue = (raw: unknown): string | undefined => {
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (
+    raw &&
+    typeof raw === "object" &&
+    "value" in raw &&
+    typeof (raw as { value?: unknown }).value === "string"
+  ) {
+    return (raw as { value: string }).value;
+  }
+  return undefined;
+};
+
+const parseJsonField = <T>(raw: unknown, schema: z.ZodType<T>, fallback: T): T => {
+  const value = multipartFieldValue(raw);
+  if (!value?.trim()) {
+    return fallback;
+  }
+  return schema.parse(JSON.parse(value));
+};
+
+const readArchiveUpload = async (request: FastifyRequest) => {
+  const file = await request.file();
+  if (!file) {
+    const err = new Error("Missing archive file");
+    (err as Error & { statusCode: number }).statusCode = 400;
+    throw err;
+  }
+  if (!file.filename.toLowerCase().endsWith(".zip")) {
+    const err = new Error("GEDCOM media import requires a .zip archive");
+    (err as Error & { statusCode: number }).statusCode = 400;
+    throw err;
+  }
+  const buffer = await file.toBuffer();
+  return {
+    fileName: file.filename,
+    archive: parseGedcomArchive(buffer),
+    byteSize: buffer.byteLength,
+    fields: file.fields
+  };
+};
 
 export const registerImportGedcomRoutes = (app: FastifyInstance) => {
   if (!isGedcomImportEnabled()) {
@@ -68,9 +123,46 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
       return {
         indis: preview.indis,
         fams: preview.fams,
+        media: preview.media,
+        archiveMediaFiles: [],
         unmatchedIndis: unmatched,
+        unmatchedIndiPolicy: "MATCH_ONLY",
         famMatchError: famError,
         lineLog: preview.lineLog.slice(0, maxGedcomImportLineLogEntries()),
+        userId: auth.user.id
+      };
+    }
+  );
+
+  app.post(
+    "/import/gedcom/preview/archive",
+    { bodyLimit: maxGedcomMediaArchiveBytes() + 256_000 },
+    async (request) => {
+      const auth = getRequiredAuth(request);
+      const { archive } = await readArchiveUpload(request);
+      const preview = buildGedcomImportPreview(archive.gedcomUtf8);
+      const merged = mergeIndiMatches({}, preview.records);
+      const unmatched = preview.indis
+        .filter((i) => !merged.get(i.xref))
+        .map((i) => ({
+          xref: i.xref,
+          displayName: i.displayName,
+          immichHint: i.immichHint
+        }));
+      const famError = validateFamMatches(preview, merged);
+      return {
+        indis: preview.indis,
+        fams: preview.fams,
+        media: preview.media,
+        archiveMediaFiles: archive.mediaFiles.map((m) => ({
+          path: m.normalizedPath,
+          byteSize: m.byteSize,
+          mimeType: m.mimeType
+        })),
+        unmatchedIndis: unmatched,
+        unmatchedIndiPolicy: "MATCH_ONLY",
+        famMatchError: famError,
+        lineLog: [...archive.lineLog, ...preview.lineLog].slice(0, maxGedcomImportLineLogEntries()),
         userId: auth.user.id
       };
     }
@@ -104,6 +196,81 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
           lineLog: preview.lineLog.slice(0, maxGedcomImportLineLogEntries())
         }
       });
+      scheduleGedcomImportJob(job.id, app.services, app.log);
+      return {
+        id: job.id,
+        status: job.status,
+        createdAt: job.createdAt.toISOString()
+      };
+    }
+  );
+
+  app.post(
+    "/import/gedcom/jobs/archive",
+    { bodyLimit: maxGedcomMediaArchiveBytes() + 256_000 },
+    async (request, reply) => {
+      const auth = getRequiredAuth(request);
+      const { fileName, archive, byteSize, fields } = await readArchiveUpload(request);
+      const indiMatches = parseJsonField(
+        fields.indiMatches,
+        z.record(z.string().min(1), z.string().min(1)),
+        {}
+      );
+      const importOptions = parseJsonField(
+        fields.importOptions,
+        createJobBodySchema.shape.importOptions.unwrap(),
+        {}
+      );
+      const preview = buildGedcomImportPreview(archive.gedcomUtf8);
+      const merged = mergeIndiMatches(indiMatches, preview.records);
+      const famErr = validateFamMatches(preview, merged);
+      const allowPartialMatches = importOptions.allowPartialMatches === true;
+      if (famErr && !allowPartialMatches) {
+        return reply.code(422).send({
+          statusCode: 422,
+          error: "Incomplete INDI matches for family records",
+          message: `${famErr}. To import only matched people, set importOptions.allowPartialMatches=true.`
+        });
+      }
+      const job = await prisma.gedcomImportJob.create({
+        data: {
+          userId: auth.user.id,
+          fileName,
+          byteSize,
+          gedcomUtf8: archive.gedcomUtf8,
+          indiMatches: indiMatches as object,
+          importOptions: importOptions as object,
+          lineLog: [...archive.lineLog, ...preview.lineLog].slice(0, maxGedcomImportLineLogEntries())
+        }
+      });
+      try {
+        const staged = await stageGedcomArchiveMediaFiles(job.id, archive.mediaFiles);
+        await prisma.gedcomImportJob.update({
+          where: { id: job.id },
+          data: {
+            importOptions: {
+              ...importOptions,
+              mediaArchive: staged
+            } as object
+          }
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Failed to stage GEDCOM media archive";
+        await prisma.gedcomImportJob.update({
+          where: { id: job.id },
+          data: {
+            status: "FAILED",
+            completedAt: new Date(),
+            errorMessage: message,
+            lineLog: [
+              ...archive.lineLog,
+              ...preview.lineLog,
+              { severity: "error", lineNo: 0, message }
+            ].slice(0, maxGedcomImportLineLogEntries())
+          }
+        });
+        throw e;
+      }
       scheduleGedcomImportJob(job.id, app.services, app.log);
       return {
         id: job.id,

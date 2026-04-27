@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   gedcomDeclaredCharsetUnsupportedMessage,
   mergeConcCont,
+  normalizeGedcomDeclaredCharset,
   normalizeIndiFamXref,
   parseGedcomDocument,
   parseTopLevelRecords,
@@ -59,17 +60,21 @@ describe("gedcom parser", () => {
     expect(recs).toHaveLength(1);
   });
 
-  it("rejects ANSEL-declared files before parsing records", () => {
+  it("transcodes ANSEL-declared files before parsing records", () => {
     const ged = `0 HEAD
 1 CHAR ANSEL
 0 @I1@ INDI
-1 NAME X /Y/
+1 NAME Jos\xC2e /Nu\xC4nez/
 0 TRLR
 `;
-    expect(gedcomDeclaredCharsetUnsupportedMessage(ged)).toMatch(/ANSEL/);
+    expect(gedcomDeclaredCharsetUnsupportedMessage(ged)).toBeNull();
+    const normalized = normalizeGedcomDeclaredCharset(ged);
+    expect(normalized.charset).toBe("ANSEL");
+    expect(normalized.gedcomUtf8).toContain("1 CHAR UTF-8");
+    expect(normalized.gedcomUtf8).toContain("José /Nuñez/");
     const { records, lineLog } = parseGedcomDocument(ged);
-    expect(records).toHaveLength(0);
-    expect(lineLog.some((e) => e.severity === "error" && e.message.includes("ANSEL"))).toBe(true);
+    expect(records).toHaveLength(1);
+    expect(lineLog.some((e) => e.severity === "warn" && e.message.includes("ANSEL"))).toBe(true);
   });
 
   it("parses checked-in minimal GEDCOM golden fixture", () => {

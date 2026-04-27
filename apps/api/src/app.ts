@@ -5,13 +5,14 @@
 
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
+import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyReply } from "fastify";
 import { ZodError } from "zod";
 import { ImmichAuthenticationError } from "./integrations/immich/client.js";
 import { readCookie } from "./auth/request.js";
 import { TreemichAuthError } from "./auth/service.js";
-import { env } from "./config/env.js";
+import { env, maxGedcomMediaArchiveBytes } from "./config/env.js";
 import { prisma } from "./db/client.js";
 import { registerAuthLinkStatusRoute } from "./routes/auth.link-status.js";
 import { registerAuthLoginRoute } from "./routes/auth.login.js";
@@ -107,6 +108,13 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(helmet, {
     global: true,
     contentSecurityPolicy: false
+  });
+  app.register(multipart, {
+    limits: {
+      fileSize: maxGedcomMediaArchiveBytes(),
+      files: 1,
+      fields: 8
+    }
   });
 
   if (env.NODE_ENV === "production" && !env.TREEMICH_TRUST_PROXY) {

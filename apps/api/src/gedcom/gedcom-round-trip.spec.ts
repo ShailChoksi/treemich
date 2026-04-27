@@ -61,4 +61,29 @@ describe("GEDCOM export → import preview (Phase 5 round-trip sanity)", () => {
     const merged = mergeIndiMatches({ I1: "any-immich-id" }, preview.records);
     expect(validateFamMatches(preview, merged)).toBeNull();
   });
+
+  it("checked-in Gramps-style fixture covers sources, repositories, media, and FAM matching", () => {
+    const ged = readFileSync(join(__dirname, "fixtures", "gramps-style-phase5.ged"), "utf8");
+    const preview = buildGedcomImportPreview(ged);
+    const merged = mergeIndiMatches({}, preview.records);
+
+    expect(preview.indis.map((row) => row.immichHint).sort()).toEqual(["immich-ana", "immich-jose"]);
+    expect(preview.fams).toEqual([
+      {
+        xref: "@F1@",
+        husbXref: "@I1@",
+        wifeXref: "@I2@",
+        childXrefs: []
+      }
+    ]);
+    expect(preview.media).toEqual([
+      {
+        xref: "@O1@",
+        file: "https://example.test/evidence/birth-record.jpg",
+        form: "image/jpeg",
+        title: "Birth record scan"
+      }
+    ]);
+    expect(validateFamMatches(preview, merged)).toBeNull();
+  });
 });

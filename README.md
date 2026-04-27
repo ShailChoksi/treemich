@@ -49,7 +49,12 @@ Imports **UTF-8 GEDCOM** into Treemich **only for people you explicitly map** to
 2. **`POST /api/import/gedcom/jobs`** — body `{ "gedcomUtf8", "indiMatches": { "@I1@": "<immichPersonId>", ... }, "fileName"?, "importOptions"? }`. Creates an async job (`PENDING` → `RUNNING` → `COMPLETED` or `FAILED`) and applies **REPO**, **SOUR**, **FAM** (via `Family` + derived edges), **MARR**/**DIV** on the spouse relationship, family-scoped **RESI**/**CENS**/**EVEN**, and **INDI** names / **SEX** / person life events. **`importOptions`**: `dryRun`, `skipAlreadyImportedIndis` (skips INDI when `PersonProfile.externalIds.gedcomIndi` already equals that xref).
 3. **`GET /api/import/gedcom/jobs/:jobId`** — poll status, **`summary`** counts, **`lineLog`**, **`errorMessage`**.
 
-**Limits:** payload size defaults to **3 MB** UTF-8 (`TREEMICH_GEDCOM_IMPORT_MAX_BYTES`); parser line cap **`TREEMICH_GEDCOM_IMPORT_MAX_LINES`** (default 250k).
+For GEDCOM files with evidence media, upload a **ZIP bundle** instead of a bare `.ged`:
+
+- **`POST /api/import/gedcom/preview/archive`** — multipart form field `archive` containing one `.zip`. The ZIP must contain exactly one `.ged` file plus any referenced media files.
+- **`POST /api/import/gedcom/jobs/archive`** — multipart `archive` plus JSON string fields `indiMatches` and optional `importOptions`. The importer resolves top-level **`OBJE`** records by matching `FILE` paths to ZIP entries, stores matched binaries in Treemich-managed media storage, and creates `MediaObject` / `MediaLink` rows for person, life-event, source, and supported family-event targets. Remote `http(s)` `FILE` values are kept as references; local paths require the ZIP bundle.
+
+**Limits:** payload size defaults to **3 MB** UTF-8 (`TREEMICH_GEDCOM_IMPORT_MAX_BYTES`); parser line cap **`TREEMICH_GEDCOM_IMPORT_MAX_LINES`** (default 250k). Media ZIP uploads default to **100 MB** (`TREEMICH_GEDCOM_MEDIA_MAX_BYTES`) and individual media files default to **50 MB** (`TREEMICH_GEDCOM_MEDIA_MAX_FILE_BYTES`). Imported media is stored under **`TREEMICH_MEDIA_STORAGE_DIR`** (Compose defaults to `/data/media`, backed by the `treemich-media` volume).
 
 **Enable** with **`TREEMICH_GEDCOM_IMPORT_ENABLED=true`** (default when unset: **disabled**). Apply migration **`0019_gedcom_import_job`**.
 

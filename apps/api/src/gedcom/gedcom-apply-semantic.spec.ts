@@ -1,0 +1,240 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AppServices } from "../services.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const mocks = vi.hoisted(() => ({
+  gedcomImportJobUpdateMany: vi.fn(),
+  gedcomImportJobFindUnique: vi.fn(),
+  gedcomImportJobUpdate: vi.fn(),
+  personProfileFindUnique: vi.fn(),
+  familyFindFirst: vi.fn(),
+  familyUpdate: vi.fn(),
+  relationshipFindFirst: vi.fn()
+}));
+
+vi.mock("../config/env.js", () => ({
+  env: { TREEMICH_GEDCOM_JOB_STALE_AFTER_MS: 60_000 },
+  maxGedcomImportLines: () => 250_000,
+  maxGedcomMediaFileBytes: () => 50_000_000
+}));
+
+vi.mock("../db/client.js", () => ({
+  prisma: {
+    gedcomImportJob: {
+      updateMany: mocks.gedcomImportJobUpdateMany,
+      findUnique: mocks.gedcomImportJobFindUnique,
+      update: mocks.gedcomImportJobUpdate
+    },
+    personProfile: {
+      findUnique: mocks.personProfileFindUnique,
+      update: vi.fn()
+    },
+    family: {
+      findFirst: mocks.familyFindFirst,
+      update: mocks.familyUpdate
+    },
+    relationship: {
+      findFirst: mocks.relationshipFindFirst
+    }
+  }
+}));
+
+describe("GEDCOM export/import semantic apply coverage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("dry-runs a Gramps-style fixture through the apply pipeline and reports semantic entity counts", async () => {
+    const gedcomUtf8 = readFileSync(join(__dirname, "fixtures", "gramps-style-phase5.ged"), "utf8");
+    mocks.gedcomImportJobUpdateMany.mockResolvedValueOnce({ count: 1 });
+    mocks.gedcomImportJobFindUnique.mockResolvedValueOnce({
+      id: "job-1",
+      userId: "user-1",
+      status: "PENDING",
+      gedcomUtf8,
+      indiMatches: {},
+      importOptions: { dryRun: true, unmatchedIndiPolicy: "MATCH_ONLY" },
+      lineLog: []
+    });
+    mocks.familyFindFirst.mockResolvedValue(null);
+    mocks.relationshipFindFirst.mockResolvedValue(null);
+    mocks.personProfileFindUnique.mockImplementation(async ({ where }) => ({
+      id: where.userId_immichPersonId.immichPersonId === "immich-jose" ? "profile-jose" : "profile-ana",
+      userId: "user-1",
+      immichPersonId: where.userId_immichPersonId.immichPersonId,
+      externalIds: {}
+    }));
+
+    const services = {
+      evidenceService: {
+        createRepository: vi.fn(),
+        createSource: vi.fn(),
+        createMediaObject: vi.fn(),
+        createMediaLink: vi.fn()
+      },
+      relationshipService: {
+        upsertProfile: vi.fn()
+      },
+      lifeEventService: {
+        createPersonLifeEvent: vi.fn(),
+        createRelationshipLifeEvent: vi.fn(),
+        createFamilyLifeEvent: vi.fn()
+      },
+      personNameService: {
+        create: vi.fn()
+      },
+      familyService: {
+        createFamily: vi.fn()
+      }
+    } as unknown as AppServices;
+
+    const { processGedcomImportJob } = await import("./importRunner.js");
+    await processGedcomImportJob("job-1", services);
+
+    const completed = mocks.gedcomImportJobUpdate.mock.calls.at(-1)?.[0]?.data;
+    expect(completed).toMatchObject({ status: "COMPLETED" });
+    expect(completed.summary).toMatchObject({
+      repositoriesCreated: 1,
+      sourcesCreated: 1,
+      mediaObjectsCreated: 1,
+      mediaLinksCreated: 1,
+      familiesCreated: 1,
+      profilesUpdated: 2,
+      personLifeEventsCreated: 1,
+      dryRunDiff: {
+        creates: expect.objectContaining({
+          repositories: 1,
+          sources: 1,
+          mediaObjects: 1,
+          families: 1,
+          personLifeEvents: 1
+        }),
+        updates: expect.objectContaining({ profiles: 2 })
+      }
+    });
+  });
+
+  it("reuses and stamps an existing same-shape family when the GEDCOM FAM xref changed", async () => {
+    const gedcomUtf8 = `0 HEAD
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Pat /Parent/
+1 _TREEMICH_IMMICH_PERSON_ID parent-1
+0 @I2@ INDI
+1 NAME Kit /Child/
+1 _TREEMICH_IMMICH_PERSON_ID child-1
+0 @F99@ FAM
+1 HUSB @I1@
+1 CHIL @I2@
+0 TRLR
+`;
+    mocks.gedcomImportJobUpdateMany.mockResolvedValueOnce({ count: 1 });
+    mocks.gedcomImportJobFindUnique.mockResolvedValueOnce({
+      id: "job-2",
+      userId: "user-1",
+      status: "PENDING",
+      gedcomUtf8,
+      indiMatches: {},
+      importOptions: { unmatchedIndiPolicy: "MATCH_ONLY" },
+      lineLog: []
+    });
+    mocks.familyFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: "family-existing",
+      parent1ImmichPersonId: "parent-1",
+      parent2ImmichPersonId: null,
+      externalIds: {},
+      children: [{ childImmichPersonId: "child-1" }]
+    });
+    mocks.familyUpdate.mockResolvedValueOnce({});
+    mocks.relationshipFindFirst.mockResolvedValue(null);
+    mocks.personProfileFindUnique.mockImplementation(async ({ where }) => ({
+      id: `profile-${where.userId_immichPersonId.immichPersonId}`,
+      userId: "user-1",
+      immichPersonId: where.userId_immichPersonId.immichPersonId,
+      externalIds: {}
+    }));
+
+    const createFamily = vi.fn();
+    const services = {
+      evidenceService: {
+        createRepository: vi.fn(),
+        createSource: vi.fn(),
+        createMediaObject: vi.fn(),
+        createMediaLink: vi.fn()
+      },
+      relationshipService: {
+        upsertProfile: vi.fn()
+      },
+      lifeEventService: {
+        createPersonLifeEvent: vi.fn(),
+        createRelationshipLifeEvent: vi.fn(),
+        createFamilyLifeEvent: vi.fn()
+      },
+      personNameService: {
+        create: vi.fn()
+      },
+      familyService: {
+        createFamily
+      }
+    } as unknown as AppServices;
+
+    const { processGedcomImportJob } = await import("./importRunner.js");
+    await processGedcomImportJob("job-2", services);
+
+    expect(createFamily).not.toHaveBeenCalled();
+    expect(mocks.familyUpdate).toHaveBeenCalledWith({
+      where: { id: "family-existing" },
+      data: { externalIds: { gedcomFam: "F99" } }
+    });
+    const completed = mocks.gedcomImportJobUpdate.mock.calls.at(-1)?.[0]?.data;
+    expect(completed.summary).toMatchObject({ familiesReused: 1, familiesCreated: 0 });
+  });
+
+  it("keeps unmatched INDI rows match-only and records an explicit skip", async () => {
+    mocks.gedcomImportJobUpdateMany.mockResolvedValueOnce({ count: 1 });
+    mocks.gedcomImportJobFindUnique.mockResolvedValueOnce({
+      id: "job-3",
+      userId: "user-1",
+      status: "PENDING",
+      gedcomUtf8: "0 HEAD\n1 CHAR UTF-8\n0 @I1@ INDI\n1 NAME Unmatched /Person/\n0 TRLR\n",
+      indiMatches: {},
+      importOptions: { dryRun: true, allowPartialMatches: true, unmatchedIndiPolicy: "MATCH_ONLY" },
+      lineLog: []
+    });
+
+    const services = {
+      evidenceService: {
+        createRepository: vi.fn(),
+        createSource: vi.fn(),
+        createMediaObject: vi.fn(),
+        createMediaLink: vi.fn()
+      },
+      relationshipService: { upsertProfile: vi.fn() },
+      lifeEventService: {
+        createPersonLifeEvent: vi.fn(),
+        createRelationshipLifeEvent: vi.fn(),
+        createFamilyLifeEvent: vi.fn()
+      },
+      personNameService: { create: vi.fn() },
+      familyService: { createFamily: vi.fn() }
+    } as unknown as AppServices;
+
+    const { processGedcomImportJob } = await import("./importRunner.js");
+    await processGedcomImportJob("job-3", services);
+
+    const completed = mocks.gedcomImportJobUpdate.mock.calls.at(-1)?.[0]?.data;
+    expect(completed.summary).toMatchObject({ indisSkipped: 1 });
+    expect(completed.lineLog).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.stringContaining("match-only")
+        })
+      ])
+    );
+    expect(services.relationshipService.upsertProfile).not.toHaveBeenCalled();
+  });
+});

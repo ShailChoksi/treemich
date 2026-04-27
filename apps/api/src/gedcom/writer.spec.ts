@@ -195,6 +195,80 @@ describe("buildGedcomDocument", () => {
     expect(norm).not.toContain("secret");
   });
 
+  it("emits OBJE records and pointers for person, life-event, and source media links", () => {
+    const { gedcomUtf8, xrefs } = buildGedcomDocument({
+      personProfiles: [
+        {
+          id: "pp-1",
+          immichPersonId: "p1",
+          gender: "UNKNOWN",
+          givenName: "Ann",
+          surname: "Smith",
+          displayNameOverride: null,
+          externalIds: {}
+        }
+      ],
+      relationships: [],
+      families: [],
+      lifeEvents: [
+        {
+          id: "le-1",
+          eventType: "BIRTH",
+          customLabel: null,
+          dateQualifier: "EXACT",
+          year: 1900,
+          month: null,
+          day: null,
+          endYear: null,
+          endMonth: null,
+          endDay: null,
+          personProfileId: "pp-1",
+          relationshipId: null,
+          familyId: null,
+          notes: null,
+          place: null,
+          citations: []
+        }
+      ],
+      personNames: [],
+      repositories: [],
+      sources: [
+        {
+          id: "src-1",
+          repositoryId: null,
+          title: "Family Bible",
+          author: null,
+          publication: null,
+          url: null,
+          notes: null
+        }
+      ],
+      mediaObjects: [
+        { id: "m1", storageUrl: "/api/evidence/media/file/a.jpg", mimeType: "image/jpeg", title: "Portrait" },
+        {
+          id: "m2",
+          storageUrl: "/api/evidence/media/file/b.pdf",
+          mimeType: "application/pdf",
+          title: "Birth certificate"
+        }
+      ],
+      mediaLinks: [
+        { mediaObjectId: "m1", targetType: "PERSON_PROFILE", targetId: "pp-1" },
+        { mediaObjectId: "m2", targetType: "LIFE_EVENT", targetId: "le-1" },
+        { mediaObjectId: "m2", targetType: "SOURCE", targetId: "src-1" }
+      ]
+    });
+
+    const norm = normalizeGedcomForTest(gedcomUtf8);
+    expect(xrefs.obje.O0001?.mediaObjectId).toBe("m1");
+    expect(norm).toContain("0 @O0001@ OBJE");
+    expect(norm).toContain("1 FILE /api/evidence/media/file/a.jpg");
+    expect(norm).toContain("1 OBJE @O0001@");
+    expect(norm).toContain("2 OBJE @O0002@");
+    expect(norm).toContain("0 @S0001@ SOUR");
+    expect(norm).toContain("1 OBJE @O0002@");
+  });
+
   it("uses externalIds.gedcomFam as stable FAM xref when valid", () => {
     const { gedcomUtf8, xrefs } = buildGedcomDocument(
       {

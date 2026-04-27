@@ -657,6 +657,20 @@ export function buildGedcomDocument(
     return [...new Set(xrefsOut)].sort();
   };
 
+  const mediaForSource = (sourceId: string): string[] => {
+    const xrefsOut: string[] = [];
+    for (const link of input.mediaLinks) {
+      if (link.targetType !== "SOURCE" || link.targetId !== sourceId) {
+        continue;
+      }
+      const ox = mediaIdToXref.get(link.mediaObjectId);
+      if (ox) {
+        xrefsOut.push(ox);
+      }
+    }
+    return [...new Set(xrefsOut)].sort();
+  };
+
   /** MARR / DIV and other events scoped to relationship */
   for (const e of input.lifeEvents) {
     if (!e.relationshipId || (e.eventType !== "MARRIAGE" && e.eventType !== "DIVORCE")) {
@@ -690,6 +704,9 @@ export function buildGedcomDocument(
           lines.push(line(3, "PAGE", c.page.trim()));
         }
       }
+    }
+    for (const ox of mediaForLifeEvent(e.id)) {
+      lines.push(line(2, "OBJE", `@${ox}@`));
     }
   }
 
@@ -729,6 +746,9 @@ export function buildGedcomDocument(
           lines.push(line(3, "PAGE", c.page.trim()));
         }
       }
+    }
+    for (const ox of mediaForLifeEvent(e.id)) {
+      lines.push(line(2, "OBJE", `@${ox}@`));
     }
   }
 
@@ -877,6 +897,9 @@ export function buildGedcomDocument(
     }
     if (s.notes?.trim()) {
       out.push(line(1, "NOTE", s.notes.trim()));
+    }
+    for (const ox of mediaForSource(s.id)) {
+      out.push(line(1, "OBJE", `@${ox}@`));
     }
   }
 

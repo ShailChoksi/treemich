@@ -115,7 +115,13 @@ const envSchema = z
     /** Max physical lines accepted by the GEDCOM parser (default 250_000). */
     TREEMICH_GEDCOM_IMPORT_MAX_LINES: z.coerce.number().int().positive().optional(),
     /** Max line-log entries returned on job GET / stored on create (default 2000). */
-    TREEMICH_GEDCOM_IMPORT_MAX_LINE_LOG: z.coerce.number().int().positive().optional()
+    TREEMICH_GEDCOM_IMPORT_MAX_LINE_LOG: z.coerce.number().int().positive().optional(),
+    /** Durable local directory for imported evidence media files. */
+    TREEMICH_MEDIA_STORAGE_DIR: z.string().min(1).default("data/media"),
+    /** Max ZIP upload size for GEDCOM + media archive imports (default 100 MB). */
+    TREEMICH_GEDCOM_MEDIA_MAX_BYTES: z.coerce.number().int().positive().optional(),
+    /** Max individual media file size accepted from GEDCOM archive imports (default 50 MB). */
+    TREEMICH_GEDCOM_MEDIA_MAX_FILE_BYTES: z.coerce.number().int().positive().optional()
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.WEB_ORIGIN) {
@@ -200,3 +206,7 @@ export const maxGedcomImportBytes = (): number => env.TREEMICH_GEDCOM_IMPORT_MAX
 export const maxGedcomImportLineLogEntries = (): number => env.TREEMICH_GEDCOM_IMPORT_MAX_LINE_LOG ?? 2000;
 
 export const maxGedcomImportLines = (): number => env.TREEMICH_GEDCOM_IMPORT_MAX_LINES ?? 250_000;
+
+export const maxGedcomMediaArchiveBytes = (): number => env.TREEMICH_GEDCOM_MEDIA_MAX_BYTES ?? 100_000_000;
+
+export const maxGedcomMediaFileBytes = (): number => env.TREEMICH_GEDCOM_MEDIA_MAX_FILE_BYTES ?? 50_000_000;

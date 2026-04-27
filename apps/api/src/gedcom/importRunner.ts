@@ -6,10 +6,13 @@
 import type { FamilyChildPedigree, Gender, LifeEventType } from "@prisma/client";
 import { FamilyChildPedigree as FCP } from "@prisma/client";
 import type { CreateFamilyBody, CreateFamilyLifeEventBody, CreateLifeEventBody } from "@treemich/shared";
+import { rm } from "node:fs/promises";
 import { prisma } from "../db/client.js";
 import type { AppServices } from "../services.js";
+import { storeMediaFile } from "../evidence/mediaStorage.js";
 import { HttpConflictError } from "../lifeEvents/errors.js";
 import { env, maxGedcomImportLines } from "../config/env.js";
+import { findArchiveMediaFile, type StagedGedcomArchiveMediaFile } from "./archiveImport.js";
 import { parseGedcomDate } from "./gedcomDateParse.js";
 import {
   chunkByLevel1,
@@ -112,6 +115,7 @@ export type GedcomImportPreviewFam = {
 export type GedcomImportPreview = {
   indis: GedcomImportPreviewIndi[];
   fams: GedcomImportPreviewFam[];
+  media: GedcomImportPreviewMedia[];
   lineLog: GedcomLineLogEntry[];
 };
 
@@ -167,6 +171,7 @@ export const buildGedcomImportPreview = (gedcomUtf8: string): GedcomImportPrevie
   });
   const indis: GedcomImportPreviewIndi[] = [];
   const fams: GedcomImportPreviewFam[] = [];
+  const media: GedcomImportPreviewMedia[] = [];
   for (const r of records) {
     if (r.recordTag === "INDI" && r.xref) {
       indis.push(summarizeIndi(r));
@@ -174,8 +179,14 @@ export const buildGedcomImportPreview = (gedcomUtf8: string): GedcomImportPrevie
     if (r.recordTag === "FAM" && r.xref) {
       fams.push(summarizeFam(r));
     }
+    if (r.recordTag === "OBJE" && r.xref) {
+      const [obje] = rawObjeRecordsFromRecords([r]);
+      if (obje) {
+        media.push({ xref: obje.xref, file: obje.file, title: obje.title, form: obje.form });
+      }
+    }
   }
-  return { indis, fams, lineLog, records };
+  return { indis, fams, media, lineLog, records };
 };
 
 export const mergeIndiMatches = (
@@ -205,6 +216,44 @@ export const mergeIndiMatches = (
 };
 
 type RawCitation = { sourceXref: string | null; page: string | null; notes: string | null };
+
+export type GedcomImportPreviewMedia = {
+  xref: string;
+  file: string | null;
+  title: string | null;
+  form: string | null;
+};
+
+type RawObjeRecord = GedcomImportPreviewMedia & {
+  startLineNo: number;
+};
+
+const rawObjeRecordsFromRecords = (records: GedcomRecordBlock[]): RawObjeRecord[] =>
+  records
+    .filter((block) => block.recordTag === "OBJE" && block.xref)
+    .map((block) => ({
+      xref: block.xref!,
+      file: block.lines.find((ln) => ln.level === 1 && ln.tag === "FILE")?.value.trim() || null,
+      form: block.lines.find((ln) => ln.level === 1 && ln.tag === "FORM")?.value.trim() || null,
+      title: block.lines.find((ln) => ln.level === 1 && ln.tag === "TITL")?.value.trim() || null,
+      startLineNo: block.startLineNo
+    }));
+
+const objePointersFromChunk = (chunk: GedcomPlainLine[], level: number): string[] => {
+  const out: string[] = [];
+  for (const ln of chunk) {
+    if (ln.level !== level || ln.tag !== "OBJE") {
+      continue;
+    }
+    const px = xrefFromPointer(ln.value);
+    if (px) {
+      out.push(normalizeIndiFamXref(px));
+    }
+  }
+  return out;
+};
+
+const isRemoteUrl = (value: string): boolean => /^https?:\/\//i.test(value.trim());
 
 const rawCitationsFromChunk = (chunk: GedcomPlainLine[]): RawCitation[] => {
   const out: RawCitation[] = [];
@@ -444,6 +493,11 @@ export async function processGedcomImportJob(jobId: string, services: AppService
     dryRun?: boolean;
     skipAlreadyImportedIndis?: boolean;
     allowPartialMatches?: boolean;
+    unmatchedIndiPolicy?: "MATCH_ONLY";
+    mediaArchive?: {
+      archiveDir: string;
+      files: StagedGedcomArchiveMediaFile[];
+    };
   };
   const dryRun = options.dryRun === true;
   const skipAlreadyImportedIndis = options.skipAlreadyImportedIndis === true;
@@ -466,9 +520,21 @@ export async function processGedcomImportJob(jobId: string, services: AppService
     familyLifeEventsCreated: number;
     repositoriesCreated: number;
     sourcesCreated: number;
+    mediaObjectsCreated: number;
+    mediaLinksCreated: number;
+    mediaFilesStored: number;
+    mediaObjectsSkipped: number;
     personNamesCreated: number;
     profilesUpdated: number;
     indisSkipped: number;
+  };
+  type DryRunDiff = {
+    creates: Record<string, number>;
+    updates: Record<string, number>;
+    reuses: Record<string, number>;
+    skips: Record<string, number>;
+    conflicts: Record<string, number>;
+    warnings: number;
   };
   const summary: ImportSummary = {
     familiesCreated: 0,
@@ -479,14 +545,49 @@ export async function processGedcomImportJob(jobId: string, services: AppService
     familyLifeEventsCreated: 0,
     repositoriesCreated: 0,
     sourcesCreated: 0,
+    mediaObjectsCreated: 0,
+    mediaLinksCreated: 0,
+    mediaFilesStored: 0,
+    mediaObjectsSkipped: 0,
     personNamesCreated: 0,
     profilesUpdated: 0,
     indisSkipped: 0
   };
+  const buildDryRunDiff = (): DryRunDiff => ({
+    creates: {
+      families: summary.familiesCreated,
+      relationshipLifeEvents: summary.relationshipLifeEventsCreated,
+      familyLifeEvents: summary.familyLifeEventsCreated,
+      personLifeEvents: summary.personLifeEventsCreated,
+      repositories: summary.repositoriesCreated,
+      sources: summary.sourcesCreated,
+      mediaObjects: summary.mediaObjectsCreated,
+      mediaLinks: summary.mediaLinksCreated,
+      mediaFiles: summary.mediaFilesStored,
+      personNames: summary.personNamesCreated
+    },
+    updates: {
+      profiles: summary.profilesUpdated
+    },
+    reuses: {
+      families: summary.familiesReused,
+      spouseRelationships: summary.spouseRelationshipsResolved
+    },
+    skips: {
+      indis: summary.indisSkipped,
+      mediaObjects: summary.mediaObjectsSkipped
+    },
+    conflicts: {
+      warnings: lineLog.filter((entry) => /conflict|already|duplicate/i.test(entry.message)).length
+    },
+    warnings: lineLog.filter((entry) => entry.severity === "warn").length
+  });
 
   const repoXrefToId = new Map<string, string>();
   const sourceXrefToId = new Map<string, string>();
   const famXrefToTreemichFamilyId = new Map<string, string>();
+  const mediaXrefToId = new Map<string, string>();
+  const mediaArchiveFiles = Array.isArray(options.mediaArchive?.files) ? options.mediaArchive.files : [];
 
   const tryCatchLog = async (label: string, fn: () => Promise<void>) => {
     try {
@@ -497,6 +598,34 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         return;
       }
       throw e;
+    }
+  };
+
+  const linkObjePointers = async (
+    pointers: string[],
+    targetType: "PERSON_PROFILE" | "LIFE_EVENT" | "SOURCE",
+    targetId: string,
+    context: string
+  ) => {
+    for (const pointer of pointers) {
+      const mediaObjectId = mediaXrefToId.get(normalizeIndiFamXref(pointer));
+      if (!mediaObjectId) {
+        pushLog(lineLog, {
+          severity: "warn",
+          lineNo: 0,
+          message: `${context}: OBJE ${pointer} was not imported or could not be resolved`
+        });
+        continue;
+      }
+      if (dryRun) {
+        summary.mediaLinksCreated += 1;
+        continue;
+      }
+      await services.evidenceService.createMediaLink(job.userId, mediaObjectId, {
+        targetType,
+        targetId
+      });
+      summary.mediaLinksCreated += 1;
     }
   };
 
@@ -586,6 +715,89 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       }
     }
 
+    for (const obje of rawObjeRecordsFromRecords(records)) {
+      if (!obje.file) {
+        summary.mediaObjectsSkipped += 1;
+        pushLog(lineLog, {
+          severity: "warn",
+          lineNo: obje.startLineNo,
+          message: `OBJE ${obje.xref}: missing FILE; media object skipped`
+        });
+        continue;
+      }
+
+      let storageUrl = obje.file;
+      let checksum: string | null = null;
+      let mimeType = obje.form && obje.form.includes("/") ? obje.form : null;
+      const archiveMatch = findArchiveMediaFile(mediaArchiveFiles, obje.file);
+      if (archiveMatch.warning) {
+        pushLog(lineLog, {
+          severity: "warn",
+          lineNo: obje.startLineNo,
+          message: `OBJE ${obje.xref}: ${archiveMatch.warning}`
+        });
+      }
+
+      if (archiveMatch.file && "stagedPath" in archiveMatch.file) {
+        if (!dryRun) {
+          const stored = await storeMediaFile(archiveMatch.file.stagedPath, {
+            originalName: archiveMatch.file.basename
+          });
+          storageUrl = stored.storageUrl;
+          checksum = stored.checksum;
+          summary.mediaFilesStored += 1;
+        } else {
+          storageUrl = `/api/evidence/media/file/dry-run-${obje.xref.replace(/^@|@$/g, "")}`;
+        }
+        mimeType = archiveMatch.file.mimeType ?? mimeType;
+      } else if (!isRemoteUrl(obje.file) && mediaArchiveFiles.length > 0) {
+        summary.mediaObjectsSkipped += 1;
+        continue;
+      } else if (!isRemoteUrl(obje.file) && mediaArchiveFiles.length === 0) {
+        summary.mediaObjectsSkipped += 1;
+        pushLog(lineLog, {
+          severity: "warn",
+          lineNo: obje.startLineNo,
+          message: `OBJE ${obje.xref}: local FILE requires archive upload; media object skipped`
+        });
+        continue;
+      }
+
+      if (dryRun) {
+        mediaXrefToId.set(obje.xref, `dry-run-${obje.xref}`);
+        summary.mediaObjectsCreated += 1;
+      } else {
+        const created = await services.evidenceService.createMediaObject(job.userId, {
+          storageUrl,
+          mimeType,
+          checksum,
+          title: obje.title,
+          immichAssetId: null
+        });
+        mediaXrefToId.set(obje.xref, created.id);
+        summary.mediaObjectsCreated += 1;
+      }
+    }
+
+    for (const block of records) {
+      if (block.recordTag !== "SOUR" || !block.xref) {
+        continue;
+      }
+      const sourceId = sourceXrefToId.get(block.xref);
+      if (!sourceId && !dryRun) {
+        continue;
+      }
+      const pointers = chunkByLevel1(block.lines)
+        .filter((ch) => ch[0]?.tag === "OBJE")
+        .flatMap((ch) => objePointersFromChunk(ch, 1));
+      await linkObjePointers(
+        pointers,
+        "SOURCE",
+        sourceId ?? `dry-run-source-${block.xref}`,
+        `SOUR ${block.xref}`
+      );
+    }
+
     for (const block of records) {
       if (block.recordTag !== "FAM" || !block.xref) {
         continue;
@@ -668,13 +880,54 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         return wantIds.every((id) => have.has(id));
       };
 
-      const existingFam = await prisma.family.findFirst({
+      let existingFam = await prisma.family.findFirst({
         where: {
           userId: job.userId,
           externalIds: { path: ["gedcomFam"], equals: gedFamKey }
         },
         include: { children: true }
       });
+      if (!existingFam) {
+        const parentFilters =
+          husbImmich && wifeImmich
+            ? [
+                { parent1ImmichPersonId: husbImmich, parent2ImmichPersonId: wifeImmich },
+                { parent1ImmichPersonId: wifeImmich, parent2ImmichPersonId: husbImmich }
+              ]
+            : husbImmich || wifeImmich
+              ? [
+                  { parent1ImmichPersonId: husbImmich ?? wifeImmich ?? null, parent2ImmichPersonId: null },
+                  { parent1ImmichPersonId: null, parent2ImmichPersonId: husbImmich ?? wifeImmich ?? null }
+                ]
+              : [{ parent1ImmichPersonId: null, parent2ImmichPersonId: null }];
+        const sameShapeFam = await prisma.family.findFirst({
+          where: {
+            userId: job.userId,
+            OR: parentFilters
+          },
+          include: { children: true }
+        });
+        if (
+          sameShapeFam &&
+          parentsMatchFamily(sameShapeFam, husbImmich ?? null, wifeImmich ?? null) &&
+          childrenMatch(sameShapeFam.children, childImmichs)
+        ) {
+          existingFam = sameShapeFam;
+          if (!dryRun) {
+            await prisma.family.update({
+              where: { id: sameShapeFam.id },
+              data: {
+                externalIds: mergeExternalIds(sameShapeFam.externalIds, { gedcomFam: gedFamKey }) as object
+              }
+            });
+          }
+          pushLog(lineLog, {
+            severity: "warn",
+            lineNo: block.startLineNo,
+            message: `FAM ${fam.xref}: reused existing Treemich family by matching parents/children and stamped gedcomFam=${gedFamKey}`
+          });
+        }
+      }
 
       let relId: string | null = null;
       let treemichFamilyId: string | null = null;
@@ -717,6 +970,17 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         summary.familiesCreated += 1;
       }
 
+      const familyLevelObjePointers = chunkByLevel1(block.lines)
+        .filter((ch) => ch[0]?.tag === "OBJE")
+        .flatMap((ch) => objePointersFromChunk(ch, 1));
+      if (familyLevelObjePointers.length > 0) {
+        pushLog(lineLog, {
+          severity: "warn",
+          lineNo: block.startLineNo,
+          message: `FAM ${fam.xref}: family-level OBJE pointers are parsed but skipped; Phase 5 links media to person profiles, life events, and sources`
+        });
+      }
+
       for (const ch of chunkByLevel1(block.lines)) {
         const tag = ch[0]!.tag;
         if (tag === "MARR" || tag === "DIV") {
@@ -724,9 +988,27 @@ export async function processGedcomImportJob(jobId: string, services: AppService
           if (b && relId && !dryRun) {
             attachCitations(b, ch, sourceXrefToId);
             await tryCatchLog(`FAM ${fam.xref} ${tag}`, async () => {
-              await services.lifeEventService.createRelationshipLifeEvent(job.userId, relId!, b);
+              const created = await services.lifeEventService.createRelationshipLifeEvent(
+                job.userId,
+                relId!,
+                b
+              );
               summary.relationshipLifeEventsCreated += 1;
+              await linkObjePointers(
+                objePointersFromChunk(ch, 2),
+                "LIFE_EVENT",
+                created.id,
+                `FAM ${fam.xref} ${tag}`
+              );
             });
+          } else if (b && relId && dryRun) {
+            summary.relationshipLifeEventsCreated += 1;
+            await linkObjePointers(
+              objePointersFromChunk(ch, 2),
+              "LIFE_EVENT",
+              `dry-run-fam-${fam.xref}-${tag}`,
+              `FAM ${fam.xref} ${tag}`
+            );
           }
         }
         if ((tag === "RESI" || tag === "CENS" || tag === "EVEN") && treemichFamilyId && !dryRun) {
@@ -734,9 +1016,30 @@ export async function processGedcomImportJob(jobId: string, services: AppService
           if (b) {
             attachCitations(b, ch, sourceXrefToId);
             await tryCatchLog(`FAM ${fam.xref} ${tag}`, async () => {
-              await services.lifeEventService.createFamilyLifeEvent(job.userId, treemichFamilyId!, b);
+              const created = await services.lifeEventService.createFamilyLifeEvent(
+                job.userId,
+                treemichFamilyId!,
+                b
+              );
               summary.familyLifeEventsCreated += 1;
+              await linkObjePointers(
+                objePointersFromChunk(ch, 2),
+                "LIFE_EVENT",
+                created.id,
+                `FAM ${fam.xref} ${tag}`
+              );
             });
+          }
+        } else if ((tag === "RESI" || tag === "CENS" || tag === "EVEN") && treemichFamilyId && dryRun) {
+          const b = chunkToFamilyLifeEventBody(ch);
+          if (b) {
+            summary.familyLifeEventsCreated += 1;
+            await linkObjePointers(
+              objePointersFromChunk(ch, 2),
+              "LIFE_EVENT",
+              `dry-run-family-${fam.xref}-${tag}`,
+              `FAM ${fam.xref} ${tag}`
+            );
           }
         }
       }
@@ -748,6 +1051,12 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       }
       const immichId = indiMap.get(block.xref);
       if (!immichId) {
+        summary.indisSkipped += 1;
+        pushLog(lineLog, {
+          severity: "warn",
+          lineNo: block.startLineNo,
+          message: `Unmatched INDI ${block.xref} skipped; Phase 5 GEDCOM import is match-only and does not create Immich people`
+        });
         continue;
       }
       const profile = await prisma.personProfile.findUnique({
@@ -835,6 +1144,12 @@ export async function processGedcomImportJob(jobId: string, services: AppService
             });
           }
         }
+        await linkObjePointers(
+          chunks.filter((ch) => ch[0]?.tag === "OBJE").flatMap((ch) => objePointersFromChunk(ch, 1)),
+          "PERSON_PROFILE",
+          profile.id,
+          `INDI ${block.xref}`
+        );
         for (const ch of chunks) {
           const tag = ch[0]!.tag;
           if (
@@ -852,8 +1167,18 @@ export async function processGedcomImportJob(jobId: string, services: AppService
             if (b) {
               attachCitations(b, ch, sourceXrefToId);
               await tryCatchLog(`person ${block.xref} ${tag}`, async () => {
-                await services.lifeEventService.createPersonLifeEvent(job.userId, immichId, b);
+                const created = await services.lifeEventService.createPersonLifeEvent(
+                  job.userId,
+                  immichId,
+                  b
+                );
                 summary.personLifeEventsCreated += 1;
+                await linkObjePointers(
+                  objePointersFromChunk(ch, 2),
+                  "LIFE_EVENT",
+                  created.id,
+                  `INDI ${block.xref} ${tag}`
+                );
               });
             }
           }
@@ -865,18 +1190,64 @@ export async function processGedcomImportJob(jobId: string, services: AppService
           }
         });
         summary.profilesUpdated += 1;
+      } else {
+        summary.profilesUpdated += 1;
+        let nameIndex = 0;
+        for (const ch of chunks) {
+          if (ch[0]!.tag === "NAME") {
+            nameIndex += 1;
+            if (nameIndex > 1) {
+              summary.personNamesCreated += 1;
+            }
+          }
+        }
+        await linkObjePointers(
+          chunks.filter((ch) => ch[0]?.tag === "OBJE").flatMap((ch) => objePointersFromChunk(ch, 1)),
+          "PERSON_PROFILE",
+          profile.id,
+          `INDI ${block.xref}`
+        );
+        for (const ch of chunks) {
+          const tag = ch[0]!.tag;
+          if (
+            tag === "BIRT" ||
+            tag === "DEAT" ||
+            tag === "EVEN" ||
+            tag === "BURI" ||
+            tag === "CHR" ||
+            tag === "BAPM" ||
+            tag === "RESI" ||
+            tag === "IMMI" ||
+            tag === "CENS"
+          ) {
+            const b = chunkToPersonLifeEventBody(ch);
+            if (b) {
+              summary.personLifeEventsCreated += 1;
+              await linkObjePointers(
+                objePointersFromChunk(ch, 2),
+                "LIFE_EVENT",
+                `dry-run-indi-${block.xref}-${tag}`,
+                `INDI ${block.xref} ${tag}`
+              );
+            }
+          }
+        }
       }
     }
 
+    const persistedSummary = dryRun ? { ...summary, dryRunDiff: buildDryRunDiff() } : summary;
     await prisma.gedcomImportJob.update({
       where: { id: jobId },
       data: {
         status: "COMPLETED",
         completedAt: new Date(),
         lineLog,
-        summary
+        summary: persistedSummary
       }
     });
+    if (options.mediaArchive?.archiveDir) {
+      await rm(options.mediaArchive.archiveDir, { recursive: true, force: true });
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Import failed";
     await prisma.gedcomImportJob.updateMany({
@@ -888,6 +1259,9 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         lineLog: [...lineLog, { severity: "error", lineNo: 0, message: msg }]
       }
     });
+    if (options.mediaArchive?.archiveDir) {
+      await rm(options.mediaArchive.archiveDir, { recursive: true, force: true });
+    }
   }
 }
 
