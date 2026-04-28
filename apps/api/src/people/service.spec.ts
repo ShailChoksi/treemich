@@ -353,27 +353,18 @@ describe("PersonService", () => {
   });
 
   describe("delete", () => {
-    it("deletes a person and cleans up co-occurrence edges for canonical and external ids", async () => {
+    it("deletes a person and lets native co-occurrence edge foreign keys cascade", async () => {
       mocks.personProfileFindFirst.mockResolvedValueOnce({
         id: "pp-1",
         immichPersonId: "legacy-immich-1",
         externalIdentities: [{ providerPersonId: "immich-abc" }]
       });
-      mocks.cooccurrenceEdgeDeleteMany.mockResolvedValueOnce({ count: 2 });
       mocks.personProfileDeleteMany.mockResolvedValueOnce({ count: 1 });
 
       const { PersonService } = await import("./service.js");
       await expect(new PersonService().delete("user-1", "pp-1")).resolves.toBeUndefined();
 
-      expect(mocks.cooccurrenceEdgeDeleteMany).toHaveBeenCalledWith({
-        where: {
-          userId: "user-1",
-          OR: [
-            { personAId: { in: ["pp-1", "legacy-immich-1", "immich-abc"] } },
-            { personBId: { in: ["pp-1", "legacy-immich-1", "immich-abc"] } }
-          ]
-        }
-      });
+      expect(mocks.cooccurrenceEdgeDeleteMany).not.toHaveBeenCalled();
       expect(mocks.personProfileDeleteMany).toHaveBeenCalledWith({
         where: { id: "pp-1", userId: "user-1" }
       });

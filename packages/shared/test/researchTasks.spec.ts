@@ -27,11 +27,11 @@ describe("createResearchTaskBodySchema", () => {
     expect(
       createResearchTaskBodySchema.parse({
         title: "Task",
-        immichPersonId: "person-1",
+        personId: "person-1",
         dueDate: "2026-12-31",
         notes: "Details here"
       })
-    ).toMatchObject({ immichPersonId: "person-1", dueDate: "2026-12-31" });
+    ).toMatchObject({ personId: "person-1", dueDate: "2026-12-31" });
   });
 });
 

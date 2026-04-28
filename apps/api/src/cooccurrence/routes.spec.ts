@@ -309,14 +309,8 @@ describe("cooccurrence routes", () => {
     expect(getPhotoCooccurrenceMock).toHaveBeenCalledTimes(0);
   });
 
-  it("falls back to the live cooccurrence computation when nothing is persisted yet", async () => {
+  it("returns an empty persisted snapshot when no cooccurrence job has completed yet", async () => {
     getPersistedPhotoCooccurrenceMock.mockResolvedValue(null);
-    getPhotoCooccurrenceMock.mockResolvedValue({
-      clusters: [],
-      edges: [],
-      computedAt: "2026-01-01T00:00:00.000Z",
-      sourcePhotoCount: 0
-    });
 
     const response = await app.inject({
       method: "GET",
@@ -324,14 +318,13 @@ describe("cooccurrence routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(getPhotoCooccurrenceMock).toHaveBeenCalledWith(
-      "user-1",
-      expect.any(Object),
-      expect.objectContaining({
-        minSharedPhotos: 2,
-        minScore: 0
-      })
-    );
+    expect(getPhotoCooccurrenceMock).toHaveBeenCalledTimes(0);
+    expect(response.json()).toEqual({
+      clusters: [],
+      edges: [],
+      computedAt: "1970-01-01T00:00:00.000Z",
+      sourcePhotoCount: 0
+    });
   });
 
   it("syncs cooccurrence schedule settings when preferences are updated", async () => {
