@@ -293,18 +293,17 @@ export class RelationshipService {
         where: {
           OR: parentEdges.map((edge) => ({
             familyId: edge.familyId as string,
-            OR: [{ childPersonId: edge.toPersonId }, { childImmichPersonId: edge.toPersonId }]
+            childPersonId: edge.toPersonId
           }))
         },
         select: {
           familyId: true,
           childPersonId: true,
-          childImmichPersonId: true,
           pedigree: true
         }
       });
       const pedigreeByPair = new Map(
-        rows.map((row) => [pairKey(row.familyId, row.childPersonId ?? row.childImmichPersonId), row.pedigree])
+        rows.filter((row) => row.childPersonId != null).map((row) => [pairKey(row.familyId, row.childPersonId!), row.pedigree])
       );
       for (const edge of parentEdges) {
         const pedigree = pedigreeByPair.get(pairKey(edge.familyId as string, edge.toPersonId));

@@ -45,7 +45,7 @@ describe("RelationshipService.listRelationships", () => {
       { id: "pe1", fromPersonId: "p1", toPersonId: "c1", type: "PARENT_OF", familyId: "fam-1" }
     ]);
     familyChildFindMany.mockResolvedValue([
-      { familyId: "fam-1", childPersonId: "c1", childImmichPersonId: null, pedigree: "ADOPTED" }
+      { familyId: "fam-1", childPersonId: "c1", pedigree: "ADOPTED" }
     ]);
     const { RelationshipService } = await import("./service.js");
     const service = new RelationshipService(mockLifeEventService as never);
@@ -53,12 +53,11 @@ describe("RelationshipService.listRelationships", () => {
 
     expect(familyChildFindMany).toHaveBeenCalledWith({
       where: {
-        OR: [{ familyId: "fam-1", OR: [{ childPersonId: "c1" }, { childImmichPersonId: "c1" }] }]
+        OR: [{ familyId: "fam-1", childPersonId: "c1" }]
       },
       select: {
         familyId: true,
         childPersonId: true,
-        childImmichPersonId: true,
         pedigree: true
       }
     });
