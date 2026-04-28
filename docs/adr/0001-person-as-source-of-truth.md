@@ -16,6 +16,10 @@ Treemich owns person identity. The canonical person id is the Treemich `PersonPr
 
 `immichPersonId` may still appear in provider-specific APIs, compatibility responses, and migration code. It must not be used as the source-of-truth key for new genealogy relationships, family membership, life events, research tasks, GEDCOM matching, or UI selection.
 
+Account export v2 is the default export shape and uses `people`, `personExternalIdentities`, and `personThumbnails`. Export v1 with the legacy `personProfiles` collection name is retained for older tooling, but new integrations should use v2.
+
+GEDCOM export emits canonical `_TREEMICH_PERSON_ID` tags by default. GEDCOM import continues to accept legacy `_TREEMICH_IMMICH_PERSON_ID` and `_IMMICH` tags as provider hints for older files, but those tags are not source-of-truth identifiers and should not be emitted by default.
+
 Thumbnail precedence is:
 
 1. Treemich-owned thumbnail metadata.

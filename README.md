@@ -29,11 +29,13 @@ Authenticated users can download a snapshot of Treemich-owned data (people, exte
   - **`manifest.json`** — describes the archive (`treemichExportManifestVersion`, `payloadExportVersion`, `exportedAt`, and the list of files).
   - **`thumbnails/...`** — Treemich-owned person thumbnail binaries referenced by `personThumbnails[].exportBinaryPath` when local thumbnail files are available.
 
+`GET /api/export/account?version=1` is retained for compatibility with older tooling and uses the legacy `personProfiles` collection name. New integrations should use the default v2 shape.
+
 Use the same session cookie as the rest of the API.
 
 ### GEDCOM export (Phase 5a)
 
-Interoperability export as **GEDCOM 5.5.1** UTF-8 (`LINEAGE-LINKED`), including **INDI**, **FAM** (with **CHIL** + **PEDI** when families exist), person-scoped and family-scoped life events, spouse **MARR**/**DIV** on unions, **SOUR**/**REPO**, and **OBJE** stubs for evidence media. Optional custom line **`_TREEMICH_PERSON_ID`** maps each `INDI` back to the Treemich person id (disable with `includeTreemichCustomTags=0` if your toolchain rejects unknown tags).
+Interoperability export as **GEDCOM 5.5.1** UTF-8 (`LINEAGE-LINKED`), including **INDI**, **FAM** (with **CHIL** + **PEDI** when families exist), person-scoped and family-scoped life events, spouse **MARR**/**DIV** on unions, **SOUR**/**REPO**, and **OBJE** stubs for evidence media. Optional custom line **`_TREEMICH_PERSON_ID`** maps each `INDI` back to the Treemich person id (disable with `includeTreemichCustomTags=0` if your toolchain rejects unknown tags). Export does not emit the legacy Immich-provider hint `_TREEMICH_IMMICH_PERSON_ID` by default; import still accepts it for older Treemich GEDCOM files.
 
 - **`GET /api/export/gedcom`** (default) — same as **`?format=ged`**. Response is `text/plain; charset=utf-8` with `Content-Disposition: attachment` (`.ged`).
 
@@ -47,7 +49,7 @@ Disable the route in restrictive environments with **`TREEMICH_GEDCOM_EXPORT_ENA
 
 Imports **UTF-8 GEDCOM** into Treemich, either by matching INDI records to existing Treemich people or by automatically creating new Treemich people for unmatched records.
 
-1. **`POST /api/import/gedcom/preview`** — body JSON `{ "gedcomUtf8": "..." }`. Returns parsed **INDI** / **FAM** summaries, **`unmatchedIndis`** (xref + display name + optional **`_TREEMICH_PERSON_ID`** hint from the file), and **`famMatchError`** if any **HUSB** / **WIFE** / **CHIL** pointer cannot be resolved.
+1. **`POST /api/import/gedcom/preview`** — body JSON `{ "gedcomUtf8": "..." }`. Returns parsed **INDI** / **FAM** summaries, **`unmatchedIndis`** (xref + display name + optional **`_TREEMICH_PERSON_ID`** hint from the file), and **`famMatchError`** if any **HUSB** / **WIFE** / **CHIL** pointer cannot be resolved. Legacy `_TREEMICH_IMMICH_PERSON_ID` and `_IMMICH` tags are accepted as provider hints for older exports, then resolved to canonical Treemich people when possible.
 2. **`POST /api/import/gedcom/jobs`** — body `{ "gedcomUtf8", "indiMatches": { "@I1@": "<treemichPersonId>", ... }, "fileName"?, "importOptions"? }`. Creates an async job (`PENDING` → `RUNNING` → `COMPLETED` or `FAILED`) and applies **REPO**, **SOUR**, **FAM** (via `Family` + derived edges), **MARR**/**DIV** on the spouse relationship, family-scoped **RESI**/**CENS**/**EVEN**, and **INDI** names / **SEX** / person life events. **`importOptions`**: `dryRun`, `skipAlreadyImportedIndis` (skips INDI when `PersonProfile.externalIds.gedcomIndi` already equals that xref), `unmatchedIndiPolicy` (`"MATCH_ONLY"` to skip unmatched INDIs, `"CREATE"` to automatically create new Treemich people for each unmatched INDI using the NAME and SEX tags).
 3. **`GET /api/import/gedcom/jobs/:jobId`** — poll status, **`summary`** counts, **`lineLog`**, **`errorMessage`**.
 

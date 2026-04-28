@@ -756,9 +756,6 @@ export function buildGedcomDocument(
     const block: string[] = [line(0, indiX, "INDI")];
     if (includeTreemichCustomTags) {
       block.push(line(1, "_TREEMICH_PERSON_ID", p.id));
-      if (p.immichProviderPersonId) {
-        block.push(line(1, "_TREEMICH_IMMICH_PERSON_ID", p.immichProviderPersonId));
-      }
     }
     const primaryName =
       input.personNames.find((n) => n.personId === p.id && n.isPrimary) ??

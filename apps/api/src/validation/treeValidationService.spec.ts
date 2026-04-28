@@ -42,7 +42,7 @@ describe("computeTreeValidationForUser", () => {
   });
 
   it("aggregates per-person life-event findings (e.g. birth after death)", async () => {
-    dbMocks.personProfileFindMany.mockResolvedValue([{ id: "pp1", immichPersonId: "p1" }]);
+    dbMocks.personProfileFindMany.mockResolvedValue([{ id: "pp1" }]);
     dbMocks.lifeEventFindMany
       .mockResolvedValueOnce([
         { personProfileId: "pp1", eventType: "BIRTH", year: 2010, month: null, day: null },
@@ -57,7 +57,7 @@ describe("computeTreeValidationForUser", () => {
 
   it("rejects validation when row scan exceeds configured cap", async () => {
     env.TREEMICH_TREE_VALIDATION_MAX_ROWS = 1;
-    dbMocks.personProfileFindMany.mockResolvedValue([{ id: "pp1", immichPersonId: "p1" }]);
+    dbMocks.personProfileFindMany.mockResolvedValue([{ id: "pp1" }]);
     dbMocks.relationshipFindMany.mockResolvedValue([{ id: "r1", type: "SPOUSE_OF" }]);
 
     await expect(computeTreeValidationForUser("u1")).rejects.toMatchObject({

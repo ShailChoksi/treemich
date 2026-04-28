@@ -128,7 +128,7 @@ describe("buildGedcomDocument", () => {
 
     const norm = normalizeGedcomForTest(gedcomUtf8);
     expect(norm).toContain("0 @I0001@ INDI");
-    expect(norm).toContain("1 _TREEMICH_IMMICH_PERSON_ID immich-child");
+    expect(norm).not.toContain("_TREEMICH_IMMICH_PERSON_ID");
     expect(norm).toContain("1 _TREEMICH_PERSON_ID pp-dad");
     expect(norm).toContain("0 @F0001@ FAM");
     expect(norm).toContain("1 CHIL @I0001@");

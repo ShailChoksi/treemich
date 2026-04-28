@@ -68,11 +68,11 @@ describe("processGedcomImportJob media import", () => {
       userId: "user-1",
       status: "PENDING",
       gedcomUtf8,
-      indiMatches: { "@I1@": "immich-1" },
+      indiMatches: { "@I1@": "person-1" },
       importOptions: {},
       lineLog: []
     });
-    const mockProfile = { id: "profile-1", userId: "user-1", immichPersonId: "immich-1", externalIds: {} };
+    const mockProfile = { id: "profile-1", userId: "user-1", externalIds: {} };
     mocks.personProfileFindFirst.mockResolvedValue(mockProfile);
     mocks.personProfileFindUnique.mockResolvedValue(mockProfile);
     mocks.personProfileUpdate.mockResolvedValueOnce({});

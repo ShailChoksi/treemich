@@ -51,7 +51,7 @@ const mediaObjectFindManyMock = vi.fn();
 const mediaLinkFindManyMock = vi.fn();
 const familyFindManyMock = vi.fn();
 const countForExportMock = vi.fn();
-const findAdoptedChildImmichPersonIdsMock = vi.fn();
+const findAdoptedChildPersonIdsMock = vi.fn();
 const listPersonServiceMock = vi.fn().mockResolvedValue([]);
 const updatePersonServiceMock = vi.fn().mockResolvedValue({ id: "pp1" });
 const createPersonServiceMock = vi.fn();
@@ -373,7 +373,7 @@ describe("Treemich API routes", () => {
         createFamily: vi.fn(),
         patchFamily: vi.fn(),
         deleteFamily: vi.fn(),
-        findAdoptedChildPersonIds: findAdoptedChildImmichPersonIdsMock
+        findAdoptedChildPersonIds: findAdoptedChildPersonIdsMock
       } as unknown as AppServices["familyService"]
     };
 
@@ -675,7 +675,7 @@ describe("Treemich API routes", () => {
   });
 
   it("searches adopted children via family pedigree instead of graph hops", async () => {
-    findAdoptedChildImmichPersonIdsMock.mockResolvedValueOnce(["ada-id"]);
+    findAdoptedChildPersonIdsMock.mockResolvedValueOnce(["ada-id"]);
     getProfilesForPersonIdsMock.mockResolvedValueOnce(new Map([["ada-id", { gender: "FEMALE" }]]));
     listPeopleMock.mockResolvedValueOnce([
       { id: "ada-id", name: "Ada" },
@@ -688,7 +688,7 @@ describe("Treemich API routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(findAdoptedChildImmichPersonIdsMock).toHaveBeenCalledWith("user-1", ["mike-id"]);
+    expect(findAdoptedChildPersonIdsMock).toHaveBeenCalledWith("user-1", ["mike-id"]);
     expect(traverseRelationshipChainMock).toHaveBeenCalledTimes(0);
     const json = response.json();
     expect(json.matches).toHaveLength(1);
@@ -1874,7 +1874,7 @@ describe("Treemich API routes", () => {
         id: "rt1",
         title: "Find census record",
         status: "OPEN",
-        immichPersonId: "p1",
+        personId: "p1",
         dueDate: null,
         notes: null,
         createdAt: "2026-01-01T00:00:00.000Z",
@@ -1893,7 +1893,7 @@ describe("Treemich API routes", () => {
           id: "rt1",
           title: "Find census record",
           status: "OPEN",
-          immichPersonId: "p1",
+          personId: "p1",
           dueDate: null,
           notes: null,
           createdAt: "2026-01-01T00:00:00.000Z",
