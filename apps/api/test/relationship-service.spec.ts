@@ -67,7 +67,7 @@ describe("RelationshipService", () => {
     const result = await service.upsertRelationship("user-1", "p1", "p2", "CHILD_OF");
 
     expect(prismaTransactionMock).toHaveBeenCalledTimes(1);
-    // upsertProfile now uses findFirst (to look up by canonical id or immichPersonId) rather than upsert
+    // upsertProfile now uses findFirst to require canonical Treemich person ids rather than upsert.
     expect(personProfileFindFirstMock).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "p1", userId: "user-1" } })
     );

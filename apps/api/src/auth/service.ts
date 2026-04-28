@@ -216,12 +216,13 @@ export class AuthService {
     sessionToken: string;
     state: AuthState;
   }> {
+    const immichBaseUrl = this.requireConfiguredImmichBaseUrl();
     const login = await this.loginToImmichWithGenericAuthError(email, password);
 
     const existingLink = await prisma.linkedImmichAccount.findUnique({
       where: {
         immichBaseUrl_immichUserId: {
-          immichBaseUrl: env.IMMICH_BASE_URL,
+          immichBaseUrl,
           immichUserId: login.userId
         }
       },
@@ -255,7 +256,7 @@ export class AuthService {
       sessionToken,
       state: this.userState(user, {
         linked: true,
-        immichBaseUrl: env.IMMICH_BASE_URL,
+        immichBaseUrl,
         immichEmail: login.userEmail,
         immichName: login.name
       })
@@ -291,11 +292,12 @@ export class AuthService {
   }
 
   async linkImmichAccount(userId: string, email: string, password: string) {
+    const immichBaseUrl = this.requireConfiguredImmichBaseUrl();
     const login = await this.loginToImmichWithGenericAuthError(email, password);
     const existingLink = await prisma.linkedImmichAccount.findUnique({
       where: {
         immichBaseUrl_immichUserId: {
-          immichBaseUrl: env.IMMICH_BASE_URL,
+          immichBaseUrl,
           immichUserId: login.userId
         }
       }
@@ -308,7 +310,7 @@ export class AuthService {
     await this.syncImmichPersonNames(userId, login.accessToken);
     return {
       linked: true,
-      immichBaseUrl: env.IMMICH_BASE_URL,
+      immichBaseUrl,
       immichEmail: login.userEmail,
       immichName: login.name
     } satisfies NonNullable<AuthState["linkStatus"]>;
@@ -370,10 +372,11 @@ export class AuthService {
   }
 
   private createImmichClientFromToken(accessToken: string): ImmichPeopleClient {
+    const immichBaseUrl = this.requireConfiguredImmichBaseUrl();
     return (
       this.options.createImmichClientFromToken?.(accessToken) ??
       new ImmichClient({
-        baseUrl: env.IMMICH_BASE_URL,
+        baseUrl: immichBaseUrl,
         accessToken,
         peoplePageSize: env.IMMICH_PEOPLE_PAGE_SIZE,
         timeoutMs: env.IMMICH_HTTP_TIMEOUT_MS,
@@ -384,9 +387,10 @@ export class AuthService {
   }
 
   private async loginToImmichWithGenericAuthError(email: string, password: string) {
+    const immichBaseUrl = this.requireConfiguredImmichBaseUrl();
     try {
       return await loginToImmich({
-        baseUrl: env.IMMICH_BASE_URL,
+        baseUrl: immichBaseUrl,
         email,
         password,
         timeoutMs: env.IMMICH_HTTP_TIMEOUT_MS
@@ -400,13 +404,14 @@ export class AuthService {
   }
 
   private async storeLinkedImmichAccount(userId: string, login: ImmichLoginResult) {
+    const immichBaseUrl = this.requireConfiguredImmichBaseUrl();
     const encryptedToken = encryptSecret(login.accessToken);
     return prisma.linkedImmichAccount.upsert({
       where: {
         userId
       },
       update: {
-        immichBaseUrl: env.IMMICH_BASE_URL,
+        immichBaseUrl,
         immichUserId: login.userId,
         immichEmail: login.userEmail,
         immichName: login.name,
@@ -417,7 +422,7 @@ export class AuthService {
       },
       create: {
         userId,
-        immichBaseUrl: env.IMMICH_BASE_URL,
+        immichBaseUrl,
         immichUserId: login.userId,
         immichEmail: login.userEmail,
         immichName: login.name,
@@ -427,6 +432,13 @@ export class AuthService {
         lastValidatedAt: new Date()
       }
     });
+  }
+
+  private requireConfiguredImmichBaseUrl() {
+    if (!env.IMMICH_BASE_URL) {
+      throw new TreemichConflictError("Immich provider is not configured");
+    }
+    return env.IMMICH_BASE_URL;
   }
 
   private async syncImmichPersonNames(userId: string, accessToken: string) {

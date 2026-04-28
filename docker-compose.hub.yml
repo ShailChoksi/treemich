@@ -1,6 +1,6 @@
 # Run Treemich using pre-built images from Docker Hub (no local clone/build).
 #
-# 1. Copy .env.example to .env and set IMMICH_BASE_URL, TREEMICH_ENCRYPTION_KEY, WEB_ORIGIN.
+# 1. Copy .env.example to .env and set TREEMICH_ENCRYPTION_KEY. Set IMMICH_BASE_URL only for optional Immich imports.
 # 2. docker compose -f docker-compose.hub.yml up -d
 #
 # Image tags default to api-latest / web-latest on schoksi/treemich.
@@ -37,7 +37,7 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/treemich
-      IMMICH_BASE_URL: ${IMMICH_BASE_URL}
+      IMMICH_BASE_URL: ${IMMICH_BASE_URL:-}
       IMMICH_PEOPLE_PAGE_SIZE: ${IMMICH_PEOPLE_PAGE_SIZE:-1000}
       TREEMICH_ENCRYPTION_KEY: ${TREEMICH_ENCRYPTION_KEY}
       TREEMICH_SESSION_COOKIE_NAME: ${TREEMICH_SESSION_COOKIE_NAME:-treemich_session}

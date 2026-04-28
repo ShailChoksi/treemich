@@ -113,21 +113,13 @@ export const personToJson = (
 };
 
 export class PersonService {
-  async resolvePersonId(userId: string, personOrExternalId: string, db: DbClient = prisma): Promise<string> {
+  async resolvePersonId(userId: string, personId: string, db: DbClient = prisma): Promise<string> {
     const direct = await db.personProfile.findFirst({
-      where: { id: personOrExternalId, userId },
+      where: { id: personId, userId },
       select: { id: true }
     });
     if (direct) {
       return direct.id;
-    }
-
-    const external = await db.personExternalIdentity.findFirst({
-      where: { userId, providerPersonId: personOrExternalId },
-      select: { personId: true }
-    });
-    if (external) {
-      return external.personId;
     }
 
     throw new HttpNotFoundError("Person not found");

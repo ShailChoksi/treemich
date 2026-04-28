@@ -191,7 +191,7 @@ describe("PeoplePage + life events (integration)", () => {
 
       if (method === "PATCH" && /\/people\/p1$/.test(url) && !url.includes("life-events")) {
         return jsonResponse({
-          immichPersonId: "p1",
+          id: "p1",
           gender: "UNKNOWN",
           givenName: null,
           surname: null,

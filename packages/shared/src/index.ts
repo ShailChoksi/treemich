@@ -1,7 +1,7 @@
 /**
  * @packageDocumentation
- * Cross-package Treemich contracts: relationship/graph types, Zod schemas for preferences and layout,
- * Immich-facing DTOs, and re-exports for life events, person names, and research tasks.
+ * Cross-package Treemich contracts: person/relationship/graph types, Zod schemas for preferences and layout,
+ * optional provider DTOs, and re-exports for life events, person names, and research tasks.
  */
 
 import { z } from "zod";
@@ -457,7 +457,7 @@ export const graphLayoutRequestSchema = z.object({
   selectedPersonId: z.string().nullable().optional(),
   primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional()
 });
-/** Layout response: stable revision string plus positions keyed by Immich person id. */
+/** Layout response: stable revision string plus positions keyed by Treemich person id. */
 export const graphLayoutResponseSchema = z.object({
   layoutRevision: z.string().min(1),
   algorithmVersion: z.string().min(1),

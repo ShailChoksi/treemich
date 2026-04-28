@@ -1,5 +1,5 @@
 /**
- * @file Registers `GET /people/:id/cooccurrence` — photo co-occurrence suggestions for one person.
+ * @file Registers `GET /people/cooccurrence` — persisted photo co-occurrence suggestions.
  */
 
 import type { FastifyInstance } from "fastify";

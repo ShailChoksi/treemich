@@ -152,19 +152,19 @@ describe("PersonService", () => {
       );
     });
 
-    it("falls back to external identity lookup", async () => {
+    it("does not resolve external provider ids on core person paths", async () => {
       mocks.personProfileFindFirst.mockResolvedValueOnce(null);
-      mocks.personExternalIdentityFindFirst.mockResolvedValueOnce({ personId: "pp-2" });
 
       const { PersonService } = await import("./service.js");
-      const id = await new PersonService().resolvePersonId("user-1", "ext-abc");
+      await expect(new PersonService().resolvePersonId("user-1", "ext-abc")).rejects.toThrow(
+        "Person not found"
+      );
 
-      expect(id).toBe("pp-2");
+      expect(mocks.personExternalIdentityFindFirst).not.toHaveBeenCalled();
     });
 
-    it("throws HttpNotFoundError when person is not found via any path", async () => {
+    it("throws HttpNotFoundError when person is not found by Treemich id", async () => {
       mocks.personProfileFindFirst.mockResolvedValue(null);
-      mocks.personExternalIdentityFindFirst.mockResolvedValue(null);
 
       const { PersonService } = await import("./service.js");
       await expect(new PersonService().resolvePersonId("user-1", "missing-id")).rejects.toThrow(

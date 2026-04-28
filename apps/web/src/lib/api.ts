@@ -1199,7 +1199,7 @@ export type GedcomImportPreviewIndiRow = {
   xref: string;
   displayName: string | null;
   personHint: string | null;
-  /** @deprecated Use personHint. */
+  /** @deprecated Legacy provider hint retained for older GEDCOM preview responses; use personHint. */
   immichHint?: string | null;
 };
 

@@ -31,13 +31,13 @@ describe("ResearchTaskService", () => {
     vi.clearAllMocks();
   });
 
-  it("resolves legacy or external person ids before listing scoped tasks", async () => {
+  it("resolves Treemich person ids before listing scoped tasks", async () => {
     personService.resolvePersonId.mockResolvedValue("person-profile-1");
     mocks.researchTaskFindMany.mockResolvedValue([]);
 
-    await service.list("user-1", "immich-person-1");
+    await service.list("user-1", "person-profile-1");
 
-    expect(personService.resolvePersonId).toHaveBeenCalledWith("user-1", "immich-person-1");
+    expect(personService.resolvePersonId).toHaveBeenCalledWith("user-1", "person-profile-1");
     expect(mocks.researchTaskFindMany).toHaveBeenCalledWith({
       where: {
         userId: "user-1",
@@ -64,7 +64,7 @@ describe("ResearchTaskService", () => {
     const result = await service.create("user-1", {
       title: "Find record",
       status: "OPEN",
-      personId: "immich-person-1"
+      personId: "person-profile-1"
     });
 
     expect(mocks.researchTaskCreate).toHaveBeenCalledWith({
@@ -95,7 +95,7 @@ describe("ResearchTaskService", () => {
       updatedAt: now
     });
 
-    await service.update("user-1", "task-1", { personId: "immich-person-2" });
+    await service.update("user-1", "task-1", { personId: "person-profile-2" });
 
     expect(mocks.researchTaskUpdate).toHaveBeenCalledWith({
       where: { id: "task-1" },

@@ -20,13 +20,14 @@ Treemich stores editable **BIRTH**, **DEATH**, **MARRIAGE**, and **DIVORCE** as 
 
 ### Account data export (Phase 0)
 
-Authenticated users can download a snapshot of Treemich-owned data (profiles, relationships, places, life events, co-occurrence metadata, etc.) **without** Immich access tokens or photo binaries:
+Authenticated users can download a snapshot of Treemich-owned data (people, external identities, thumbnails, relationships, places, life events, co-occurrence metadata, etc.) **without** Immich access tokens or other secret material:
 
-- **`GET /api/export/account`** (default) — same as **`GET /api/export/account?format=json`**. Response is `application/json` with `Content-Disposition: attachment`. The JSON object includes `exportVersion`, `exportedAt`, and all relational tables the server stores for that user (sensitive fields such as session `tokenHash` and linked-account encrypted token material are omitted).
+- **`GET /api/export/account`** (default) — same as **`GET /api/export/account?format=json`**. Response is `application/json` with `Content-Disposition: attachment`. The JSON object uses `exportVersion: 2`, includes `people`, `personExternalIdentities`, `personThumbnails`, and all relational tables the server stores for that user. Sensitive fields such as password hashes, session `tokenHash`, and linked-account encrypted token material are omitted.
 
 - **`GET /api/export/account?format=zip`** — `application/zip` attachment containing:
   - **`account.json`** — the same payload as the JSON export above.
   - **`manifest.json`** — describes the archive (`treemichExportManifestVersion`, `payloadExportVersion`, `exportedAt`, and the list of files).
+  - **`thumbnails/...`** — Treemich-owned person thumbnail binaries referenced by `personThumbnails[].exportBinaryPath` when local thumbnail files are available.
 
 Use the same session cookie as the rest of the API.
 
@@ -64,6 +65,16 @@ For GEDCOM files with evidence media, upload a **ZIP bundle** instead of a bare 
 Deleting a **`TreemichUser`** row (for example via Prisma or direct SQL) **cascades** to all Treemich-owned graph data linked by `userId`: linked Immich account row, sessions, person profiles, relationships, places, life events (and citations), and co-occurrence tables. If you have a linked Immich account, **Immich itself is unchanged** — people, faces, and photos remain in your Immich instance.
 
 There is currently **no** dedicated “delete my Treemich account” HTTP button in the shipped UI; operators or scripts can delete the user row if you need a full Treemich data purge.
+
+### Immich unlink behavior
+
+Immich is an optional provider. Unlinking Immich removes stored provider credentials and stops future Immich refresh/import jobs. Data already copied into Treemich remains:
+
+- Imported person thumbnails stay available as Treemich-owned thumbnail files.
+- Imported photo co-occurrence edges stay available as evidence/suggestions with provider provenance metadata.
+- Immich assets, faces, and photos remain unchanged in Immich.
+
+Relink Immich to refresh thumbnails or import new co-occurrence data.
 
 ### Upgrading from releases before legacy column removal
 
@@ -147,7 +158,7 @@ treemich/
 
 ## Quick Start with Docker Compose
 
-You need **Docker** (Compose v2) and an **Immich** instance. Treemich stores its own data in PostgreSQL; Immich stays the source for photos and people.
+You need **Docker** (Compose v2). Treemich stores its own data in PostgreSQL and can be used without Immich. Immich is optional for importing face thumbnails and photo co-occurrence suggestions.
 
 Choose one of the following:
 
@@ -165,7 +176,7 @@ Edit `.env` and set at least:
 
 | Variable                  | Required | Description                                                                                                                         |
 | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `IMMICH_BASE_URL`         | Yes      | Your Immich API URL. If Immich runs on the host machine, use `http://host.docker.internal:2283/api`.                                |
+| `IMMICH_BASE_URL`         | No       | Optional Immich API URL for provider login/import. If Immich runs on the host machine, use `http://host.docker.internal:2283/api`.  |
 | `TREEMICH_ENCRYPTION_KEY` | Yes      | A random 64-character hex string (`openssl rand -hex 32`). **Do not change** after you have data, or stored tokens become unusable. |
 | `WEB_ORIGIN`              | No       | Defaults to `http://localhost:8080` in Compose. Use the URL users use in the browser (CORS + cookies).                              |
 
@@ -191,11 +202,11 @@ docker compose -f docker-compose.hub.yml up -d
 
 **3. Open the app**
 
-[http://localhost:8080](http://localhost:8080) — sign in with an email and password (standalone Treemich account), or use `provider: "immich"` at login if you have a linked Immich account.
+[http://localhost:8080](http://localhost:8080) — sign in with an email and password. On a fresh install, the first Treemich email/password sign-in creates the first standalone account. Configure `IMMICH_BASE_URL` only when you want optional Immich login/import.
 
 The API runs migrations on startup (`prisma migrate deploy`), then serves the app.
 
-**Immich login fails or returns HTTP 500:** If you sign in using an Immich account (`provider: "immich"`), the API container must reach Immich over the network. **`IMMICH_BASE_URL=http://localhost:2283/api` is wrong for Compose** when Immich runs on your machine — `localhost` inside the container is not your host. Use `http://host.docker.internal:2283/api` instead (Compose already maps `host.docker.internal`; Linux may need Docker 20.10+ with `host-gateway`). If Immich runs in another Docker network, use that service’s URL. Check `docker logs treemich-api` for connection errors.
+**Immich login/import unavailable:** If `IMMICH_BASE_URL` is unset, Immich provider login, thumbnail refresh, and co-occurrence import are disabled. If you configure Immich and it fails, the API container must reach Immich over the network. **`IMMICH_BASE_URL=http://localhost:2283/api` is wrong for Compose** when Immich runs on your machine — `localhost` inside the container is not your host. Use `http://host.docker.internal:2283/api` instead (Compose already maps `host.docker.internal`; Linux may need Docker 20.10+ with `host-gateway`). If Immich runs in another Docker network, use that service’s URL. Check `docker logs treemich-api` for connection errors.
 
 ---
 
@@ -256,7 +267,8 @@ Your PostgreSQL data lives in the Docker volume `treemich-postgres` until you ru
 ### After updating
 
 - If the UI behaves oddly right after an upgrade, try a **hard refresh** (cached JavaScript) or clear site data for Treemich’s origin.
-- When Immich is upgraded, confirm Treemich still matches your expectations; check release notes if something breaks.
+- If you use optional Immich imports, confirm provider login/import still matches your expectations after Immich upgrades.
+- For existing installations crossing the person-native migration, follow [`docs/person-migration-runbook.md`](docs/person-migration-runbook.md) before and after deploy.
 
 Image publishing from this repo (tags and GitHub Releases) is defined in [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml).
 
@@ -274,7 +286,7 @@ Image publishing from this repo (tags and GitHub Releases) is defined in [`.gith
 cp .env.example .env
 ```
 
-Set `TREEMICH_ENCRYPTION_KEY` to a random 64-char hex string. Set `IMMICH_BASE_URL` only if you want to use Immich login or import thumbnails from Immich.
+Set `TREEMICH_ENCRYPTION_KEY` to a random 64-char hex string. Set `IMMICH_BASE_URL` only if you want optional Immich login, thumbnail import, or co-occurrence import. When unset, standalone Treemich features still work.
 
 ### 2. Start PostgreSQL
 
@@ -305,24 +317,24 @@ This starts the API on `localhost:4000` and the web app on `localhost:5173` with
 
 ## Environment Variables
 
-| Variable                       | Default                 | Description                                                                                           |
-| ------------------------------ | ----------------------- | ----------------------------------------------------------------------------------------------------- |
-| `PORT`                         | `4000`                  | API server port                                                                                       |
-| `DATABASE_URL`                 | --                      | PostgreSQL connection string                                                                          |
-| `IMMICH_BASE_URL`              | _(optional)_            | Immich API base URL; required only when signing in via Immich or using thumbnail/co-occurrence import |
-| `IMMICH_PEOPLE_PAGE_SIZE`      | `1000`                  | Page size when fetching people from Immich                                                            |
-| `TREEMICH_ENCRYPTION_KEY`      | --                      | 64-char hex key for encrypting stored Immich tokens                                                   |
-| `TREEMICH_SESSION_COOKIE_NAME` | `treemich_session`      | Browser cookie name                                                                                   |
-| `TREEMICH_SESSION_TTL_MS`      | `2592000000` (30 days)  | Session lifetime                                                                                      |
-| `WEB_ORIGIN`                   | `http://localhost:5173` | CORS allowed origin                                                                                   |
-| `RATE_LIMIT_MAX`               | `300`                   | Max API requests per time window                                                                      |
-| `RATE_LIMIT_TIME_WINDOW_MS`    | `60000`                 | Rate limit window in ms                                                                               |
-| `VITE_TREEMICH_API_URL`        | `/api`                  | Frontend API base URL (build-time)                                                                    |
+| Variable                       | Default                 | Description                                                                        |
+| ------------------------------ | ----------------------- | ---------------------------------------------------------------------------------- |
+| `PORT`                         | `4000`                  | API server port                                                                    |
+| `DATABASE_URL`                 | --                      | PostgreSQL connection string                                                       |
+| `IMMICH_BASE_URL`              | _(unset)_               | Optional Immich API base URL; when unset, Immich provider login/import is disabled |
+| `IMMICH_PEOPLE_PAGE_SIZE`      | `1000`                  | Page size when fetching people from Immich                                         |
+| `TREEMICH_ENCRYPTION_KEY`      | --                      | 64-char hex key for encrypting stored Immich tokens                                |
+| `TREEMICH_SESSION_COOKIE_NAME` | `treemich_session`      | Browser cookie name                                                                |
+| `TREEMICH_SESSION_TTL_MS`      | `2592000000` (30 days)  | Session lifetime                                                                   |
+| `WEB_ORIGIN`                   | `http://localhost:5173` | CORS allowed origin                                                                |
+| `RATE_LIMIT_MAX`               | `300`                   | Max API requests per time window                                                   |
+| `RATE_LIMIT_TIME_WINDOW_MS`    | `60000`                 | Rate limit window in ms                                                            |
+| `VITE_TREEMICH_API_URL`        | `/api`                  | Frontend API base URL (build-time)                                                 |
 
 ## Auth Model
 
 - Sign in with a Treemich email and password (standalone; no Immich required).
-- Optionally sign in via Immich credentials (`provider: "immich"` in the login body) to link an Immich account for thumbnail and co-occurrence import.
+- Optionally sign in via Immich credentials (`provider: "immich"` in the login body) as a legacy migration/provider path when `IMMICH_BASE_URL` is configured.
 - Treemich stores a session cookie for browser auth. Immich tokens are encrypted at rest and used only for optional provider calls.
 - All relationship and profile data is private per Treemich user.
 

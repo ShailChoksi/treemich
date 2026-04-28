@@ -1313,14 +1313,14 @@ export function lifeEventToJson(event: LifeEventWithRelations) {
   };
 }
 
-/** Effective birth ISO for GET /people: life event first, then Immich person birthDate. */
+/** Effective birth ISO for GET /people: Treemich life event first, then optional provider birth date. */
 export function effectiveBirthIsoFromLifeEvent(
   birthEvent: (LifeEvent & { place?: Place | null }) | null | undefined,
-  immichBirth: string | null | undefined
+  providerBirth: string | null | undefined
 ): string | null {
   const fromEvent = birthEvent ? isoFromLifeEventRow(birthEvent) : null;
   if (fromEvent) {
     return fromEvent;
   }
-  return immichBirth?.trim() ? immichBirth.trim() : null;
+  return providerBirth?.trim() ? providerBirth.trim() : null;
 }

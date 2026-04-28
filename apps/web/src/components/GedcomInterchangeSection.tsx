@@ -113,7 +113,8 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
   const initMatchesFromPreview = (p: GedcomImportPreviewResponse) => {
     const next: Record<string, string> = {};
     for (const row of p.indis) {
-      next[row.xref] = (row.personHint ?? row.immichHint)?.trim() ?? "";
+      const legacyProviderHint = row.personHint ?? row.immichHint;
+      next[row.xref] = legacyProviderHint?.trim() ?? "";
     }
     setMatchByXref(next);
   };
@@ -431,11 +432,12 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                               </option>
                             ))}
                           </select>
-                          {(row.personHint ?? row.immichHint) ? (
-                            <p className="hint hint--tight-below">
-                              Hint in file: {row.personHint ?? row.immichHint}
-                            </p>
-                          ) : null}
+                          {(() => {
+                            const legacyProviderHint = row.personHint ?? row.immichHint;
+                            return legacyProviderHint ? (
+                              <p className="hint hint--tight-below">Hint in file: {legacyProviderHint}</p>
+                            ) : null;
+                          })()}
                         </td>
                       </tr>
                     ))}

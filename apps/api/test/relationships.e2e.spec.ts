@@ -33,6 +33,8 @@ const treemichUserFindUniqueOrThrowMock = vi.fn();
 const treemichUserFindUniqueMock = vi.fn();
 const treemichUserUpdateMock = vi.fn();
 const personProfileFindManyMock = vi.fn();
+const personExternalIdentityFindManyMock = vi.fn();
+const personThumbnailFindManyMock = vi.fn();
 const relationshipFindManyForExportMock = vi.fn();
 const placeFindManyMock = vi.fn();
 const lifeEventFindManyForExportMock = vi.fn();
@@ -126,6 +128,8 @@ vi.mock("../src/db/client.js", () => ({
       update: treemichUserUpdateMock
     },
     personProfile: { findMany: personProfileFindManyMock, count: countForExportMock },
+    personExternalIdentity: { findMany: personExternalIdentityFindManyMock, count: countForExportMock },
+    personThumbnail: { findMany: personThumbnailFindManyMock, count: countForExportMock },
     relationship: { findMany: relationshipFindManyForExportMock, count: countForExportMock },
     place: { findMany: placeFindManyMock, count: countForExportMock },
     lifeEvent: { findMany: lifeEventFindManyForExportMock, count: countForExportMock },
@@ -216,7 +220,6 @@ describe("Treemich API routes", () => {
     return {
       id: person.id,
       userId: "user-1",
-      immichPersonId: null,
       gender: person.gender ?? "UNKNOWN",
       displayNameOverride: null,
       givenName: givenName ?? person.name,
@@ -280,6 +283,8 @@ describe("Treemich API routes", () => {
       return [];
     });
     relationshipFindManyForExportMock.mockResolvedValue([]);
+    personExternalIdentityFindManyMock.mockResolvedValue([]);
+    personThumbnailFindManyMock.mockResolvedValue([]);
     placeFindManyMock.mockResolvedValue([]);
     lifeEventFindManyForExportMock.mockResolvedValue([]);
     treemichSessionFindManyMock.mockResolvedValue([]);
@@ -1259,7 +1264,6 @@ describe("Treemich API routes", () => {
       surname: "Smith",
       displayNameOverride: null,
       nicknames: null,
-      immichPersonId: null,
       externalIds: {},
       externalIdentities: [],
       thumbnails: [],
@@ -2306,7 +2310,7 @@ describe("Treemich API routes", () => {
       expect(response.json()).toMatchObject({ statusCode: 404 });
     });
 
-    it("returns JSON attachment with export metadata and no session token hashes", async () => {
+    it("returns JSON attachment with export v2 person-native data and no secrets", async () => {
       const createdAt = new Date("2024-06-01T12:00:00.000Z");
       treemichUserFindUniqueMock.mockResolvedValueOnce({
         id: "user-1",
@@ -2322,13 +2326,43 @@ describe("Treemich API routes", () => {
         {
           id: "pp-1",
           userId: "user-1",
-          immichPersonId: "p1",
           gender: "MALE",
           displayNameOverride: null,
           givenName: "Mike",
           surname: "Smith",
           nicknames: null,
           externalIds: {},
+          createdAt,
+          updatedAt: createdAt
+        }
+      ]);
+      personExternalIdentityFindManyMock.mockResolvedValueOnce([
+        {
+          id: "ident-1",
+          userId: "user-1",
+          personId: "pp-1",
+          provider: "IMMICH",
+          providerPersonId: "p1",
+          providerBaseUrl: "http://localhost:2283/api",
+          displayName: "Mike",
+          thumbnailImportedAt: null,
+          lastSeenAt: createdAt,
+          metadata: {},
+          createdAt,
+          updatedAt: createdAt
+        }
+      ]);
+      personThumbnailFindManyMock.mockResolvedValueOnce([
+        {
+          id: "thumb-1",
+          userId: "user-1",
+          personId: "pp-1",
+          source: "IMMICH",
+          storageUrl: null,
+          mimeType: "image/jpeg",
+          checksum: "abc123",
+          sourceExternalIdentityId: "ident-1",
+          importedAt: createdAt,
           createdAt,
           updatedAt: createdAt
         }
@@ -2394,16 +2428,20 @@ describe("Treemich API routes", () => {
         exportVersion: number;
         exportedAt: string;
         treemichUser: { id: string };
-        personProfiles: unknown[];
+        people: unknown[];
+        personExternalIdentities: unknown[];
+        personThumbnails: unknown[];
         lifeEvents: Array<{ id: string; eventType: string }>;
         treemichSessions: Array<Record<string, unknown>>;
         linkedImmichAccount: Record<string, unknown> | null;
       };
 
-      expect(payload.exportVersion).toBe(1);
+      expect(payload.exportVersion).toBe(2);
       expect(payload.exportedAt).toBeTruthy();
       expect(payload.treemichUser.id).toBe("user-1");
-      expect(payload.personProfiles).toHaveLength(1);
+      expect(payload.people).toHaveLength(1);
+      expect(payload.personExternalIdentities).toHaveLength(1);
+      expect(payload.personThumbnails).toHaveLength(1);
       expect(payload.lifeEvents).toHaveLength(1);
       expect(payload.lifeEvents[0]?.eventType).toBe("BIRTH");
       expect(payload.treemichSessions).toHaveLength(1);
@@ -2412,6 +2450,8 @@ describe("Treemich API routes", () => {
       expect(payload.linkedImmichAccount).toBeTruthy();
       const link = payload.linkedImmichAccount as Record<string, unknown>;
       expect(Object.hasOwn(link, "encryptedAccessToken")).toBe(false);
+      expect(Object.hasOwn(link, "accessTokenIv")).toBe(false);
+      expect(Object.hasOwn(link, "accessTokenTag")).toBe(false);
     });
 
     it("returns 400 for unsupported format query", async () => {
@@ -2437,6 +2477,8 @@ describe("Treemich API routes", () => {
       };
       treemichUserFindUniqueMock.mockResolvedValueOnce(userRow).mockResolvedValueOnce(userRow);
       personProfileFindManyMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      personExternalIdentityFindManyMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      personThumbnailFindManyMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       relationshipFindManyForExportMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       placeFindManyMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       lifeEventFindManyForExportMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
@@ -2474,7 +2516,7 @@ describe("Treemich API routes", () => {
         files: Array<{ path: string }>;
       };
       expect(manifest.treemichExportManifestVersion).toBe(1);
-      expect(manifest.payloadExportVersion).toBe(1);
+      expect(manifest.payloadExportVersion).toBe(2);
       expect(manifest.files.some((f) => f.path === "account.json")).toBe(true);
     });
   });
