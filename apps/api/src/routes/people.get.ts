@@ -1,78 +1,93 @@
 /**
- * @file Registers `GET /people` — Immich people merged with Treemich profiles and display names.
+ * @file Registers person-native `/people` routes.
  */
 
 import type { FastifyInstance } from "fastify";
-import type { PersonName } from "@prisma/client";
+import {
+  createPersonBodySchema,
+  createPersonExternalIdentityBodySchema,
+  patchPersonBodySchema
+} from "@treemich/shared";
 import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";
-import { effectiveBirthIsoFromLifeEvent } from "../lifeEvents/service.js";
-import { resolveDisplayNameForPerson } from "../personNames/service.js";
-import { getImmichClientForRequest } from "../services.js";
-
-type ProfileRow = {
-  id: string;
-  displayNameOverride: string | null;
-  givenName: string | null;
-  surname: string | null;
-};
 
 const querySchema = z.object({
   q: z.string().trim().min(1).optional()
+});
+
+const paramsSchema = z.object({
+  id: z.string().min(1)
+});
+
+const identityParamsSchema = z.object({
+  id: z.string().min(1),
+  identityId: z.string().min(1)
 });
 
 export const registerPeopleGetRoute = (app: FastifyInstance) => {
   app.get("/people", async (request) => {
     const auth = getRequiredAuth(request);
     const { q } = querySchema.parse(request.query);
-    const immichClient = await getImmichClientForRequest(request);
-    const people =
-      q && "findPeopleByName" in immichClient && typeof immichClient.findPeopleByName === "function"
-        ? await immichClient.findPeopleByName(q)
-        : q
-          ? (await immichClient.listPeople()).filter((person) =>
-              person.name.toLowerCase().includes(q.toLowerCase())
-            )
-          : await immichClient.listPeople();
-    const personIds = people.map((person) => person.id);
-    const [profilesById, connectedIds] = await Promise.all([
-      app.services.relationshipService.getProfilesForPersonIds(auth.user.id, personIds),
-      app.services.relationshipService.getConnectedPersonIds(auth.user.id, personIds)
-    ]);
+    const people = await app.services.personService.list(auth.user.id, q);
+    const connectedIds = await app.services.relationshipService.getConnectedPersonIds(
+      auth.user.id,
+      people.map((person) => person.id)
+    );
+    return { people: people.map((person) => ({ ...person, hasRelationship: connectedIds.has(person.id) })) };
+  });
 
-    const profileRows = [...profilesById.values()];
-    const profileInternalIds = profileRows
-      .map((p) =>
-        "id" in p && typeof (p as { id?: string }).id === "string" ? (p as { id: string }).id : null
-      )
-      .filter((id): id is string => id != null);
-    const [birthDeathByProfileId, primaryNameByProfileId] = await Promise.all([
-      app.services.lifeEventService.getBirthDeathByPersonProfileIds(auth.user.id, profileInternalIds),
-      app.services.personNameService.getPrimaryMapForProfileIds(auth.user.id, profileInternalIds)
-    ]);
+  app.post("/people", async (request, reply) => {
+    const auth = getRequiredAuth(request);
+    const body = createPersonBodySchema.parse(request.body);
+    const person = await app.services.personService.create(auth.user.id, body);
+    if (body.birthDate !== undefined || body.deathDate !== undefined) {
+      await app.services.lifeEventService.syncPersonProfileFieldsToLifeEvents(auth.user.id, person.id, {
+        ...(body.birthDate !== undefined ? { birthDate: body.birthDate } : {}),
+        ...(body.deathDate !== undefined ? { deathDate: body.deathDate } : {})
+      });
+    }
+    return reply.code(201).send(person);
+  });
 
-    return {
-      people: people.map((person) => {
-        const profile = profilesById.get(person.id) ?? null;
-        const pr = profile as ProfileRow | null;
-        const bd = profile ? birthDeathByProfileId.get((profile as ProfileRow).id) : undefined;
-        const mergedBirth = effectiveBirthIsoFromLifeEvent(bd?.birth ?? null, person.birthDate);
-        const primaryName: PersonName | null = pr ? (primaryNameByProfileId.get(pr.id) ?? null) : null;
-        const displayName = resolveDisplayNameForPerson({
-          immichName: person.name,
-          displayNameOverride: pr?.displayNameOverride ?? null,
-          givenName: pr?.givenName ?? null,
-          surname: pr?.surname ?? null,
-          primaryName: primaryName as PersonName | null
-        });
-        return {
-          ...person,
-          displayName: displayName === person.name ? null : displayName,
-          birthDate: mergedBirth,
-          profile: profile ?? null,
-          hasRelationship: connectedIds.has(person.id)
-        };
-      })
-    };
+  app.get("/people/:id", async (request) => {
+    const auth = getRequiredAuth(request);
+    const { id } = paramsSchema.parse(request.params);
+    const row = await app.services.personService.get(auth.user.id, id);
+    return { person: row };
+  });
+
+  app.patch("/people/:id", async (request) => {
+    const auth = getRequiredAuth(request);
+    const { id } = paramsSchema.parse(request.params);
+    const body = patchPersonBodySchema.parse(request.body);
+    const person = await app.services.personService.update(auth.user.id, id, body);
+    if (body.birthDate !== undefined || body.deathDate !== undefined) {
+      await app.services.lifeEventService.syncPersonProfileFieldsToLifeEvents(auth.user.id, person.id, {
+        ...(body.birthDate !== undefined ? { birthDate: body.birthDate } : {}),
+        ...(body.deathDate !== undefined ? { deathDate: body.deathDate } : {})
+      });
+    }
+    return person;
+  });
+
+  app.get("/people/:id/external-identities", async (request) => {
+    const auth = getRequiredAuth(request);
+    const { id } = paramsSchema.parse(request.params);
+    return { externalIdentities: await app.services.personService.listExternalIdentities(auth.user.id, id) };
+  });
+
+  app.post("/people/:id/external-identities", async (request, reply) => {
+    const auth = getRequiredAuth(request);
+    const { id } = paramsSchema.parse(request.params);
+    const body = createPersonExternalIdentityBodySchema.parse(request.body);
+    const externalIdentity = await app.services.personService.addExternalIdentity(auth.user.id, id, body);
+    return reply.code(201).send(externalIdentity);
+  });
+
+  app.delete("/people/:id/external-identities/:identityId", async (request, reply) => {
+    const auth = getRequiredAuth(request);
+    const { id, identityId } = identityParamsSchema.parse(request.params);
+    await app.services.personService.deleteExternalIdentity(auth.user.id, id, identityId);
+    return reply.code(204).send();
   });
 };

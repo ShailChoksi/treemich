@@ -55,19 +55,90 @@ export const relationshipTypeSchema = z.enum(relationshipTypes);
 export const graphLayoutModeValues = ["family", "photo"] as const;
 export const graphLayoutModeSchema = z.enum(graphLayoutModeValues);
 
-/** Minimal Immich person row as Treemich uses it in lists and search (ids are Immich person ids). */
-export type ImmichPerson = {
+export const personExternalIdentityProviderValues = ["IMMICH", "GEDCOM", "OTHER"] as const;
+export type PersonExternalIdentityProvider = (typeof personExternalIdentityProviderValues)[number];
+export const personExternalIdentityProviderSchema = z.enum(personExternalIdentityProviderValues);
+
+export const personThumbnailSourceValues = ["UPLOADED", "IMMICH", "GENERATED"] as const;
+export type PersonThumbnailSource = (typeof personThumbnailSourceValues)[number];
+export const personThumbnailSourceSchema = z.enum(personThumbnailSourceValues);
+
+export const createPersonBodySchema = z.object({
+  displayNameOverride: z.string().trim().min(1).max(200).nullable().optional(),
+  givenName: z.string().trim().min(1).max(200).nullable().optional(),
+  surname: z.string().trim().min(1).max(200).nullable().optional(),
+  nicknames: z.string().trim().min(1).max(500).nullable().optional(),
+  gender: genderSchema.optional(),
+  birthDate: z.string().trim().min(1).nullable().optional(),
+  deathDate: z.string().trim().min(1).nullable().optional()
+});
+
+export const patchPersonBodySchema = createPersonBodySchema.partial().refine(
+  (body) => Object.keys(body).length > 0,
+  { message: "At least one person field must be provided" }
+);
+
+export const createPersonExternalIdentityBodySchema = z.object({
+  provider: personExternalIdentityProviderSchema,
+  providerPersonId: z.string().trim().min(1),
+  providerBaseUrl: z.string().trim().min(1).nullable().optional(),
+  displayName: z.string().trim().min(1).nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional()
+});
+
+export type CreatePersonBody = z.infer<typeof createPersonBodySchema>;
+export type PatchPersonBody = z.infer<typeof patchPersonBodySchema>;
+export type CreatePersonExternalIdentityBody = z.infer<typeof createPersonExternalIdentityBodySchema>;
+
+export type PersonExternalIdentityRecord = {
+  id: string;
+  personId: string;
+  provider: PersonExternalIdentityProvider;
+  providerPersonId: string;
+  providerBaseUrl: string | null;
+  displayName: string | null;
+  thumbnailImportedAt: string | null;
+  lastSeenAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PersonThumbnailRecord = {
+  id: string;
+  personId: string;
+  source: PersonThumbnailSource;
+  storageUrl: string | null;
+  mimeType: string | null;
+  checksum: string | null;
+  sourceExternalIdentityId: string | null;
+  importedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Canonical Treemich person row. Immich ids are optional external identities. */
+export type PersonRecord = {
   id: string;
   name: string;
   /** Treemich primary or formatted display; prefer over `name` for UI when set. */
   displayName?: string | null;
   birthDate?: string | null;
   thumbnailPath?: string | null;
+  profile?: TreemichPersonProfile | null;
+  externalIdentities?: PersonExternalIdentityRecord[];
+  thumbnail?: PersonThumbnailRecord | null;
+  hasRelationship?: boolean;
 };
+
+/** @deprecated Use PersonRecord. */
+export type ImmichPerson = PersonRecord;
 
 /** Treemich-owned fields layered on an Immich person (persisted in Treemich DB). */
 export type TreemichPersonProfile = {
-  immichPersonId: string;
+  id: string;
+  /** @deprecated Immich ids now live in PersonExternalIdentity. */
+  immichPersonId?: string | null;
   gender: GenderValue;
   givenName?: string | null;
   surname?: string | null;

@@ -13,6 +13,8 @@ const toIso = (d: Date) => d.toISOString();
 export const familyToJson = (row: FamilyWithChildren) => ({
   id: row.id,
   userId: row.userId,
+  parent1PersonId: row.parent1PersonId,
+  parent2PersonId: row.parent2PersonId,
   parent1ImmichPersonId: row.parent1ImmichPersonId,
   parent2ImmichPersonId: row.parent2ImmichPersonId,
   notes: row.notes,
@@ -24,6 +26,7 @@ export const familyToJson = (row: FamilyWithChildren) => ({
   updatedAt: toIso(row.updatedAt),
   children: row.children.map((c) => ({
     id: c.id,
+    childPersonId: c.childPersonId,
     childImmichPersonId: c.childImmichPersonId,
     pedigree: c.pedigree,
     createdAt: toIso(c.createdAt),
@@ -34,9 +37,9 @@ export const familyToJson = (row: FamilyWithChildren) => ({
 export class FamilyService {
   constructor(private readonly relationshipService: RelationshipService) {}
 
-  private async ensureProfiles(tx: DbClient, userId: string, immichPersonIds: string[]) {
-    for (const immichPersonId of new Set(immichPersonIds)) {
-      await this.relationshipService.upsertProfile(userId, immichPersonId, {}, tx);
+  private async ensureProfiles(tx: DbClient, userId: string, personIds: string[]) {
+    for (const personId of new Set(personIds)) {
+      await this.relationshipService.upsertProfile(userId, personId, {}, tx);
     }
   }
 
@@ -48,11 +51,17 @@ export class FamilyService {
     tx: Prisma.TransactionClient,
     userId: string,
     familyId: string,
-    row: Pick<FamilyWithChildren, "parent1ImmichPersonId" | "parent2ImmichPersonId" | "children">
+    row: Pick<
+      FamilyWithChildren,
+      "parent1PersonId" | "parent2PersonId" | "parent1ImmichPersonId" | "parent2ImmichPersonId" | "children"
+    >
   ) {
     await tx.relationship.deleteMany({ where: { userId, familyId } });
 
-    const parents = [row.parent1ImmichPersonId, row.parent2ImmichPersonId].filter(
+    const parents = [
+      row.parent1PersonId ?? row.parent1ImmichPersonId,
+      row.parent2PersonId ?? row.parent2ImmichPersonId
+    ].filter(
       (v): v is string => typeof v === "string" && v.length > 0
     );
 
@@ -68,13 +77,13 @@ export class FamilyService {
         {
           userId,
           fromPersonId: parentId,
-          toPersonId: child.childImmichPersonId,
+          toPersonId: child.childPersonId ?? child.childImmichPersonId,
           type: "PARENT_OF" as const,
           familyId
         },
         {
           userId,
-          fromPersonId: child.childImmichPersonId,
+          fromPersonId: child.childPersonId ?? child.childImmichPersonId,
           toPersonId: parentId,
           type: "CHILD_OF" as const,
           familyId
@@ -108,14 +117,17 @@ export class FamilyService {
     return row;
   }
 
-  async listFamiliesForPerson(userId: string, immichPersonId: string): Promise<FamilyWithChildren[]> {
+  async listFamiliesForPerson(userId: string, personId: string): Promise<FamilyWithChildren[]> {
     return prisma.family.findMany({
       where: {
         userId,
         OR: [
-          { parent1ImmichPersonId: immichPersonId },
-          { parent2ImmichPersonId: immichPersonId },
-          { children: { some: { childImmichPersonId: immichPersonId } } }
+          { parent1PersonId: personId },
+          { parent2PersonId: personId },
+          { children: { some: { childPersonId: personId } } },
+          { parent1ImmichPersonId: personId },
+          { parent2ImmichPersonId: personId },
+          { children: { some: { childImmichPersonId: personId } } }
         ]
       },
       include: { children: true },
@@ -136,23 +148,25 @@ export class FamilyService {
         family: {
           userId,
           OR: [
+            { parent1PersonId: { in: parentImmichPersonIds } },
+            { parent2PersonId: { in: parentImmichPersonIds } },
             { parent1ImmichPersonId: { in: parentImmichPersonIds } },
             { parent2ImmichPersonId: { in: parentImmichPersonIds } }
           ]
         }
       },
-      select: { childImmichPersonId: true }
+      select: { childPersonId: true, childImmichPersonId: true }
     });
-    return [...new Set(rows.map((r) => r.childImmichPersonId))];
+    return [...new Set(rows.map((r) => r.childPersonId ?? r.childImmichPersonId))];
   }
 
   async createFamily(userId: string, body: CreateFamilyBody): Promise<FamilyWithChildren> {
-    const parent1 = body.parent1ImmichPersonId ?? null;
-    const parent2 = body.parent2ImmichPersonId ?? null;
+    const parent1 = body.parent1PersonId ?? body.parent1ImmichPersonId ?? null;
+    const parent2 = body.parent2PersonId ?? body.parent2ImmichPersonId ?? null;
     const childRows = body.children ?? [];
 
     return prisma.$transaction(async (tx) => {
-      const involved = [...childRows.map((c) => c.childImmichPersonId)];
+      const involved = [...childRows.map((c) => c.childPersonId ?? c.childImmichPersonId).filter((id): id is string => !!id)];
       if (parent1) {
         involved.push(parent1);
       }
@@ -169,13 +183,16 @@ export class FamilyService {
       const family = await tx.family.create({
         data: {
           userId,
-          parent1ImmichPersonId: parent1,
-          parent2ImmichPersonId: parent2,
+          parent1PersonId: parent1,
+          parent2PersonId: parent2,
+          parent1ImmichPersonId: body.parent1ImmichPersonId ?? null,
+          parent2ImmichPersonId: body.parent2ImmichPersonId ?? null,
           notes: body.notes ?? null,
           ...(ext !== undefined ? { externalIds: ext } : {}),
           children: {
             create: childRows.map((c) => ({
-              childImmichPersonId: c.childImmichPersonId,
+              childPersonId: c.childPersonId ?? c.childImmichPersonId ?? null,
+              childImmichPersonId: c.childImmichPersonId ?? null,
               pedigree: (c.pedigree ?? FamilyChildPedigree.UNKNOWN) as FamilyChildPedigree
             }))
           }
@@ -196,8 +213,14 @@ export class FamilyService {
 
     return prisma.$transaction(async (tx) => {
       const data: Prisma.FamilyUpdateInput = {};
+      if (body.parent1PersonId !== undefined || body.parent1ImmichPersonId !== undefined) {
+        data.parent1PersonId = body.parent1PersonId ?? body.parent1ImmichPersonId;
+      }
       if (body.parent1ImmichPersonId !== undefined) {
         data.parent1ImmichPersonId = body.parent1ImmichPersonId;
+      }
+      if (body.parent2PersonId !== undefined || body.parent2ImmichPersonId !== undefined) {
+        data.parent2PersonId = body.parent2PersonId ?? body.parent2ImmichPersonId;
       }
       if (body.parent2ImmichPersonId !== undefined) {
         data.parent2ImmichPersonId = body.parent2ImmichPersonId;
@@ -219,7 +242,8 @@ export class FamilyService {
           await tx.familyChild.createMany({
             data: body.children.map((c) => ({
               familyId,
-              childImmichPersonId: c.childImmichPersonId,
+              childPersonId: c.childPersonId ?? c.childImmichPersonId ?? null,
+              childImmichPersonId: c.childImmichPersonId ?? null,
               pedigree: (c.pedigree ?? FamilyChildPedigree.UNKNOWN) as FamilyChildPedigree
             }))
           });
@@ -231,16 +255,17 @@ export class FamilyService {
         include: { children: true }
       });
 
-      const p1 = merged.parent1ImmichPersonId;
-      const p2 = merged.parent2ImmichPersonId;
+      const p1 = merged.parent1PersonId ?? merged.parent1ImmichPersonId;
+      const p2 = merged.parent2PersonId ?? merged.parent2ImmichPersonId;
       if (p1 && p2 && p1 === p2) {
         throw new HttpValidationError("parent1ImmichPersonId and parent2ImmichPersonId must differ");
       }
       for (const c of merged.children) {
-        if (p1 && c.childImmichPersonId === p1) {
+        const childId = c.childPersonId ?? c.childImmichPersonId;
+        if (p1 && childId === p1) {
           throw new HttpValidationError("A child cannot be the same person as parent1");
         }
-        if (p2 && c.childImmichPersonId === p2) {
+        if (p2 && childId === p2) {
           throw new HttpValidationError("A child cannot be the same person as parent2");
         }
       }
@@ -248,7 +273,7 @@ export class FamilyService {
         throw new HttpValidationError("Family must include at least one parent or one child");
       }
 
-      const involved = [...merged.children.map((c) => c.childImmichPersonId)];
+      const involved = [...merged.children.map((c) => c.childPersonId ?? c.childImmichPersonId)];
       if (p1) {
         involved.push(p1);
       }

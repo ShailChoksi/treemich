@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import type { AuthState } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import { env } from "../config/env.js";
-import { createOpaqueToken, encryptSecret, hashToken } from "./crypto.js";
+import { createOpaqueToken, encryptSecret, hashPassword, hashToken, verifyPassword } from "./crypto.js";
 import { loginToImmich } from "../integrations/immich/client.js";
 
 const authSessionIncludeLight = {
@@ -113,6 +113,74 @@ export class AuthService {
     this.maxSessionCacheEntries
   );
 
+  async loginWithPassword(
+    email: string,
+    password: string
+  ): Promise<{
+    sessionToken: string;
+    state: AuthState;
+  }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = await prisma.treemichUser.findFirst({
+      where: { email: normalizedEmail }
+    });
+    const nativeUserCount = await prisma.treemichUser.count({
+      where: { passwordHash: { not: null } }
+    });
+
+    if (!existing && nativeUserCount > 0) {
+      throw new TreemichAuthError("Invalid email or password");
+    }
+
+    const user =
+      existing ??
+      (await prisma.treemichUser.create({
+        data: {
+          email: normalizedEmail,
+          name: normalizedEmail,
+          passwordHash: hashPassword(password),
+          immichBaseUrl: "optional://local",
+          immichUserId: `local-${hashToken(normalizedEmail).slice(0, 24)}`,
+          immichEmail: normalizedEmail,
+          immichName: normalizedEmail
+        }
+      }));
+
+    if (!user.passwordHash) {
+      await prisma.treemichUser.update({
+        where: { id: user.id },
+        data: { passwordHash: hashPassword(password), email: normalizedEmail, name: user.name ?? user.immichName }
+      });
+    } else if (!verifyPassword(password, user.passwordHash)) {
+      throw new TreemichAuthError("Invalid email or password");
+    }
+
+    const sessionToken = createOpaqueToken();
+    await prisma.treemichSession.create({
+      data: {
+        userId: user.id,
+        tokenHash: hashToken(sessionToken),
+        expiresAt: new Date(Date.now() + env.TREEMICH_SESSION_TTL_MS)
+      }
+    });
+
+    return {
+      sessionToken,
+      state: {
+        authenticated: true,
+        user: {
+          id: user.id,
+          immichUserId: user.immichUserId,
+          email: user.email ?? user.immichEmail,
+          name: user.name ?? user.immichName
+        },
+        linkStatus: {
+          linked: false
+        }
+      }
+    };
+  }
+
   async loginWithImmich(
     email: string,
     password: string
@@ -192,8 +260,8 @@ export class AuthService {
         user: {
           id: user.id,
           immichUserId: user.immichUserId,
-          email: user.immichEmail,
-          name: user.immichName
+          email: user.email ?? user.immichEmail,
+          name: user.name ?? user.immichName
         },
         linkStatus: {
           linked: true,
@@ -206,7 +274,7 @@ export class AuthService {
   }
 
   async getAuthState(sessionToken?: string | null): Promise<AuthState> {
-    const context = await this.resolveSession(sessionToken, { includeLinkedAccount: true });
+    const context = await this.resolveSession(sessionToken);
     if (!context) {
       return {
         authenticated: false,
@@ -216,20 +284,26 @@ export class AuthService {
       };
     }
 
+    const linkedAccount = await prisma.linkedImmichAccount.findUnique({
+      where: { userId: context.user.id }
+    });
+
     return {
       authenticated: true,
       user: {
         id: context.user.id,
         immichUserId: context.user.immichUserId,
-        email: context.user.immichEmail,
-        name: context.user.immichName
+        email: context.user.email ?? context.user.immichEmail,
+        name: context.user.name ?? context.user.immichName
       },
-      linkStatus: {
-        linked: true,
-        immichBaseUrl: context.linkedAccount.immichBaseUrl,
-        immichEmail: context.linkedAccount.immichEmail,
-        immichName: context.linkedAccount.immichName
-      }
+      linkStatus: linkedAccount
+        ? {
+            linked: true,
+            immichBaseUrl: linkedAccount.immichBaseUrl,
+            immichEmail: linkedAccount.immichEmail,
+            immichName: linkedAccount.immichName
+          }
+        : { linked: false }
     };
   }
 

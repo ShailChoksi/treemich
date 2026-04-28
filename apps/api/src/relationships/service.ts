@@ -57,7 +57,7 @@ export class RelationshipService {
 
   async upsertProfile(
     userId: string,
-    immichPersonId: string,
+    personId: string,
     profile: {
       gender?: Gender;
       givenName?: string | null;
@@ -66,26 +66,36 @@ export class RelationshipService {
     },
     db: DbClient = prisma
   ): Promise<PersonProfile> {
-    return db.personProfile.upsert({
-      where: {
-        userId_immichPersonId: {
-          userId,
-          immichPersonId
+    const existing =
+      (await db.personProfile.findFirst({ where: { id: personId, userId } })) ??
+      (await db.personProfile.findFirst({ where: { userId, immichPersonId: personId } })) ??
+      (
+        await db.personExternalIdentity.findFirst({
+          where: { userId, providerPersonId: personId },
+          include: { person: true }
+        })
+      )?.person ??
+      null;
+
+    if (existing) {
+      return db.personProfile.update({
+        where: { id: existing.id },
+        data: {
+          ...(profile.gender !== undefined ? { gender: profile.gender } : {}),
+          ...(profile.givenName !== undefined ? { givenName: profile.givenName } : {}),
+          ...(profile.surname !== undefined ? { surname: profile.surname } : {}),
+          ...(profile.nicknames !== undefined ? { nicknames: profile.nicknames } : {})
         }
-      },
-      update: {
+      });
+    }
+
+    return db.personProfile.create({
+      data: {
+        userId,
         ...(profile.gender !== undefined ? { gender: profile.gender } : {}),
         ...(profile.givenName !== undefined ? { givenName: profile.givenName } : {}),
         ...(profile.surname !== undefined ? { surname: profile.surname } : {}),
         ...(profile.nicknames !== undefined ? { nicknames: profile.nicknames } : {})
-      },
-      create: {
-        userId,
-        immichPersonId,
-        gender: profile.gender ?? Gender.UNKNOWN,
-        givenName: profile.givenName ?? null,
-        surname: profile.surname ?? null,
-        nicknames: profile.nicknames ?? null
       }
     });
   }
@@ -106,26 +116,10 @@ export class RelationshipService {
       isParentChildEdge && options != null && Object.prototype.hasOwnProperty.call(options, "familyId");
 
     const run = async (tx: DbClient) => {
-      await tx.personProfile.upsert({
-        where: {
-          userId_immichPersonId: {
-            userId,
-            immichPersonId: fromPersonId
-          }
-        },
-        update: {},
-        create: { userId, immichPersonId: fromPersonId, gender: Gender.UNKNOWN }
-      });
-      await tx.personProfile.upsert({
-        where: {
-          userId_immichPersonId: {
-            userId,
-            immichPersonId: toPersonId
-          }
-        },
-        update: {},
-        create: { userId, immichPersonId: toPersonId, gender: Gender.UNKNOWN }
-      });
+      const fromProfile = await this.upsertProfile(userId, fromPersonId, {}, tx);
+      const toProfile = await this.upsertProfile(userId, toPersonId, {}, tx);
+      const canonicalFromPersonId = fromProfile.id;
+      const canonicalToPersonId = toProfile.id;
 
       const directUpdate = shouldWriteFamilyIdColumn ? { familyId: storedFamilyId } : {};
 
@@ -133,16 +127,16 @@ export class RelationshipService {
         where: {
           userId_fromPersonId_toPersonId_type: {
             userId,
-            fromPersonId,
-            toPersonId,
+            fromPersonId: canonicalFromPersonId,
+            toPersonId: canonicalToPersonId,
             type: relationshipType
           }
         },
         update: directUpdate,
         create: {
           userId,
-          fromPersonId,
-          toPersonId,
+          fromPersonId: canonicalFromPersonId,
+          toPersonId: canonicalToPersonId,
           type: relationshipType,
           ...(shouldWriteFamilyIdColumn ? { familyId: storedFamilyId } : {})
         }
@@ -154,16 +148,16 @@ export class RelationshipService {
         where: {
           userId_fromPersonId_toPersonId_type: {
             userId,
-            fromPersonId: toPersonId,
-            toPersonId: fromPersonId,
+            fromPersonId: canonicalToPersonId,
+            toPersonId: canonicalFromPersonId,
             type: inverseType
           }
         },
         update: inverseUpdate,
         create: {
           userId,
-          fromPersonId: toPersonId,
-          toPersonId: fromPersonId,
+          fromPersonId: canonicalToPersonId,
+          toPersonId: canonicalFromPersonId,
           type: inverseType,
           ...(shouldWriteFamilyIdColumn ? { familyId: storedFamilyId } : {})
         }
@@ -229,11 +223,11 @@ export class RelationshipService {
     const profiles = await prisma.personProfile.findMany({
       where: {
         userId,
-        immichPersonId: { in: personIds }
+        id: { in: personIds }
       }
     });
 
-    return new Map(profiles.map((profile) => [profile.immichPersonId, profile]));
+    return new Map(profiles.map((profile) => [profile.id, profile]));
   }
 
   async getConnectedPersonIds(userId: string, personIds: string[]) {
@@ -299,17 +293,18 @@ export class RelationshipService {
         where: {
           OR: parentEdges.map((edge) => ({
             familyId: edge.familyId as string,
-            childImmichPersonId: edge.toPersonId
+            OR: [{ childPersonId: edge.toPersonId }, { childImmichPersonId: edge.toPersonId }]
           }))
         },
         select: {
           familyId: true,
+          childPersonId: true,
           childImmichPersonId: true,
           pedigree: true
         }
       });
       const pedigreeByPair = new Map(
-        rows.map((row) => [pairKey(row.familyId, row.childImmichPersonId), row.pedigree])
+        rows.map((row) => [pairKey(row.familyId, row.childPersonId ?? row.childImmichPersonId), row.pedigree])
       );
       for (const edge of parentEdges) {
         const pedigree = pedigreeByPair.get(pairKey(edge.familyId as string, edge.toPersonId));

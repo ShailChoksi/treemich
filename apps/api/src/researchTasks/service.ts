@@ -5,6 +5,7 @@ const toJson = (row: {
   id: string;
   title: string;
   status: "OPEN" | "IN_PROGRESS" | "DONE";
+  personId: string | null;
   immichPersonId: string | null;
   dueDate: string | null;
   notes: string | null;
@@ -14,6 +15,7 @@ const toJson = (row: {
   id: row.id,
   title: row.title,
   status: row.status,
+  personId: row.personId,
   immichPersonId: row.immichPersonId,
   dueDate: row.dueDate,
   notes: row.notes,
@@ -26,7 +28,9 @@ export class ResearchTaskService {
     const rows = await prisma.researchTask.findMany({
       where: {
         userId,
-        ...(personId ? { OR: [{ immichPersonId: personId }, { immichPersonId: null }] } : {})
+        ...(personId
+          ? { OR: [{ personId }, { immichPersonId: personId }, { personId: null, immichPersonId: null }] }
+          : {})
       },
       orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }]
     });
@@ -39,6 +43,7 @@ export class ResearchTaskService {
         userId,
         title: body.title,
         status: body.status ?? "OPEN",
+        personId: body.personId ?? body.immichPersonId ?? null,
         immichPersonId: body.immichPersonId ?? null,
         dueDate: body.dueDate ?? null,
         notes: body.notes ?? null
@@ -61,6 +66,7 @@ export class ResearchTaskService {
       data: {
         ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.status !== undefined ? { status: body.status } : {}),
+        ...(body.personId !== undefined ? { personId: body.personId } : {}),
         ...(body.immichPersonId !== undefined ? { immichPersonId: body.immichPersonId } : {}),
         ...(body.dueDate !== undefined ? { dueDate: body.dueDate } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {})

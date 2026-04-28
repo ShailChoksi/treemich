@@ -53,7 +53,8 @@ const envSchema = z
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     PORT: z.coerce.number().int().positive().default(4000),
     DATABASE_URL: z.string().min(1),
-    IMMICH_BASE_URL: z.string().url(),
+    /** Optional Immich provider URL; only required when linking/importing Immich data. */
+    IMMICH_BASE_URL: z.string().url().optional().default("http://localhost:2283/api"),
     IMMICH_PEOPLE_PAGE_SIZE: z.coerce.number().int().positive().default(1000),
     IMMICH_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
     IMMICH_HTTP_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),

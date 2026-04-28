@@ -100,18 +100,35 @@ enum FamilyChildPedigree {
   UNKNOWN
 }
 
+enum PersonExternalIdentityProvider {
+  IMMICH
+  GEDCOM
+  OTHER
+}
+
+enum PersonThumbnailSource {
+  UPLOADED
+  IMMICH
+  GENERATED
+}
+
 model TreemichUser {
   id                  String                @id @default(cuid())
   immichBaseUrl       String
   immichUserId        String
   immichEmail         String
   immichName          String
+  email               String?
+  name                String?
+  passwordHash        String?
   preferences         Json                  @default("{}")
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
   linkedAccount       LinkedImmichAccount?
   sessions            TreemichSession[]
   profiles            PersonProfile[]
+  personExternalIdentities PersonExternalIdentity[]
+  personThumbnails    PersonThumbnail[]
   relationships       Relationship[]
   places              Place[]
   lifeEvents          LifeEvent[]
@@ -168,7 +185,8 @@ model TreemichSession {
 model PersonProfile {
   id                  String         @id @default(cuid())
   userId              String
-  immichPersonId      String
+  /// Deprecated compatibility field. New code uses `id`; Immich ids live in PersonExternalIdentity.
+  immichPersonId      String?
   gender              Gender         @default(UNKNOWN)
   displayNameOverride String?
   givenName           String?
@@ -179,13 +197,60 @@ model PersonProfile {
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   user                TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  externalIdentities  PersonExternalIdentity[]
+  thumbnails          PersonThumbnail[]
   fromRelationships   Relationship[] @relation("FromPerson")
   toRelationships     Relationship[] @relation("ToPerson")
   lifeEvents          LifeEvent[]
   personNames         PersonName[]
+  researchTasks       ResearchTask[]
 
   @@unique([userId, immichPersonId])
   @@index([userId])
+  @@index([userId, givenName])
+  @@index([userId, surname])
+}
+
+model PersonExternalIdentity {
+  id                  String                         @id @default(cuid())
+  userId              String
+  personId            String
+  provider            PersonExternalIdentityProvider
+  providerPersonId    String
+  providerBaseUrl     String?
+  displayName         String?
+  thumbnailImportedAt DateTime?
+  lastSeenAt          DateTime?
+  metadata            Json                           @default("{}")
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+  user                TreemichUser                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person              PersonProfile                  @relation(fields: [personId], references: [id], onDelete: Cascade)
+  thumbnails          PersonThumbnail[]
+
+  @@unique([userId, provider, providerBaseUrl, providerPersonId])
+  @@index([userId, personId])
+  @@index([provider, providerPersonId])
+}
+
+model PersonThumbnail {
+  id                       String                    @id @default(cuid())
+  userId                   String
+  personId                 String
+  source                   PersonThumbnailSource
+  storageUrl               String?
+  mimeType                 String?
+  checksum                 String?
+  sourceExternalIdentityId String?
+  importedAt               DateTime?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  user                     TreemichUser              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person                   PersonProfile             @relation(fields: [personId], references: [id], onDelete: Cascade)
+  sourceExternalIdentity   PersonExternalIdentity?   @relation(fields: [sourceExternalIdentityId], references: [id], onDelete: SetNull)
+
+  @@index([userId, personId])
+  @@index([sourceExternalIdentityId])
 }
 
 model PersonName {
@@ -211,6 +276,7 @@ model PersonName {
 model ResearchTask {
   id             String             @id @default(cuid())
   userId         String
+  personId       String?
   immichPersonId String?
   title          String
   status         ResearchTaskStatus @default(OPEN)
@@ -219,7 +285,9 @@ model ResearchTask {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   user           TreemichUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person         PersonProfile?     @relation(fields: [personId], references: [id], onDelete: Cascade)
 
+  @@index([userId, personId])
   @@index([userId, immichPersonId])
   @@index([userId, status])
   @@index([userId, createdAt])
@@ -236,8 +304,8 @@ model Relationship {
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
   user       TreemichUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fromPerson PersonProfile    @relation("FromPerson", fields: [userId, fromPersonId], references: [userId, immichPersonId], onDelete: Cascade)
-  toPerson   PersonProfile    @relation("ToPerson", fields: [userId, toPersonId], references: [userId, immichPersonId], onDelete: Cascade)
+  fromPerson PersonProfile    @relation("FromPerson", fields: [fromPersonId], references: [id], onDelete: Cascade)
+  toPerson   PersonProfile    @relation("ToPerson", fields: [toPersonId], references: [id], onDelete: Cascade)
   family     Family?          @relation(fields: [familyId], references: [id], onDelete: Cascade)
   lifeEvents LifeEvent[]
 
@@ -252,6 +320,8 @@ model Relationship {
 model Family {
   id                     String         @id @default(cuid())
   userId                 String
+  parent1PersonId        String?
+  parent2PersonId        String?
   parent1ImmichPersonId  String?
   parent2ImmichPersonId String?
   notes                  String?
@@ -265,6 +335,8 @@ model Family {
   lifeEvents             LifeEvent[]
 
   @@index([userId])
+  @@index([userId, parent1PersonId])
+  @@index([userId, parent2PersonId])
   @@index([userId, parent1ImmichPersonId])
   @@index([userId, parent2ImmichPersonId])
 }
@@ -272,13 +344,15 @@ model Family {
 model FamilyChild {
   id                  String               @id @default(cuid())
   familyId            String
-  childImmichPersonId String
+  childPersonId       String?
+  childImmichPersonId String?
   pedigree            FamilyChildPedigree @default(UNKNOWN)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   family              Family               @relation(fields: [familyId], references: [id], onDelete: Cascade)
 
   @@unique([familyId, childImmichPersonId])
+  @@index([childPersonId])
   @@index([childImmichPersonId])
 }
 

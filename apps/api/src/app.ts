@@ -36,7 +36,6 @@ import { registerPeopleRelationshipsPatchRoute } from "./routes/people-relations
 import { registerPeopleLifeEventsRoutes } from "./routes/people-life-events.js";
 import { registerPeoplePersonNamesRoutes } from "./routes/people-person-names.js";
 import { registerPeopleTimelineGetRoute } from "./routes/people-timeline.get.js";
-import { registerPeoplePatchRoute } from "./routes/people.patch.js";
 import { registerPlacesMapGetRoute } from "./routes/places-map.get.js";
 import { registerPeopleRelationshipsPostRoute } from "./routes/people-relationships.post.js";
 import { registerPeopleThumbnailGetRoute } from "./routes/people-thumbnail.get.js";
@@ -235,7 +234,6 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerPlacesMapGetRoute);
   app.register(registerResearchTaskRoutes);
   app.register(registerEvidenceRoutes);
-  app.register(registerPeoplePatchRoute);
   app.register(registerSearchGetRoute);
   app.register(registerTreeValidationGetRoute);
   app.register(registerUserPreferencesGetRoute);
