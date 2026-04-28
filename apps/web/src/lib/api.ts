@@ -505,8 +505,10 @@ export const searchRelationships = async (query: string): Promise<SearchRelation
 };
 
 /** Absolute URL for Treemich-proxied person thumbnail image. */
-export const personThumbnailUrl = (personId: string) =>
-  `${treemichApi}/people/${encodeURIComponent(personId)}/thumbnail`;
+export const personThumbnailUrl = (personId: string, revision?: string) => {
+  const baseUrl = `${treemichApi}/people/${encodeURIComponent(personId)}/thumbnail`;
+  return revision ? `${baseUrl}?revision=${encodeURIComponent(revision)}` : baseUrl;
+};
 
 export const getImmichImportPreview = async (): Promise<ImmichImportPreviewResponse> => {
   const response = await fetchWithRetry(`${treemichApi}/providers/immich/people/preview`, {

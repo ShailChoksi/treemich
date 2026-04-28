@@ -58,6 +58,7 @@ type Props = {
   hoveredPersonId: string | null;
   highlightedPersonIds: Set<string>;
   peopleIds: string[];
+  thumbnailCacheKeys?: Record<string, string | undefined>;
   prioritizedNodeIds: Set<string>;
   renderVisibilityBucketByPersonId: Map<string, GraphVisibilityBucket>;
   renderNearPersonIds: string[];
@@ -86,6 +87,7 @@ export const GraphCanvasScene = ({
   hoveredPersonId,
   highlightedPersonIds,
   peopleIds,
+  thumbnailCacheKeys,
   prioritizedNodeIds,
   renderVisibilityBucketByPersonId,
   renderNearPersonIds,
@@ -141,6 +143,7 @@ export const GraphCanvasScene = ({
   });
   const { thumbnailNodeIds, thumbnailTextures, thumbnailProgress } = useThumbnailLoader({
     peopleIds,
+    thumbnailCacheKeys,
     prioritizedNodeIds,
     renderNearPersonIds,
     displayVisiblePeople,

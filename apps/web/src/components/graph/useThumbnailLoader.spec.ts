@@ -24,12 +24,13 @@ vi.mock("./thumbnailCache", async () => {
     getCachedBitmap: vi.fn(() => undefined),
     hasCachedValue: vi.fn(() => false),
     setCachedTexture: vi.fn(),
-    setCachedBitmap: vi.fn()
+    setCachedBitmap: vi.fn(),
+    removeCachedTexture: vi.fn()
   };
 });
 
 import { loadThumbnailBatch } from "./thumbnailWorkerClient";
-import { hasCachedValue } from "./thumbnailCache";
+import { hasCachedValue, removeCachedTexture } from "./thumbnailCache";
 
 const reactTestEnv = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnv.IS_REACT_ACT_ENVIRONMENT = true;
@@ -121,6 +122,68 @@ describe("useThumbnailLoader hook", () => {
       batchSize: 5
     });
     expect(batch).toEqual(["b", "c"]);
+  });
+
+  it("evicts and reloads a cached thumbnail when its revision changes", async () => {
+    let hasCachedThumbnail = true;
+    vi.mocked(hasCachedValue).mockImplementation((id: string) => id === "a" && hasCachedThumbnail);
+    vi.mocked(removeCachedTexture).mockImplementation((id: string) => {
+      if (id === "a") {
+        hasCachedThumbnail = false;
+      }
+    });
+    vi.mocked(loadThumbnailBatch).mockResolvedValue([
+      { personId: "a", status: "fulfilled", bitmap: makeFakeBitmap() }
+    ]);
+
+    type Props = { revision: string };
+    const Probe = ({ revision }: Props) => {
+      useThumbnailLoader({
+        peopleIds: ["a"],
+        thumbnailCacheKeys: { a: revision },
+        prioritizedNodeIds: new Set<string>(),
+        renderNearPersonIds: ["a"],
+        displayVisiblePeople: [
+          {
+            person: { id: "a" },
+            displayPosition: [0, 0, 0] as [number, number, number]
+          }
+        ],
+        cameraSampleRef: { current: { x: 0, y: 0, z: 0 } } as unknown as MutableRefObject<Vector3>
+      });
+      return null;
+    };
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+      act(() => {
+        root.render(createElement(Probe, { revision: "old" }));
+      });
+      expect(vi.mocked(loadThumbnailBatch)).not.toHaveBeenCalled();
+
+      act(() => {
+        root.render(createElement(Probe, { revision: "new" }));
+      });
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(removeCachedTexture).toHaveBeenCalledWith("a");
+      expect(vi.mocked(loadThumbnailBatch)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(loadThumbnailBatch).mock.calls[0]?.[0]).toEqual([
+        { personId: "a", url: "/api/people/a/thumbnail?revision=new" }
+      ]);
+    } finally {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    }
   });
 
   it("reports thumbnail progress via thumbnailProgress", async () => {

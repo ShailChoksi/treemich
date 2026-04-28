@@ -101,6 +101,33 @@ export const canLoadPersonThumbnail = (person: Person) =>
     person.externalIdentities?.some((identity) => identity.provider === "IMMICH")
   );
 
+const thumbnailCacheKeyForPerson = (person: Person): string | undefined => {
+  const thumbnail = person.thumbnail;
+  if (thumbnail) {
+    return [
+      thumbnail.id,
+      thumbnail.updatedAt,
+      thumbnail.importedAt,
+      thumbnail.checksum,
+      thumbnail.storageUrl,
+      thumbnail.source
+    ]
+      .filter(Boolean)
+      .join(":");
+  }
+
+  const immichIdentity = person.externalIdentities?.find((identity) => identity.provider === "IMMICH");
+  return [
+    person.thumbnailPath,
+    immichIdentity?.id,
+    immichIdentity?.providerPersonId,
+    immichIdentity?.thumbnailImportedAt,
+    immichIdentity?.updatedAt
+  ]
+    .filter(Boolean)
+    .join(":");
+};
+
 export const resolveAddRelativeRelationshipType = (
   slot: AddRelativeSlot,
   selectedRelationshipType?: RelationshipType
@@ -264,6 +291,15 @@ const PeopleGraph3DComponent = ({
   });
   const thumbnailCandidatePersonIds = useMemo(
     () => filteredPeople.filter(canLoadPersonThumbnail).map((person) => person.id),
+    [filteredPeople]
+  );
+  const thumbnailCacheKeys = useMemo(
+    () =>
+      Object.fromEntries(
+        filteredPeople
+          .filter(canLoadPersonThumbnail)
+          .map((person) => [person.id, thumbnailCacheKeyForPerson(person)] as const)
+      ),
     [filteredPeople]
   );
 
@@ -641,6 +677,7 @@ const PeopleGraph3DComponent = ({
             hoveredPersonId={hoveredPersonId}
             highlightedPersonIds={highlightedPersonIds}
             peopleIds={thumbnailCandidatePersonIds}
+            thumbnailCacheKeys={thumbnailCacheKeys}
             prioritizedNodeIds={prioritizedNodeIds}
             renderNearPersonIds={renderNearPersonIds}
             setHoveredPersonId={setHoveredPersonId}

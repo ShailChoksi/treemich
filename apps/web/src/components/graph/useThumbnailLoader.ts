@@ -21,7 +21,8 @@ import {
   setCachedTexture,
   setCachedBitmap,
   hasCachedValue,
-  evictToCap
+  evictToCap,
+  removeCachedTexture
 } from "./thumbnailCache";
 
 const CAMERA_THUMBNAIL_BATCH = 10;
@@ -30,6 +31,7 @@ const THUMBNAIL_BATCH_INTERVAL_MS = 750;
 const CAMERA_SAMPLE_INTERVAL_MS = 140;
 const THUMBNAIL_BACKOFF_BASE_MS = 1000;
 const THUMBNAIL_BACKOFF_MAX_MS = 4000;
+const EMPTY_THUMBNAIL_CACHE_KEYS: Record<string, string | undefined> = {};
 
 type PositionedPerson = {
   person: { id: string };
@@ -188,6 +190,7 @@ const pickNearestIds = (items: PositionedPerson[], origin: NodePosition, limit: 
  */
 export const useThumbnailLoader = ({
   peopleIds,
+  thumbnailCacheKeys = EMPTY_THUMBNAIL_CACHE_KEYS,
   prioritizedNodeIds,
   renderNearPersonIds,
   displayVisiblePeople,
@@ -195,6 +198,7 @@ export const useThumbnailLoader = ({
   visible
 }: {
   peopleIds: string[];
+  thumbnailCacheKeys?: Record<string, string | undefined>;
   prioritizedNodeIds: Set<string>;
   renderNearPersonIds: string[];
   displayVisiblePeople: PositionedPerson[];
@@ -223,6 +227,7 @@ export const useThumbnailLoader = ({
   const inFlightIdsRef = useRef(new Set<string>());
   const isDrainActiveRef = useRef(false);
   const failureStreakRef = useRef(0);
+  const thumbnailCacheKeysRef = useRef<Record<string, string | undefined>>(thumbnailCacheKeys);
 
   useEffect(() => {
     if (displayVisiblePeople.length === 0 || visible === false) {
@@ -299,6 +304,40 @@ export const useThumbnailLoader = ({
     });
   }, [peopleIds]);
 
+  // Imported or uploaded thumbnails can replace an already cached generated/provider fallback.
+  // Evict by person id when the person's thumbnail metadata revision changes.
+  useEffect(() => {
+    const previousKeys = thumbnailCacheKeysRef.current;
+    const evictedIds = new Set<string>();
+
+    for (const id of peopleIds) {
+      const previousKey = previousKeys[id];
+      const nextKey = thumbnailCacheKeys[id];
+      if (previousKey && nextKey && previousKey !== nextKey) {
+        removeCachedTexture(id);
+        inFlightIdsRef.current.delete(id);
+        evictedIds.add(id);
+      }
+    }
+
+    thumbnailCacheKeysRef.current = thumbnailCacheKeys;
+
+    if (evictedIds.size === 0) {
+      return;
+    }
+
+    setThumbnailTextures((current) => {
+      let changed = false;
+      const next = new Map(current);
+      for (const id of evictedIds) {
+        if (next.delete(id)) {
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [peopleIds, thumbnailCacheKeys]);
+
   const isPaused = visible === false;
 
   useEffect(() => {
@@ -329,7 +368,7 @@ export const useThumbnailLoader = ({
       try {
         const items = batch.map((personId) => ({
           personId,
-          url: personThumbnailUrl(personId)
+          url: personThumbnailUrl(personId, thumbnailCacheKeys[personId])
         }));
         const results = await loadThumbnailBatch(items);
 
@@ -387,7 +426,7 @@ export const useThumbnailLoader = ({
       isDisposed = true;
       window.clearInterval(interval);
     };
-  }, [backoffUntilMs, thumbnailLoadOrder, isPaused]);
+  }, [backoffUntilMs, thumbnailLoadOrder, isPaused, thumbnailCacheKeys]);
 
   const thumbnailNodeIds = useMemo(() => new Set(thumbnailTextures.keys()), [thumbnailTextures]);
 
