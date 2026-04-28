@@ -1537,7 +1537,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const handleResearchTaskUpdate = useCallback(
     async (
       taskId: string,
-      patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "immichPersonId">>
+      patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "personId">>
     ) => {
       try {
         await updateResearchTask(taskId, patch);

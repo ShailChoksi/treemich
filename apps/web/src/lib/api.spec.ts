@@ -367,7 +367,7 @@ describe("phase-2 API helpers", () => {
         headers: { "content-type": "application/json" }
       })
     );
-    await createResearchTask({ title: "Task", status: "OPEN", immichPersonId: null });
+    await createResearchTask({ title: "Task", status: "OPEN", personId: null });
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "/api/research/tasks",
       expect.objectContaining({ method: "POST", credentials: "include" })
@@ -635,8 +635,8 @@ describe("family API helpers", () => {
         JSON.stringify({
           id: "fam-new",
           userId: "u1",
-          parent1ImmichPersonId: "a",
-          parent2ImmichPersonId: "b",
+          parent1PersonId: "a",
+          parent2PersonId: "b",
           notes: null,
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
@@ -647,8 +647,8 @@ describe("family API helpers", () => {
     );
 
     const row = await createFamily({
-      parent1ImmichPersonId: "a",
-      parent2ImmichPersonId: "b",
+      parent1PersonId: "a",
+      parent2PersonId: "b",
       children: []
     });
     expect(row.id).toBe("fam-new");
@@ -700,8 +700,8 @@ describe("family API helpers", () => {
         JSON.stringify({
           id: "fam-1",
           userId: "u1",
-          parent1ImmichPersonId: "p1",
-          parent2ImmichPersonId: null,
+          parent1PersonId: "p1",
+          parent2PersonId: null,
           notes: "x",
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
@@ -797,7 +797,7 @@ describe("people API helpers", () => {
     const result = await getPeople();
 
     expect(result).toEqual(people);
-    const [[url]] = vi.mocked(globalThis.fetch).mock.calls;
+    const [[url] = []] = vi.mocked(globalThis.fetch).mock.calls;
     expect(String(url)).toContain("/api/people");
   });
 
@@ -812,7 +812,7 @@ describe("people API helpers", () => {
 
     await getPeople("alice");
 
-    const [[url]] = vi.mocked(globalThis.fetch).mock.calls;
+    const [[url] = []] = vi.mocked(globalThis.fetch).mock.calls;
     expect(String(url)).toContain("q=alice");
   });
 

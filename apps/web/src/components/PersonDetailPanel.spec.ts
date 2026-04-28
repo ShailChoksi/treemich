@@ -227,15 +227,15 @@ describe("PersonDetailPanel", () => {
     const spouse = person("spouse", "Spouse");
     const spouseSibling: ImmichPerson = {
       ...person("spouse-sibling", "Sam"),
-      profile: { immichPersonId: "spouse-sibling", gender: "MALE" }
+      profile: { id: "spouse-sibling", immichPersonId: "spouse-sibling", gender: "MALE" }
     };
     const spouseParent: ImmichPerson = {
       ...person("spouse-parent", "Pat"),
-      profile: { immichPersonId: "spouse-parent", gender: "FEMALE" }
+      profile: { id: "spouse-parent", immichPersonId: "spouse-parent", gender: "FEMALE" }
     };
     const spouseUncle: ImmichPerson = {
       ...person("spouse-uncle", "Uma"),
-      profile: { immichPersonId: "spouse-uncle", gender: "FEMALE" }
+      profile: { id: "spouse-uncle", immichPersonId: "spouse-uncle", gender: "FEMALE" }
     };
     const { container, root } = renderPanel({
       person: me,

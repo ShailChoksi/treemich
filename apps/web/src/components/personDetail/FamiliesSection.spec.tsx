@@ -35,8 +35,8 @@ const parent2: ImmichPerson = {
 const baseFamily = (overrides: Partial<FamilyRecord> = {}): FamilyRecord => ({
   id: "fam-1",
   userId: "u1",
-  parent1ImmichPersonId: "p1",
-  parent2ImmichPersonId: "p2",
+  parent1PersonId: "p1",
+  parent2PersonId: "p2",
   notes: "Original notes",
   externalIds: {},
   createdAt: "2026-01-01T00:00:00.000Z",
@@ -44,7 +44,7 @@ const baseFamily = (overrides: Partial<FamilyRecord> = {}): FamilyRecord => ({
   children: [
     {
       id: "fc-1",
-      childImmichPersonId: "self-1",
+      childPersonId: "self-1",
       pedigree: "BIOLOGICAL",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"

@@ -162,9 +162,9 @@ export const FamiliesSection = ({
                 <div className="field-group">
                   <span className="field-label">Parents</span>
                   <span className="family-unit-readonly">
-                    {labelFor(people, family.parent1ImmichPersonId)}
+                    {labelFor(people, family.parent1PersonId)}
                     {" · "}
-                    {labelFor(people, family.parent2ImmichPersonId)}
+                    {labelFor(people, family.parent2PersonId)}
                   </span>
                 </div>
 
@@ -223,7 +223,7 @@ export const FamiliesSection = ({
                   <ul className="family-unit-children">
                     {family.children.map((child) => (
                       <li key={child.id}>
-                        {labelFor(people, child.childImmichPersonId)}
+                        {labelFor(people, child.childPersonId)}
                         <span className="family-unit-pedigree"> — {child.pedigree}</span>
                       </li>
                     ))}
