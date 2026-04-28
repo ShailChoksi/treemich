@@ -2,11 +2,12 @@
 -- Legacy rows may contain Immich person ids; map them through external identities
 -- or the deprecated PersonProfile.immichPersonId compatibility column.
 
-ALTER TABLE "CooccurrenceEdge" ADD COLUMN "sourceProvider" "PersonExternalIdentityProvider";
-ALTER TABLE "CooccurrenceEdge" ADD COLUMN "sourceImportedAt" TIMESTAMP(3);
-ALTER TABLE "CooccurrenceEdge" ADD COLUMN "sourceMetadata" JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE "CooccurrenceEdge" ADD COLUMN IF NOT EXISTS "sourceProvider" "PersonExternalIdentityProvider";
+ALTER TABLE "CooccurrenceEdge" ADD COLUMN IF NOT EXISTS "sourceImportedAt" TIMESTAMP(3);
+ALTER TABLE "CooccurrenceEdge" ADD COLUMN IF NOT EXISTS "sourceMetadata" JSONB NOT NULL DEFAULT '{}';
 
 ALTER TABLE "CooccurrenceEdge" DROP CONSTRAINT IF EXISTS "CooccurrenceEdge_userId_personAId_personBId_key";
+DROP INDEX IF EXISTS "CooccurrenceEdge_userId_personAId_personBId_key";
 
 CREATE TEMP TABLE "_cooccurrence_remap" AS
 SELECT
@@ -102,9 +103,8 @@ DELETE FROM "CooccurrenceEdge" e
 USING ranked_edges r
 WHERE e."id" = r."id" AND r."rank" > 1;
 
-ALTER TABLE "CooccurrenceEdge"
-  ADD CONSTRAINT "CooccurrenceEdge_userId_personAId_personBId_key"
-  UNIQUE ("userId", "personAId", "personBId");
+CREATE UNIQUE INDEX IF NOT EXISTS "CooccurrenceEdge_userId_personAId_personBId_key"
+  ON "CooccurrenceEdge"("userId", "personAId", "personBId");
 
 ALTER TABLE "CooccurrenceEdge"
   ADD CONSTRAINT "CooccurrenceEdge_personAId_fkey"

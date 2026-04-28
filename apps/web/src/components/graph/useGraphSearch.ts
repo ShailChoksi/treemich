@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { ImmichPerson } from "../../lib/api";
+import type { Person } from "../../lib/api";
 import { getPersonDisplayLabel } from "../../lib/personDisplay";
 
 type SearchFallbackMatch = {
@@ -17,7 +17,7 @@ type SearchFallbackResult = {
 };
 
 type UseGraphSearchOptions = {
-  people: ImmichPerson[];
+  people: Person[];
   focusPersonRequest: string | null;
   clearFocusPersonRequest: () => void;
   setSelectedPersonId: (personId: string | null) => void;
@@ -29,7 +29,7 @@ type UseGraphSearchOptions = {
   onSearchFallback?: (query: string) => Promise<SearchFallbackResult | null>;
 };
 
-export const findPersonBySearchTerm = (people: ImmichPerson[], searchTerm: string) => {
+export const findPersonBySearchTerm = (people: Person[], searchTerm: string) => {
   const normalized = searchTerm.trim().toLowerCase();
   if (!normalized) {
     return null;
@@ -42,7 +42,7 @@ export const findPersonBySearchTerm = (people: ImmichPerson[], searchTerm: strin
   );
 };
 
-export const resolveFocusPersonRequest = (people: ImmichPerson[], focusPersonRequest: string | null) => {
+export const resolveFocusPersonRequest = (people: Person[], focusPersonRequest: string | null) => {
   if (!focusPersonRequest) {
     return null;
   }

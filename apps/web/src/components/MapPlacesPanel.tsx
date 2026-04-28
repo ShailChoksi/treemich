@@ -11,7 +11,7 @@ import {
   filterPlaces,
   filterPlacesByBounds,
   getAdaptiveClusterCellDegrees,
-  placeClusterIncludesImmichPerson,
+  placeClusterIncludesPerson,
   type GeoBounds
 } from "./mapPlaces/utils";
 import type { LatLngTuple, MapUiSnapshot } from "../lib/workspaceUiState";
@@ -38,7 +38,7 @@ type Props = {
   onIncludeLivingChange: (next: boolean) => void;
   onFocusPerson: (personId: string) => void;
   getPersonLabel: (personId: string) => string;
-  /** When set, clusters that include this Immich person id (via map `samplePersonIds`) render green. */
+  /** When set, clusters that include this person id (via map `samplePersonIds`) render green. */
   selectedPersonId?: string | null;
   error?: string | null;
   onRetry?: () => void;
@@ -312,7 +312,7 @@ export const MapPlacesPanel = ({
             />
             {clusters.map((cluster) => {
               const includesSelected =
-                focusPersonId != null && placeClusterIncludesImmichPerson(cluster, focusPersonId);
+                focusPersonId != null && placeClusterIncludesPerson(cluster, focusPersonId);
               const pathOptions = includesSelected
                 ? clusterMarkerPathOptionsSelected
                 : clusterMarkerPathOptionsDefault;

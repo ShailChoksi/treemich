@@ -7,7 +7,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type {
   FamilyRecord,
   Gender,
-  ImmichPerson,
+  Person,
   LifeEventRecord,
   PatchFamilyBody,
   RelationshipRecord,
@@ -52,8 +52,8 @@ export {
 } from "./personDetail/personDetailHelpers";
 
 type Props = {
-  person: ImmichPerson | null;
-  people: ImmichPerson[];
+  person: Person | null;
+  people: Person[];
   relationships: RelationshipRecord[];
   dismissedSuggestionKeys: string[];
   genders: Gender[];
@@ -92,6 +92,10 @@ type Props = {
   ) => Promise<void>;
   onDeleteRelationship: (relationship: RelationshipRecord, relatedPersonId: string) => Promise<void>;
   onDeletePerson?: () => Promise<void>;
+  onThumbnailUpload?: (file: File) => Promise<void>;
+  onImmichThumbnailImport?: () => Promise<void>;
+  onImmichIdentityLink?: (providerPersonId: string) => Promise<void>;
+  onImmichIdentityUnlink?: (identityId: string) => Promise<void>;
   onDismissSuggestion: (suggestionKey: string) => void;
   isSavingRelationship: boolean;
   immichBaseUrl?: string | null;
@@ -184,6 +188,10 @@ const PersonDetailPanelComponent = ({
   onUpdateRelationship,
   onDeleteRelationship,
   onDeletePerson,
+  onThumbnailUpload,
+  onImmichThumbnailImport,
+  onImmichIdentityLink,
+  onImmichIdentityUnlink,
   onDismissSuggestion,
   isSavingRelationship,
   immichBaseUrl,
@@ -221,6 +229,8 @@ const PersonDetailPanelComponent = ({
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
   const [showDeletePersonConfirm, setShowDeletePersonConfirm] = useState(false);
   const [isDeletingPerson, setIsDeletingPerson] = useState(false);
+  const [isSavingProviderLink, setIsSavingProviderLink] = useState(false);
+  const [immichProviderPersonId, setImmichProviderPersonId] = useState("");
   const [visibleSuggestionCount, setVisibleSuggestionCount] = useState(maxVisibleSuggestions);
   const [collapsedSections, setCollapsedSections] =
     useState<SectionCollapsedState>(DEFAULT_COLLAPSED_SECTIONS);
@@ -345,7 +355,11 @@ const PersonDetailPanelComponent = ({
       )
     : [];
   const sourceBirthDate = formatBirthDate(person?.birthDate);
-  const immichPersonPageUrl = person ? immichPersonUrl(person.id, immichBaseUrl) : null;
+  const immichIdentity =
+    person?.externalIdentities?.find((identity) => identity.provider === "IMMICH") ?? null;
+  const immichPersonPageUrl = immichIdentity
+    ? immichPersonUrl(immichIdentity.providerPersonId, immichBaseUrl)
+    : null;
   const spouseDisplay = useMemo(() => {
     if (!activeRelationship || activeRelationship.record.type !== RELATIONSHIP_TYPES.spouseOf) {
       return { marriage: "", divorce: "" };
@@ -477,6 +491,56 @@ const PersonDetailPanelComponent = ({
     }
   };
 
+  const handleThumbnailUpload = async (file: File | null | undefined) => {
+    if (!file || !onThumbnailUpload) {
+      return;
+    }
+    setIsSavingProviderLink(true);
+    try {
+      await onThumbnailUpload(file);
+    } finally {
+      setIsSavingProviderLink(false);
+    }
+  };
+
+  const handleImportImmichThumbnail = async () => {
+    if (!onImmichThumbnailImport) {
+      return;
+    }
+    setIsSavingProviderLink(true);
+    try {
+      await onImmichThumbnailImport();
+    } finally {
+      setIsSavingProviderLink(false);
+    }
+  };
+
+  const handleLinkImmichIdentity = async () => {
+    const providerPersonId = immichProviderPersonId.trim();
+    if (!providerPersonId || !onImmichIdentityLink) {
+      return;
+    }
+    setIsSavingProviderLink(true);
+    try {
+      await onImmichIdentityLink(providerPersonId);
+      setImmichProviderPersonId("");
+    } finally {
+      setIsSavingProviderLink(false);
+    }
+  };
+
+  const handleUnlinkImmichIdentity = async () => {
+    if (!immichIdentity || !onImmichIdentityUnlink) {
+      return;
+    }
+    setIsSavingProviderLink(true);
+    try {
+      await onImmichIdentityUnlink(immichIdentity.id);
+    } finally {
+      setIsSavingProviderLink(false);
+    }
+  };
+
   return (
     <section className="card person-detail-panel">
       {person ? (
@@ -510,7 +574,7 @@ const PersonDetailPanelComponent = ({
                 )}
               </h3>
               <div className="person-detail-meta">
-                <span className="person-detail-meta-item">Immich birth date: {sourceBirthDate}</span>
+                <span className="person-detail-meta-item">Birth date: {sourceBirthDate}</span>
                 <span className="person-detail-meta-item">
                   {familyRelatives.length + extendedFamily.length} relative
                   {familyRelatives.length + extendedFamily.length === 1 ? "" : "s"}
@@ -627,6 +691,67 @@ const PersonDetailPanelComponent = ({
             >
               {isSavingProfile ? "Saving..." : "Save profile"}
             </button>
+            <div className="person-provider-controls">
+              <label className="field-group">
+                <span className="field-label">Treemich thumbnail</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={!onThumbnailUpload || isSavingProviderLink}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    void handleThumbnailUpload(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              {immichIdentity ? (
+                <div className="provider-link-card">
+                  <span className="field-label">Linked Immich identity</span>
+                  <span className="hint">
+                    {immichIdentity.displayName || immichIdentity.providerPersonId}
+                  </span>
+                  <div className="toolbar-row">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={!onImmichThumbnailImport || isSavingProviderLink}
+                      onClick={() => void handleImportImmichThumbnail()}
+                    >
+                      Import Immich thumbnail
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button danger-button"
+                      disabled={!onImmichIdentityUnlink || isSavingProviderLink}
+                      onClick={() => void handleUnlinkImmichIdentity()}
+                    >
+                      Unlink Immich
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="provider-link-card">
+                  <label className="field-group">
+                    <span className="field-label">Immich person ID</span>
+                    <input
+                      value={immichProviderPersonId}
+                      onChange={(event) => setImmichProviderPersonId(event.target.value)}
+                      placeholder="Optional provider identity"
+                      disabled={!onImmichIdentityLink || isSavingProviderLink}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={!onImmichIdentityLink || !immichProviderPersonId.trim() || isSavingProviderLink}
+                    onClick={() => void handleLinkImmichIdentity()}
+                  >
+                    Link Immich identity
+                  </button>
+                </div>
+              )}
+            </div>
           </CollapsibleSection>
           <RelativesSection
             sectionKey="relatives"

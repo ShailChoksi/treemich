@@ -2,7 +2,7 @@ import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../styles.css";
-import type { ImmichPerson, LifeEventRecord, RelationshipRecord } from "../lib/api";
+import type { Person, LifeEventRecord, RelationshipRecord } from "../lib/api";
 import {
   PersonDetailPanel,
   getRelativeRelationshipLabel,
@@ -18,7 +18,7 @@ type RenderResult = {
   root: Root;
 };
 
-const person = (id: string, name: string): ImmichPerson => ({
+const person = (id: string, name: string): Person => ({
   id,
   name,
   hasRelationship: false
@@ -75,8 +75,8 @@ const divorceEv = (y: number, m: number, d: number): LifeEventRecord => ({
 });
 
 const renderPanel = (overrides?: {
-  person?: ImmichPerson | null;
-  people?: ImmichPerson[];
+  person?: Person | null;
+  people?: Person[];
   relationships?: RelationshipRecord[];
   panelProps?: Partial<PanelProps>;
 }): RenderResult => {
@@ -225,15 +225,15 @@ describe("PersonDetailPanel", () => {
   it("uses gendered in-law labels when profile gender is known", () => {
     const me = person("me", "Me");
     const spouse = person("spouse", "Spouse");
-    const spouseSibling: ImmichPerson = {
+    const spouseSibling: Person = {
       ...person("spouse-sibling", "Sam"),
       profile: { id: "spouse-sibling", immichPersonId: "spouse-sibling", gender: "MALE" }
     };
-    const spouseParent: ImmichPerson = {
+    const spouseParent: Person = {
       ...person("spouse-parent", "Pat"),
       profile: { id: "spouse-parent", immichPersonId: "spouse-parent", gender: "FEMALE" }
     };
-    const spouseUncle: ImmichPerson = {
+    const spouseUncle: Person = {
       ...person("spouse-uncle", "Uma"),
       profile: { id: "spouse-uncle", immichPersonId: "spouse-uncle", gender: "FEMALE" }
     };
@@ -347,7 +347,7 @@ describe("PersonDetailPanel", () => {
     container.remove();
   });
 
-  it("keeps displayed Immich birth date consistent with date input value", () => {
+  it("keeps displayed birth date consistent with date input value", () => {
     const { container, root } = renderPanel({
       person: {
         ...person("me", "Me"),
@@ -358,10 +358,52 @@ describe("PersonDetailPanel", () => {
       }
     });
 
-    expect(container.textContent).toContain(`Immich birth date: ${formatBirthDate("1992-09-25")}`);
+    expect(container.textContent).toContain(`Birth date: ${formatBirthDate("1992-09-25")}`);
     const profileContent = container.querySelector("#person-detail-section-content-profile");
     const birthInput = profileContent?.querySelector('input[type="date"]') as HTMLInputElement | null;
     expect(birthInput?.value).toBe("1992-09-25");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("supports thumbnail upload and Immich provider link actions", async () => {
+    const onThumbnailUpload = vi.fn().mockResolvedValue(undefined);
+    const onImmichIdentityLink = vi.fn().mockResolvedValue(undefined);
+    const { container, root } = renderPanel({
+      panelProps: {
+        onThumbnailUpload,
+        onImmichIdentityLink
+      }
+    });
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["portrait"], "portrait.jpg", { type: "image/jpeg" });
+    Object.defineProperty(fileInput, "files", { value: [file], configurable: true });
+    await act(async () => {
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(onThumbnailUpload).toHaveBeenCalledWith(file);
+
+    const textInputs = [...container.querySelectorAll("input")];
+    const providerInput = textInputs.find((input) => input.placeholder === "Optional provider identity");
+    expect(providerInput).toBeDefined();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        providerInput,
+        "immich-person-1"
+      );
+      providerInput!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const linkButton = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Link Immich identity")
+    );
+    await act(async () => {
+      linkButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onImmichIdentityLink).toHaveBeenCalledWith("immich-person-1");
 
     act(() => {
       root.unmount();

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { getPersonNameForGraphLayout } from "./personDisplay";
-import type { ImmichPerson } from "./api";
+import type { Person } from "./api";
 
-const person = (overrides: Partial<ImmichPerson>): ImmichPerson => ({
+const person = (overrides: Partial<Person>): Person => ({
   id: "p1",
   name: "Immich",
   ...overrides

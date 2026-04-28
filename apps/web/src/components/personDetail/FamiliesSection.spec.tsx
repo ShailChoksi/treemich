@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FamilyRecord, ImmichPerson } from "../../lib/api";
+import type { FamilyRecord, Person } from "../../lib/api";
 import { FamiliesSection } from "./FamiliesSection";
 
 vi.mock("./FamilyLifeEventsBlock", () => ({
@@ -11,21 +11,21 @@ vi.mock("./FamilyLifeEventsBlock", () => ({
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
-const person: ImmichPerson = {
+const person: Person = {
   id: "self-1",
   name: "Self Person",
   displayName: null,
   birthDate: null
 };
 
-const parent1: ImmichPerson = {
+const parent1: Person = {
   id: "p1",
   name: "Parent One",
   displayName: null,
   birthDate: null
 };
 
-const parent2: ImmichPerson = {
+const parent2: Person = {
   id: "p2",
   name: "Parent Two",
   displayName: null,

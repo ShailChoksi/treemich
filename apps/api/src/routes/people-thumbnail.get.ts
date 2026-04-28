@@ -4,7 +4,7 @@
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { openStoredMediaReadStream, storageKeyFromUrl } from "../evidence/mediaStorage.js";
+import { openStoredMediaReadStream, storageKeyFromUrl, storeMediaBuffer } from "../evidence/mediaStorage.js";
 import { importImmichThumbnailForIdentity } from "../integrations/immich/importProvider.js";
 import { getImmichClientForRequest } from "../services.js";
 
@@ -78,6 +78,32 @@ export const registerPeopleThumbnailGetRoute = (app: FastifyInstance) => {
       personId: person.id,
       identity: immichIdentity,
       immichClient: await getImmichClientForRequest(request)
+    });
+    return reply.code(201).send(thumbnail);
+  });
+
+  app.post("/people/:id/thumbnail/upload", async (request, reply) => {
+    const auth = request.auth;
+    if (!auth) {
+      return reply.code(401).send({ statusCode: 401, error: "Unauthorized" });
+    }
+    const { id } = paramsSchema.parse(request.params);
+    await app.services.personService.get(auth.user.id, id);
+    const file = await request.file();
+    if (!file) {
+      return reply.code(400).send({ statusCode: 400, error: "Missing thumbnail file" });
+    }
+    if (!file.mimetype.startsWith("image/")) {
+      return reply.code(400).send({ statusCode: 400, error: "Thumbnail must be an image" });
+    }
+    const stored = await storeMediaBuffer(await file.toBuffer(), {
+      originalName: file.filename || "thumbnail",
+      maxBytes: 10 * 1024 * 1024
+    });
+    const thumbnail = await app.services.personService.addUploadedThumbnail(auth.user.id, id, {
+      storageUrl: stored.storageUrl,
+      mimeType: file.mimetype,
+      checksum: stored.checksum
     });
     return reply.code(201).send(thumbnail);
   });

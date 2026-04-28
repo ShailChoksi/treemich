@@ -2,7 +2,7 @@
  * @file Derive extended family and in-law candidates from the current graph topology.
  */
 
-import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
+import type { Person, RelationshipRecord } from "../../lib/api";
 import { buildParentChildIndex } from "./layout";
 
 export type ExtendedFamilyMember = {
@@ -154,7 +154,7 @@ const IN_LAW_RULES: ExtendedFamilyRule[] = [
 
 const computeFamilyMembers = (
   selectedPersonId: string,
-  people: ImmichPerson[],
+  people: Person[],
   relationships: RelationshipRecord[],
   directRelativeIds: Set<string>,
   rules: ExtendedFamilyRule[]
@@ -196,7 +196,7 @@ const computeFamilyMembers = (
 
 export const computeExtendedFamily = (
   selectedPersonId: string,
-  people: ImmichPerson[],
+  people: Person[],
   relationships: RelationshipRecord[],
   directRelativeIds: Set<string>
 ): ExtendedFamilyMember[] => {
@@ -205,7 +205,7 @@ export const computeExtendedFamily = (
 
 export const computeInLawFamily = (
   selectedPersonId: string,
-  people: ImmichPerson[],
+  people: Person[],
   relationships: RelationshipRecord[],
   excludedPersonIds: Set<string>
 ): ExtendedFamilyMember[] =>

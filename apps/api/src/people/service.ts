@@ -350,4 +350,24 @@ export class PersonService {
       throw new HttpNotFoundError("External identity not found");
     }
   }
+
+  async addUploadedThumbnail(
+    userId: string,
+    personId: string,
+    thumbnail: { storageUrl: string; mimeType: string | null; checksum: string | null }
+  ): Promise<PersonThumbnailRecord> {
+    const id = await this.resolvePersonId(userId, personId);
+    const created = await prisma.personThumbnail.create({
+      data: {
+        userId,
+        personId: id,
+        source: "UPLOADED",
+        storageUrl: thumbnail.storageUrl,
+        mimeType: thumbnail.mimeType,
+        checksum: thumbnail.checksum,
+        importedAt: new Date()
+      }
+    });
+    return personThumbnailToJson(created);
+  }
 }

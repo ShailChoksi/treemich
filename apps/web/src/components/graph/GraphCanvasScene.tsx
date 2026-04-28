@@ -7,7 +7,7 @@ import { Canvas, invalidate, type RootState, useThree } from "@react-three/fiber
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { MOUSE, PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import type { ImmichPerson } from "../../lib/api";
+import type { Person } from "../../lib/api";
 import type { AddRelativeSlot } from "./NodeActionButtons";
 import type { GraphVisibilityBucket } from "./graphVisibility";
 import type { NodePosition } from "./layout";
@@ -26,7 +26,7 @@ type VisibleLine = {
 };
 
 type DisplayPerson = {
-  person: ImmichPerson;
+  person: Person;
   displayPosition: NodePosition;
 };
 

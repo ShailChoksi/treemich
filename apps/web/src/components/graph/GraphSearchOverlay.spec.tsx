@@ -30,6 +30,8 @@ const renderOverlay = (onCenterView = vi.fn()): RenderResult => {
         treeValidationEngineDisabled={false}
         searchIncludeAlternateNames={false}
         onSearchIncludeAlternateNamesChange={() => undefined}
+        providerFilter="all"
+        onProviderFilterChange={() => undefined}
       />
     );
   });
@@ -97,6 +99,8 @@ describe("GraphSearchOverlay", () => {
           treeValidationEngineDisabled={false}
           searchIncludeAlternateNames={false}
           onSearchIncludeAlternateNamesChange={() => undefined}
+          providerFilter="all"
+          onProviderFilterChange={() => undefined}
         />
       );
     });
@@ -131,6 +135,8 @@ describe("GraphSearchOverlay", () => {
           treeValidationEngineDisabled={false}
           searchIncludeAlternateNames={false}
           onSearchIncludeAlternateNamesChange={() => undefined}
+          providerFilter="all"
+          onProviderFilterChange={() => undefined}
         />
       );
     });
@@ -140,6 +146,45 @@ describe("GraphSearchOverlay", () => {
     );
     expect(options).toContain("Standalone Person");
     expect(options).not.toContain("Immich Person");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("notifies when linked status filter changes", () => {
+    const onProviderFilterChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <GraphSearchOverlay
+          searchTerm=""
+          onSearchTermChange={() => undefined}
+          onSearchSubmit={(event) => event.preventDefault()}
+          onClearSearch={() => undefined}
+          onCenterView={() => undefined}
+          people={[{ id: "person-1", name: "Alex" }]}
+          searchFeedback={null}
+          treeValidationIssueCount={null}
+          treeValidationEngineDisabled={false}
+          searchIncludeAlternateNames={false}
+          onSearchIncludeAlternateNamesChange={() => undefined}
+          providerFilter="all"
+          onProviderFilterChange={onProviderFilterChange}
+        />
+      );
+    });
+
+    const select = container.querySelector(".graph-search-provider-filter select") as HTMLSelectElement;
+    act(() => {
+      select.value = "unlinked";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(onProviderFilterChange).toHaveBeenCalledWith("unlinked");
 
     act(() => {
       root.unmount();

@@ -45,7 +45,7 @@ export const filterGraphLayoutTopologyRelationships = <R extends { type: Relatio
   relationships: readonly R[]
 ): R[] => relationships.filter((relationship) => graphLayoutTopologyTypeSet.has(relationship.type));
 
-/** Stored gender enum for Treemich profiles (Immich-backed). */
+/** Stored gender enum for Treemich person profiles. */
 export const genderValues = ["MALE", "FEMALE", "OTHER", "UNKNOWN"] as const;
 export type GenderValue = (typeof genderValues)[number];
 
@@ -133,7 +133,7 @@ export type PersonRecord = {
 /** @deprecated Use PersonRecord. */
 export type ImmichPerson = PersonRecord;
 
-/** Treemich-owned fields layered on an Immich person (persisted in Treemich DB). */
+/** Treemich-owned person profile fields. */
 export type TreemichPersonProfile = {
   id: string;
   /** @deprecated Immich ids now live in PersonExternalIdentity. */
@@ -367,9 +367,9 @@ export type SearchRelationshipsResponse = {
     hops: RelationshipType[];
     ageFilter?: AgeFilter;
   };
-  sourceCandidates?: ImmichPerson[];
+  sourceCandidates?: PersonRecord[];
   matches?: Array<{
-    person: ImmichPerson;
+    person: PersonRecord;
     profile?: TreemichPersonProfile | null;
   }>;
   message?: string;

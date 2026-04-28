@@ -30,6 +30,7 @@ import type {
 } from "../lib/api";
 import {
   createPerson,
+  createPersonExternalIdentity,
   createResearchTask,
   createPersonLifeEvent,
   createRelationshipLifeEvent,
@@ -43,6 +44,7 @@ import {
   getFamilyLifeEvents,
   deletePersonLifeEvent,
   deletePerson,
+  deletePersonExternalIdentity,
   deleteRelationship,
   deleteRelationshipLifeEvent,
   getPeople,
@@ -57,6 +59,8 @@ import {
   patchFamily,
   updateFamilyLifeEvent,
   updatePersonLifeEvent,
+  uploadPersonThumbnail,
+  importPersonImmichThumbnail,
   updateResearchTask,
   updateRelationshipLifeEvent,
   updatePersonProfile,
@@ -1309,6 +1313,79 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     }
   }, [refreshGraphData]);
 
+  const handleUploadPersonThumbnail = useCallback(
+    async (file: File) => {
+      const person = selectedPersonRef.current;
+      if (!person) {
+        return;
+      }
+      try {
+        await uploadPersonThumbnail(person.id, file);
+        await refreshGraphData({ bypassSaveGuard: true });
+        setStatus("Thumbnail uploaded");
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      }
+    },
+    [refreshGraphData]
+  );
+
+  const handleImportImmichThumbnail = useCallback(async () => {
+    const person = selectedPersonRef.current;
+    if (!person) {
+      return;
+    }
+    try {
+      await importPersonImmichThumbnail(person.id);
+      await refreshGraphData({ bypassSaveGuard: true });
+      setStatus("Immich thumbnail imported");
+    } catch (error: unknown) {
+      setStatus(getErrorMessage(error));
+      throw error;
+    }
+  }, [refreshGraphData]);
+
+  const handleLinkImmichIdentity = useCallback(
+    async (providerPersonId: string) => {
+      const person = selectedPersonRef.current;
+      if (!person) {
+        return;
+      }
+      try {
+        await createPersonExternalIdentity(person.id, {
+          provider: "IMMICH",
+          providerPersonId,
+          providerBaseUrl: immichBaseUrl ?? undefined
+        });
+        await refreshGraphData({ bypassSaveGuard: true });
+        setStatus("Immich identity linked");
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      }
+    },
+    [immichBaseUrl, refreshGraphData]
+  );
+
+  const handleUnlinkImmichIdentity = useCallback(
+    async (identityId: string) => {
+      const person = selectedPersonRef.current;
+      if (!person) {
+        return;
+      }
+      try {
+        await deletePersonExternalIdentity(person.id, identityId);
+        await refreshGraphData({ bypassSaveGuard: true });
+        setStatus("Immich identity unlinked");
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      }
+    },
+    [refreshGraphData]
+  );
+
   const onDeleteExistingRelationship = useCallback(
     async (relationship: RelationshipRecord) => {
       setIsSavingRelationship(true);
@@ -2101,6 +2178,10 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onUpdateRelationship: onUpdateExistingRelationship,
           onDeleteRelationship: onDeleteExistingRelationship,
           onDeletePerson: handleDeletePerson,
+          onThumbnailUpload: handleUploadPersonThumbnail,
+          onImmichThumbnailImport: handleImportImmichThumbnail,
+          onImmichIdentityLink: handleLinkImmichIdentity,
+          onImmichIdentityUnlink: handleUnlinkImmichIdentity,
           onDismissSuggestion,
           isSavingRelationship,
           immichBaseUrl,

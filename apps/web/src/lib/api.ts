@@ -13,6 +13,7 @@ import type {
   CreateMediaObjectBody,
   CreatePersonNameBody,
   CreatePersonBody,
+  CreatePersonExternalIdentityBody,
   CreateRepositoryBody,
   CreateResearchTaskBody,
   CreateSourceBody,
@@ -34,6 +35,8 @@ import type {
   PatchPersonNameBody,
   PatchResearchTaskBody,
   PersonNameTypeValue,
+  PersonExternalIdentityRecord,
+  PersonThumbnailRecord,
   PersonRecord,
   PhotoCluster,
   PhotoCooccurrenceEdge,
@@ -56,6 +59,7 @@ export type {
   CreateLifeEventBody,
   CreateMediaObjectBody,
   CreatePersonBody,
+  CreatePersonExternalIdentityBody,
   CreatePersonNameBody,
   CreateRepositoryBody,
   CreateResearchTaskBody,
@@ -77,6 +81,8 @@ export type {
   PatchPersonNameBody,
   PatchResearchTaskBody,
   PersonNameTypeValue,
+  PersonExternalIdentityRecord,
+  PersonThumbnailRecord,
   PersonRecord,
   PhotoCluster,
   PhotoCooccurrenceEdge,
@@ -114,9 +120,6 @@ export class ApiHttpError extends Error {
  * This is the same shape as `PersonRecord` from `@treemich/shared`.
  */
 export type Person = PersonRecord;
-
-/** @deprecated Use {@link Person} or {@link PersonRecord} from `@treemich/shared`. */
-export type ImmichPerson = Person;
 
 /** Optional spouse timeline fields when creating/updating `SPOUSE_OF` edges. */
 export type SpouseRelationshipDates = {
@@ -271,9 +274,6 @@ export const getPeople = async (query?: string): Promise<Person[]> => {
   return json.people ?? [];
 };
 
-/** @deprecated Use {@link getPeople}. */
-export const getImmichPeople = getPeople;
-
 /** `POST /people` — creates a new Treemich person without requiring an Immich account. */
 export const createPerson = async (body: CreatePersonBody): Promise<Person> => {
   const response = await fetch(
@@ -325,6 +325,70 @@ export const updatePersonProfile = async (
   );
   await ensureOk(response, "Failed to update profile");
   return (await response.json()) as TreemichPersonProfile;
+};
+
+/** `GET /people/:id/external-identities` — provider links for this Treemich person. */
+export const getPersonExternalIdentities = async (
+  personId: string
+): Promise<PersonExternalIdentityRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/external-identities`,
+    { cache: "no-store" }
+  );
+  await ensureOk(response, "Failed to load external identities");
+  const body = (await response.json()) as { externalIdentities?: PersonExternalIdentityRecord[] };
+  return body.externalIdentities ?? [];
+};
+
+/** `POST /people/:id/external-identities` — link an external provider identity. */
+export const createPersonExternalIdentity = async (
+  personId: string,
+  body: CreatePersonExternalIdentityBody
+): Promise<PersonExternalIdentityRecord> => {
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/external-identities`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to link external identity");
+  return (await response.json()) as PersonExternalIdentityRecord;
+};
+
+/** `DELETE /people/:id/external-identities/:identityId` — unlink an external provider identity. */
+export const deletePersonExternalIdentity = async (personId: string, identityId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/external-identities/${encodeURIComponent(identityId)}`,
+    withSession({ method: "DELETE" })
+  );
+  await ensureOk(response, "Failed to unlink external identity");
+};
+
+/** `POST /people/:id/thumbnail/upload` — store a Treemich-owned thumbnail image. */
+export const uploadPersonThumbnail = async (personId: string, file: File): Promise<PersonThumbnailRecord> => {
+  const body = new FormData();
+  body.set("file", file);
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/thumbnail/upload`,
+    withSession({
+      method: "POST",
+      body
+    })
+  );
+  await ensureOk(response, "Failed to upload thumbnail");
+  return (await response.json()) as PersonThumbnailRecord;
+};
+
+/** `POST /people/:id/thumbnail/import/immich` — refresh thumbnail bytes from the linked Immich identity. */
+export const importPersonImmichThumbnail = async (personId: string): Promise<PersonThumbnailRecord> => {
+  const response = await fetch(
+    `${treemichApi}/people/${encodeURIComponent(personId)}/thumbnail/import/immich`,
+    withSession({ method: "POST" })
+  );
+  await ensureOk(response, "Failed to import Immich thumbnail");
+  return (await response.json()) as PersonThumbnailRecord;
 };
 
 /** `POST /people/:fromPersonId/relationships` — add edge; optional spouse dates for `SPOUSE_OF`. */
@@ -617,9 +681,11 @@ export type PersonLifeEventValidationFinding = {
   code: string;
   severity: "error" | "warning";
   message: string;
+  personId?: string;
+  /** @deprecated Use personId. */
   immichPersonId?: string;
   relationshipId?: string;
-  relatedImmichPersonId?: string;
+  relatedPersonId?: string;
 };
 
 /** `GET .../life-events/validation` response wrapper. */
@@ -854,16 +920,15 @@ export const getPlacesMap = async (
   return (await response.json()) as PlacesMapResponse;
 };
 
-/** `GET /research/tasks` — optional `personId` filters to person-linked tasks. */
-/** `GET /people/:immichPersonId/families` — family units this person appears in (read-only list in UI). */
+/** `GET /people/:personId/families` — family units this person appears in. */
 export const getFamiliesForPerson = async (
-  immichPersonId: string,
+  personId: string,
   options?: RequestOptions
 ): Promise<FamilyRecord[]> => {
-  const response = await fetchWithRetry(
-    `${treemichApi}/people/${encodeURIComponent(immichPersonId)}/families`,
-    { cache: "no-store", signal: options?.signal }
-  );
+  const response = await fetchWithRetry(`${treemichApi}/people/${encodeURIComponent(personId)}/families`, {
+    cache: "no-store",
+    signal: options?.signal
+  });
   await ensureOk(response, "Failed to load families");
   const body = (await response.json()) as { families: FamilyRecord[] };
   return body.families ?? [];

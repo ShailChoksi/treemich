@@ -17,11 +17,11 @@ import {
   type GedcomDryRunDiff,
   type GedcomImportPreviewResponse
 } from "../lib/api";
-import type { ImmichPerson } from "../lib/api";
+import type { Person } from "../lib/api";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
 
 type Props = {
-  people: ImmichPerson[];
+  people: Person[];
   onTreeChanged?: () => void;
 };
 

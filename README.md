@@ -305,19 +305,19 @@ This starts the API on `localhost:4000` and the web app on `localhost:5173` with
 
 ## Environment Variables
 
-| Variable                       | Default                 | Description                                                              |
-| ------------------------------ | ----------------------- | ------------------------------------------------------------------------ |
-| `PORT`                         | `4000`                  | API server port                                                          |
-| `DATABASE_URL`                 | --                      | PostgreSQL connection string                                             |
+| Variable                       | Default                 | Description                                                                                           |
+| ------------------------------ | ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| `PORT`                         | `4000`                  | API server port                                                                                       |
+| `DATABASE_URL`                 | --                      | PostgreSQL connection string                                                                          |
 | `IMMICH_BASE_URL`              | _(optional)_            | Immich API base URL; required only when signing in via Immich or using thumbnail/co-occurrence import |
-| `IMMICH_PEOPLE_PAGE_SIZE`      | `1000`                  | Page size when fetching people from Immich                               |
-| `TREEMICH_ENCRYPTION_KEY`      | --                      | 64-char hex key for encrypting stored Immich tokens                      |
-| `TREEMICH_SESSION_COOKIE_NAME` | `treemich_session`      | Browser cookie name                                                      |
-| `TREEMICH_SESSION_TTL_MS`      | `2592000000` (30 days)  | Session lifetime                                                         |
-| `WEB_ORIGIN`                   | `http://localhost:5173` | CORS allowed origin                                                      |
-| `RATE_LIMIT_MAX`               | `300`                   | Max API requests per time window                                         |
-| `RATE_LIMIT_TIME_WINDOW_MS`    | `60000`                 | Rate limit window in ms                                                  |
-| `VITE_TREEMICH_API_URL`        | `/api`                  | Frontend API base URL (build-time)                                       |
+| `IMMICH_PEOPLE_PAGE_SIZE`      | `1000`                  | Page size when fetching people from Immich                                                            |
+| `TREEMICH_ENCRYPTION_KEY`      | --                      | 64-char hex key for encrypting stored Immich tokens                                                   |
+| `TREEMICH_SESSION_COOKIE_NAME` | `treemich_session`      | Browser cookie name                                                                                   |
+| `TREEMICH_SESSION_TTL_MS`      | `2592000000` (30 days)  | Session lifetime                                                                                      |
+| `WEB_ORIGIN`                   | `http://localhost:5173` | CORS allowed origin                                                                                   |
+| `RATE_LIMIT_MAX`               | `300`                   | Max API requests per time window                                                                      |
+| `RATE_LIMIT_TIME_WINDOW_MS`    | `60000`                 | Rate limit window in ms                                                                               |
+| `VITE_TREEMICH_API_URL`        | `/api`                  | Frontend API base URL (build-time)                                                                    |
 
 ## Auth Model
 
@@ -328,24 +328,24 @@ This starts the API on `localhost:4000` and the web app on `localhost:5173` with
 
 ## API Endpoints
 
-| Method   | Path                              | Description                                            |
-| -------- | --------------------------------- | ------------------------------------------------------ |
-| `POST`   | `/auth/login`                     | Sign in (email+password standalone, or Immich provider)|
-| `POST`   | `/auth/logout`                    | End session                                            |
-| `GET`    | `/auth/me`                        | Current session state                                  |
-| `GET`    | `/auth/link-status`               | Immich link status (optional provider)                 |
-| `GET`    | `/people`                         | List Treemich-owned people                             |
-| `POST`   | `/people`                         | Create a new person (no Immich required)               |
-| `PATCH`  | `/people/:id`                     | Update person profile (gender, birth date, names)      |
-| `GET`    | `/people/:id`                     | Get a single person                                    |
-| `GET`    | `/people/:id/thumbnail`           | Person thumbnail (Immich or SVG initials fallback)     |
-| `GET`    | `/people/:id/external-identities` | List external identities (e.g. Immich)                 |
-| `POST`   | `/people/:id/external-identities` | Add an external identity link                          |
-| `POST`   | `/people/:id/relationships`       | Create a relationship                                  |
-| `DELETE` | `/people/:id/relationships`       | Delete a relationship                                  |
-| `GET`    | `/relationships`                  | List all relationships (paginated)                     |
-| `GET`    | `/people/cooccurrence`            | Photo co-occurrence data (requires Immich link)        |
-| `GET`    | `/search?q=...`                   | Natural-language relationship search                   |
+| Method   | Path                              | Description                                             |
+| -------- | --------------------------------- | ------------------------------------------------------- |
+| `POST`   | `/auth/login`                     | Sign in (email+password standalone, or Immich provider) |
+| `POST`   | `/auth/logout`                    | End session                                             |
+| `GET`    | `/auth/me`                        | Current session state                                   |
+| `GET`    | `/auth/link-status`               | Immich link status (optional provider)                  |
+| `GET`    | `/people`                         | List Treemich-owned people                              |
+| `POST`   | `/people`                         | Create a new person (no Immich required)                |
+| `PATCH`  | `/people/:id`                     | Update person profile (gender, birth date, names)       |
+| `GET`    | `/people/:id`                     | Get a single person                                     |
+| `GET`    | `/people/:id/thumbnail`           | Person thumbnail (Immich or SVG initials fallback)      |
+| `GET`    | `/people/:id/external-identities` | List external identities (e.g. Immich)                  |
+| `POST`   | `/people/:id/external-identities` | Add an external identity link                           |
+| `POST`   | `/people/:id/relationships`       | Create a relationship                                   |
+| `DELETE` | `/people/:id/relationships`       | Delete a relationship                                   |
+| `GET`    | `/relationships`                  | List all relationships (paginated)                      |
+| `GET`    | `/people/cooccurrence`            | Photo co-occurrence data (requires Immich link)         |
+| `GET`    | `/search?q=...`                   | Natural-language relationship search                    |
 
 ### Example requests
 

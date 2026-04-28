@@ -826,11 +826,6 @@ describe("people API helpers", () => {
     expect(result).toEqual([]);
   });
 
-  it("getImmichPeople is a deprecated alias for getPeople and returns the same data", async () => {
-    const { getPeople, getImmichPeople } = await import("./api");
-    expect(getImmichPeople).toBe(getPeople);
-  });
-
   it("createPerson POSTs to /people and returns the created person", async () => {
     const { createPerson } = await import("./api");
     const created = { id: "p-new", name: "Bob Jones" };
@@ -865,6 +860,64 @@ describe("people API helpers", () => {
     );
 
     await expect(createPerson({ givenName: "X" })).rejects.toBeInstanceOf(ApiHttpError);
+  });
+
+  it("links and unlinks person external identities", async () => {
+    const { createPersonExternalIdentity, deletePersonExternalIdentity } = await import("./api");
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "identity-1", provider: "IMMICH", providerPersonId: "immich-1" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const created = await createPersonExternalIdentity("person-1", {
+      provider: "IMMICH",
+      providerPersonId: "immich-1"
+    });
+    await deletePersonExternalIdentity("person-1", "identity-1");
+
+    expect(created.providerPersonId).toBe("immich-1");
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toContain(
+      "/people/person-1/external-identities"
+    );
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[1]?.[0])).toContain(
+      "/people/person-1/external-identities/identity-1"
+    );
+  });
+
+  it("uploads and imports person thumbnails", async () => {
+    const { uploadPersonThumbnail, importPersonImmichThumbnail } = await import("./api");
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "thumb-1", source: "UPLOADED" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "thumb-2", source: "IMMICH" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        })
+      );
+
+    const uploaded = await uploadPersonThumbnail(
+      "person-1",
+      new File(["portrait"], "portrait.jpg", { type: "image/jpeg" })
+    );
+    const imported = await importPersonImmichThumbnail("person-1");
+
+    expect(uploaded.source).toBe("UPLOADED");
+    expect(imported.source).toBe("IMMICH");
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toContain(
+      "/people/person-1/thumbnail/upload"
+    );
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[1]?.[0])).toContain(
+      "/people/person-1/thumbnail/import/immich"
+    );
   });
 
   it("deletePerson sends DELETE /people/:id", async () => {

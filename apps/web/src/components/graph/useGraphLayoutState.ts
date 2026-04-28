@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildGraphLayoutRevision, filterGraphLayoutTopologyRelationships } from "@treemich/shared";
-import type { ImmichPerson, PhotoCluster, PhotoCooccurrenceEdge, RelationshipRecord } from "../../lib/api";
+import type { Person, PhotoCluster, PhotoCooccurrenceEdge, RelationshipRecord } from "../../lib/api";
 import {
   buildParentChildIndex,
   distanceSquared,
@@ -28,7 +28,7 @@ import { pickNearest } from "./pickNearest";
 import { getLocalStorageItem } from "../../lib/safeLocalStorage";
 
 type UseGraphLayoutStateOptions = {
-  people: ImmichPerson[];
+  people: Person[];
   relationships: RelationshipRecord[];
   photoEdges: PhotoCooccurrenceEdge[];
   photoClusters: PhotoCluster[];
@@ -230,7 +230,7 @@ export const useGraphLayoutState = ({
         const position = serverPositionsByPersonId[person.id];
         return position ? { person, position } : null;
       })
-      .filter((entry): entry is { person: ImmichPerson; position: NodePosition } => !!entry);
+      .filter((entry): entry is { person: Person; position: NodePosition } => !!entry);
   }, [people, serverPositionsByPersonId, shouldUseServerLayout]);
   const [progressiveRenderLimit, setProgressiveRenderLimit] = useState(baseRenderLimit);
   const workerPayload = useMemo<LayoutWorkerPayload>(
@@ -265,7 +265,7 @@ export const useGraphLayoutState = ({
           const person = peopleById.get(entry.personId);
           return person ? { person, position: entry.position } : null;
         })
-        .filter((entry): entry is { person: ImmichPerson; position: NodePosition } => !!entry);
+        .filter((entry): entry is { person: Person; position: NodePosition } => !!entry);
     }
     const positioned = measureGraphStep("positionPeople", () =>
       positionPeople(people, topologyRelationships, {
@@ -310,7 +310,7 @@ export const useGraphLayoutState = ({
         const person = peopleById.get(entry.personId);
         return person ? { person, position: entry.position } : null;
       })
-      .filter((entry): entry is { person: ImmichPerson; position: NodePosition } => !!entry);
+      .filter((entry): entry is { person: Person; position: NodePosition } => !!entry);
   }, [
     isWorkerFallbackEnabled,
     peopleById,
@@ -347,7 +347,7 @@ export const useGraphLayoutState = ({
         const person = peopleById.get(entry.personId);
         return person ? { person, position: entry.position } : null;
       })
-      .filter((entry): entry is { person: ImmichPerson; position: NodePosition } => !!entry);
+      .filter((entry): entry is { person: Person; position: NodePosition } => !!entry);
   }, [
     computedPositionedPeople,
     isWorkerFallbackEnabled,

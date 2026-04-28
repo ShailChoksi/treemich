@@ -8,7 +8,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
   createPerson,
   searchRelationships,
-  type ImmichPerson,
+  type Person,
   type RelationshipRecord,
   type RelationshipType,
   type UserPreferences
@@ -38,7 +38,7 @@ import { RELATIONSHIP_TYPES } from "../lib/relationshipConstants";
 import type { GraphUiSnapshot } from "../lib/workspaceUiState";
 
 type Props = {
-  people: ImmichPerson[];
+  people: Person[];
   relationships: RelationshipRecord[];
   serverPositionsByPersonId?: Record<string, [number, number, number]>;
   serverLayoutRevision?: string | null;
@@ -92,7 +92,9 @@ type GraphViewPreferencesState = {
   showSingleFamilyTree: boolean;
 };
 
-export const canLoadPersonThumbnail = (person: ImmichPerson) =>
+type ProviderFilter = "all" | "linked" | "unlinked";
+
+export const canLoadPersonThumbnail = (person: Person) =>
   Boolean(
     person.thumbnailPath?.trim() ||
     person.thumbnail?.storageUrl?.trim() ||
@@ -127,7 +129,7 @@ const resolveInitialGraphViewPreferences = (
 });
 
 /**
- * Interactive 3D graph: Immich people, Treemich relationships, layout worker, search, and chrome controls.
+ * Interactive 3D graph: Treemich people, relationships, layout worker, search, and chrome controls.
  * Exported as memo-wrapped `PeopleGraph3D`.
  */
 const PeopleGraph3DComponent = ({
@@ -168,6 +170,7 @@ const PeopleGraph3DComponent = ({
   const [pinnedPersonId, setPinnedPersonId] = useState<string | null>(initialUiState?.pinnedPersonId ?? null);
   const [addRelativeIntent, setAddRelativeIntent] = useState<AddRelativeIntent | null>(null);
   const [thumbnailProgress, setThumbnailProgress] = useState<{ loaded: number; total: number } | null>(null);
+  const [providerFilter, setProviderFilter] = useState<ProviderFilter>("all");
   const [graphViewPreferences, setGraphViewPreferences] = useState<GraphViewPreferencesState>(() =>
     resolveInitialGraphViewPreferences(
       savedPreferences ?? null,
@@ -208,6 +211,29 @@ const PeopleGraph3DComponent = ({
     setPinnedPersonId,
     onSelectedPersonChange
   });
+  const filteredPeople = useMemo(() => {
+    if (providerFilter === "all") {
+      return people;
+    }
+    return people.filter((person) => {
+      const linkedToImmich =
+        Boolean(person.profile?.immichPersonId?.trim()) ||
+        person.externalIdentities?.some((identity) => identity.provider === "IMMICH");
+      return providerFilter === "linked" ? linkedToImmich : !linkedToImmich;
+    });
+  }, [people, providerFilter]);
+  const filteredPersonIds = useMemo(
+    () => new Set(filteredPeople.map((person) => person.id)),
+    [filteredPeople]
+  );
+  const filteredRelationships = useMemo(
+    () =>
+      relationships.filter(
+        (relationship) =>
+          filteredPersonIds.has(relationship.fromPersonId) && filteredPersonIds.has(relationship.toPersonId)
+      ),
+    [filteredPersonIds, relationships]
+  );
   const {
     peopleById,
     selectedPerson,
@@ -220,8 +246,8 @@ const PeopleGraph3DComponent = ({
     renderNearPersonIds,
     isWorkerLayoutPending
   } = useGraphLayoutState({
-    people,
-    relationships,
+    people: filteredPeople,
+    relationships: filteredRelationships,
     photoEdges: EMPTY_PHOTO_EDGES,
     photoClusters: EMPTY_PHOTO_CLUSTERS,
     viewMode: "family",
@@ -240,8 +266,8 @@ const PeopleGraph3DComponent = ({
     renderLimit: DEFAULT_RENDER_LIMIT
   });
   const thumbnailCandidatePersonIds = useMemo(
-    () => people.filter(canLoadPersonThumbnail).map((person) => person.id),
-    [people]
+    () => filteredPeople.filter(canLoadPersonThumbnail).map((person) => person.id),
+    [filteredPeople]
   );
 
   const handleSearchFallback = useCallback(async (query: string) => {
@@ -544,8 +570,8 @@ const PeopleGraph3DComponent = ({
   };
 
   const peopleForSearchList = useMemo(
-    () => people.map((p) => ({ id: p.id, name: getPersonDisplayLabel(p) })),
-    [people]
+    () => filteredPeople.map((p) => ({ id: p.id, name: getPersonDisplayLabel(p) })),
+    [filteredPeople]
   );
   const graphSelectionSummary = selectedPerson
     ? `Selected person: ${getPersonDisplayLabel(selectedPerson)}. ${renderVisiblePeople.length} people and ${renderVisibleRelationshipLines.length} relationships are currently visible in the graph.`
@@ -571,6 +597,8 @@ const PeopleGraph3DComponent = ({
           onSearchIncludeAlternateNamesChange={(next) =>
             onPreferencesChange({ searchIncludeAlternateNames: next })
           }
+          providerFilter={providerFilter}
+          onProviderFilterChange={setProviderFilter}
           onNewPerson={onNewPerson}
         />
         <GraphLayerControls
@@ -591,7 +619,7 @@ const PeopleGraph3DComponent = ({
           <AddRelativePopup
             slot={addRelativeIntent.slot}
             selectedPersonName={getPersonDisplayLabel(selectedPerson)}
-            people={people}
+            people={filteredPeople}
             busy={isSavingRelationship}
             onCancel={() => setAddRelativeIntent(null)}
             onSubmit={handleAddRelative}

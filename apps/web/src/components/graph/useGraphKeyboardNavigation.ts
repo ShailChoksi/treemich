@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useMemo, useRef } from "react";
-import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
+import type { Person, RelationshipRecord } from "../../lib/api";
 import {
   buildDirectionalNeighborBuckets,
   type DirectionalNeighborBuckets,
@@ -22,7 +22,7 @@ type UseGraphKeyboardNavigationOptions = {
   selectedPersonId: string | null;
   relationships: RelationshipRecord[];
   visiblePositionsById: Map<string, NodePosition>;
-  peopleById: Map<string, ImmichPerson>;
+  peopleById: Map<string, Person>;
   setSelectedPersonId: (personId: string | null) => void;
   setFocusPersonId: (personId: string | null) => void;
   setPinnedPersonId: (personId: string | null) => void;
@@ -34,7 +34,7 @@ type NextTraversalOptions = {
   direction: KeyboardDirection;
   buckets: DirectionalNeighborBuckets;
   visiblePositionsById: Map<string, NodePosition>;
-  peopleById: Map<string, ImmichPerson>;
+  peopleById: Map<string, Person>;
   previousCycle: TraversalCycleState | null;
 };
 
@@ -55,7 +55,7 @@ export const isGraphKeyboardSuppressedTarget = (target: EventTarget | null) => {
   return false;
 };
 
-const getPersonName = (peopleById: Map<string, ImmichPerson>, personId: string) =>
+const getPersonName = (peopleById: Map<string, Person>, personId: string) =>
   peopleById.get(personId)?.name ?? personId;
 
 const getDirectionalPositionScore = (
@@ -102,7 +102,7 @@ const sortDirectionalCandidates = (
   direction: KeyboardDirection,
   selectedPersonId: string,
   visiblePositionsById: Map<string, NodePosition>,
-  peopleById: Map<string, ImmichPerson>
+  peopleById: Map<string, Person>
 ) => {
   const uniqueCandidateIds = [
     ...new Set(candidateIds.filter((candidateId) => candidateId !== selectedPersonId))

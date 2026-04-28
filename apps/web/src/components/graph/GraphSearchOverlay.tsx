@@ -16,6 +16,8 @@ type Props = {
   treeValidationEngineDisabled: boolean;
   searchIncludeAlternateNames: boolean;
   onSearchIncludeAlternateNamesChange: (next: boolean) => void;
+  providerFilter: "all" | "linked" | "unlinked";
+  onProviderFilterChange: (next: "all" | "linked" | "unlinked") => void;
   onNewPerson?: () => void;
 };
 
@@ -34,6 +36,8 @@ const GraphSearchOverlayComponent = ({
   treeValidationEngineDisabled,
   searchIncludeAlternateNames,
   onSearchIncludeAlternateNamesChange,
+  providerFilter,
+  onProviderFilterChange,
   onNewPerson
 }: Props) => {
   const [draftSearchTerm, setDraftSearchTerm] = useState(searchTerm);
@@ -126,6 +130,17 @@ const GraphSearchOverlayComponent = ({
           onChange={(e) => onSearchIncludeAlternateNamesChange(e.target.checked)}
         />
         Match alternate Treemich names in people search
+      </label>
+      <label className="graph-search-provider-filter">
+        <span>People</span>
+        <select
+          value={providerFilter}
+          onChange={(e) => onProviderFilterChange(e.target.value as typeof providerFilter)}
+        >
+          <option value="all">All</option>
+          <option value="linked">Linked to Immich</option>
+          <option value="unlinked">Not linked to Immich</option>
+        </select>
       </label>
       {treeValidationEngineDisabled ? (
         <p className="graph-tree-issues-hint">Full-tree validation is disabled (server setting).</p>

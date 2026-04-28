@@ -2,7 +2,7 @@
  * @file Family-tree layout math: familyTreeBuildPositions.
  */
 
-import type { ImmichPerson } from "../../../lib/api";
+import type { Person } from "../../../lib/api";
 import type { NodePosition } from "./types";
 import { collectConnectedComponents, buildComponentCenters } from "./familyTreeComponents";
 import { assignDepthsForComponent, alignCoupleDepths, normalizeParentChildDepths } from "./familyTreeDepths";
@@ -14,7 +14,7 @@ import { buildFamilyUnitTreeEdges, buildFamilyUnitsForComponent, type FamilyUnit
 import type { ParentChildEdge, SiblingPair, SpousePair } from "./familyTreeTypes";
 
 export const buildTreePositions = (
-  people: ImmichPerson[],
+  people: Person[],
   parentChildEdges: ParentChildEdge[],
   spousePairs: SpousePair[],
   _siblingPairs: SiblingPair[],

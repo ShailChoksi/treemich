@@ -2,7 +2,7 @@
  * @file Family-tree layout math: familyTreeUnits.
  */
 
-import type { ImmichPerson } from "../../../lib/api";
+import type { Person } from "../../../lib/api";
 import { sortPersonIdsByName } from "./familyTreeNaming";
 import type { SpousePair } from "./familyTreeTypes";
 
@@ -15,7 +15,7 @@ export type FamilyUnit = {
 /** Stable key for a parent set. Person ids must not contain "|" — keys are split on "|" when building merged parent lines. */
 const familyUnitKeyFromParents = (parentIds: string[]) => [...parentIds].sort().join("|");
 
-const enumerateCandidateUnitKeys = (parentIds: string[], peopleById: Map<string, ImmichPerson>) => {
+const enumerateCandidateUnitKeys = (parentIds: string[], peopleById: Map<string, Person>) => {
   const sorted = sortPersonIdsByName(parentIds, peopleById);
   if (sorted.length <= 1) {
     return sorted.length === 1 ? [familyUnitKeyFromParents([sorted[0] as string])] : [];
@@ -43,7 +43,7 @@ const enumerateCandidateUnitKeys = (parentIds: string[], peopleById: Map<string,
 const resolvePrimaryUnitByChild = (
   component: string[],
   parentsByChild: Map<string, Set<string>>,
-  peopleById: Map<string, ImmichPerson>,
+  peopleById: Map<string, Person>,
   primaryFamilyUnitByPersonId?: Record<string, string>
 ) => {
   const primaryByChild = new Map<string, string>();
@@ -70,7 +70,7 @@ export const buildFamilyUnitsForComponent = (
   component: string[],
   parentsByChild: Map<string, Set<string>>,
   spousePairs: SpousePair[],
-  peopleById: Map<string, ImmichPerson>,
+  peopleById: Map<string, Person>,
   primaryFamilyUnitByPersonId?: Record<string, string>
 ) => {
   const componentSet = new Set(component);

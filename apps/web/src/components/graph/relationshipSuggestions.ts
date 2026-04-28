@@ -2,7 +2,7 @@
  * @file Suggest likely missing edges (e.g. parents) from graph structure heuristics.
  */
 
-import type { ImmichPerson, RelationshipRecord, RelationshipType } from "../../lib/api";
+import type { Person, RelationshipRecord, RelationshipType } from "../../lib/api";
 import { buildParentChildIndex } from "./layout";
 
 export type RelationshipSuggestion = {
@@ -67,7 +67,7 @@ const getPairPartnersForPerson = (pairKeys: Set<string>, personId: string) => {
 const addSuggestion = (
   suggestionsByKey: Map<string, RelationshipSuggestion>,
   dismissedKeys: Set<string>,
-  peopleById: Map<string, ImmichPerson>,
+  peopleById: Map<string, Person>,
   suggestion: Omit<RelationshipSuggestion, "personName">
 ) => {
   if (dismissedKeys.has(suggestion.key) || suggestionsByKey.has(suggestion.key)) {
@@ -138,7 +138,7 @@ export const getSuggestionRelationshipLabel = (relationshipType: RelationshipTyp
 
 export const computeSuggestions = (
   selectedPersonId: string,
-  people: ImmichPerson[],
+  people: Person[],
   relationships: RelationshipRecord[],
   dismissedKeys: string[]
 ): RelationshipSuggestion[] => {

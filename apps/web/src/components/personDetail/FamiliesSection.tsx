@@ -1,13 +1,13 @@
 import { useState } from "react";
 import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
-import type { FamilyRecord, ImmichPerson, LifeEventRecord, PatchFamilyBody } from "../../lib/api";
+import type { FamilyRecord, Person, LifeEventRecord, PatchFamilyBody } from "../../lib/api";
 import { getPersonDisplayLabel } from "../../lib/personDisplay";
 import { DestructiveConfirmDialog } from "../DestructiveConfirmDialog";
 import { FamilyLifeEventsBlock } from "./FamilyLifeEventsBlock";
 
 type Props = {
-  person: ImmichPerson;
-  people: ImmichPerson[];
+  person: Person;
+  people: Person[];
   families: FamilyRecord[];
   onPatchFamily?: (familyId: string, body: PatchFamilyBody) => Promise<void>;
   onDeleteFamily?: (familyId: string) => Promise<void>;
@@ -18,12 +18,12 @@ type Props = {
   onFamilyLifeEventDelete?: (familyId: string, eventId: string) => Promise<void>;
 };
 
-const labelFor = (people: ImmichPerson[], immichPersonId: string | null) => {
-  if (!immichPersonId) {
+const labelFor = (people: Person[], personId: string | null) => {
+  if (!personId) {
     return "—";
   }
-  const match = people.find((p) => p.id === immichPersonId);
-  return match ? getPersonDisplayLabel(match) : immichPersonId;
+  const match = people.find((p) => p.id === personId);
+  return match ? getPersonDisplayLabel(match) : personId;
 };
 
 export const FamiliesSection = ({

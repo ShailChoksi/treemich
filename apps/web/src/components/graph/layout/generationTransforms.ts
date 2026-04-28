@@ -2,10 +2,10 @@
  * @file Family-tree layout math: generationTransforms.
  */
 
-import type { ImmichPerson } from "../../../lib/api";
+import type { Person } from "../../../lib/api";
 import type { NodePosition } from "./types";
 
-export type PositionedPerson = { person: ImmichPerson; position: NodePosition };
+export type PositionedPerson = { person: Person; position: NodePosition };
 
 const staircaseStep = {
   x: 0.9,

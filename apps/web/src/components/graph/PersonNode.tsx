@@ -15,13 +15,13 @@ import {
   type BufferGeometry,
   type Texture
 } from "three";
-import type { ImmichPerson } from "../../lib/api";
+import type { Person } from "../../lib/api";
 import { personThumbnailUrl } from "../../lib/api";
 import { applyCoverCrop } from "./useThumbnailLoader";
 import { useFrame, useThree } from "@react-three/fiber";
 
 export type PersonNodeProps = {
-  person: ImmichPerson;
+  person: Person;
   isSelected: boolean;
   isHovered: boolean;
   isHighlighted: boolean;

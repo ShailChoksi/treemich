@@ -2,7 +2,7 @@
  * @file Family-tree layout math: positionPeople.
  */
 
-import type { ImmichPerson, PhotoCluster, RelationshipRecord } from "../../../lib/api";
+import type { Person, PhotoCluster, RelationshipRecord } from "../../../lib/api";
 import type { GraphLayoutMode, NodePosition } from "./types";
 import { buildParentChildIndex, getLastNameKey, hashToNumber } from "./graphPrimitives";
 import { buildTreePositions, deriveSiblingPairs, deriveSpousePairs } from "./familyTreeCore";
@@ -14,7 +14,7 @@ import {
 } from "./generationTransforms";
 
 export const positionPeople = (
-  people: ImmichPerson[],
+  people: Person[],
   relationships: RelationshipRecord[],
   options?: {
     mode?: GraphLayoutMode;
@@ -39,7 +39,7 @@ export const positionPeople = (
   const withoutTreePosition = people.filter((person) => !treePositions.has(person.id));
   const connectedPeople = people.filter((person) => treePositions.has(person.id));
 
-  const clustersByLastName = withoutTreePosition.reduce<Map<string, ImmichPerson[]>>((acc, person) => {
+  const clustersByLastName = withoutTreePosition.reduce<Map<string, Person[]>>((acc, person) => {
     const key = getLastNameKey(person.name);
     const existing = acc.get(key);
     if (existing) {
