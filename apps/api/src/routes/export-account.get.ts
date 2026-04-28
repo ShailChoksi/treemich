@@ -16,6 +16,13 @@ import {
   zipAccountExport
 } from "./export-account.zip.js";
 
+const manifestFileFromZipFile = ({ path, role, personId, personThumbnailId }: AccountExportZipFile) => ({
+  path,
+  role,
+  ...(personId ? { personId } : {}),
+  ...(personThumbnailId ? { personThumbnailId } : {})
+});
+
 const serializeForExport = (value: unknown) =>
   JSON.stringify(value, (_key, v) => {
     if (v instanceof Date) {
@@ -294,7 +301,7 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
     const manifest = buildAccountExportManifestV1({
       exportVersion: payload.exportVersion,
       exportedAt: payload.exportedAt,
-      extraFiles: extraZipFiles.map(({ data: _data, ...file }) => file)
+      extraFiles: extraZipFiles.map(manifestFileFromZipFile)
     });
     const zipBuffer = zipAccountExport(jsonBody, manifest, extraZipFiles);
     return reply
