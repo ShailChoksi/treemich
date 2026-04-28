@@ -1,5 +1,5 @@
 /**
- * @file Phase 5: GEDCOM import wizard (preview → match Immich people → job) and async export job + immediate download.
+ * @file GEDCOM import wizard (preview → match/create Treemich people → job) and export.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -84,6 +84,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
   const [dryRun, setDryRun] = useState(false);
   const [skipImported, setSkipImported] = useState(false);
   const [allowPartialMatches, setAllowPartialMatches] = useState(true);
+  const [createMissingPeople, setCreateMissingPeople] = useState(true);
   const [showOnlyUnmatched, setShowOnlyUnmatched] = useState(true);
 
   const [busy, setBusy] = useState(false);
@@ -112,7 +113,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
   const initMatchesFromPreview = (p: GedcomImportPreviewResponse) => {
     const next: Record<string, string> = {};
     for (const row of p.indis) {
-      next[row.xref] = row.immichHint?.trim() ?? "";
+      next[row.xref] = (row.personHint ?? row.immichHint)?.trim() ?? "";
     }
     setMatchByXref(next);
   };
@@ -176,8 +177,8 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
     }
   };
 
-  const setMatch = (xref: string, immichPersonId: string) => {
-    setMatchByXref((cur) => ({ ...cur, [xref]: immichPersonId }));
+  const setMatch = (xref: string, personId: string) => {
+    setMatchByXref((cur) => ({ ...cur, [xref]: personId }));
   };
 
   const matchablePeopleOptions = useMemo(
@@ -201,11 +202,11 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
       return;
     }
     const incomplete = indiRowsIncomplete(preview);
-    if (incomplete.length > 0 && !allowPartialMatches) {
-      setError(`Match every INDI to an Immich person (${incomplete.length} missing).`);
+    if (incomplete.length > 0 && !allowPartialMatches && !createMissingPeople) {
+      setError(`Match every INDI to a Treemich person (${incomplete.length} missing).`);
       return;
     }
-    if (preview.famMatchError && !allowPartialMatches) {
+    if (preview.famMatchError && !allowPartialMatches && !createMissingPeople) {
       setError(preview.famMatchError);
       return;
     }
@@ -224,7 +225,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
         dryRun,
         skipAlreadyImportedIndis: skipImported,
         allowPartialMatches,
-        unmatchedIndiPolicy: "MATCH_ONLY" as const
+        unmatchedIndiPolicy: createMissingPeople ? ("CREATE" as const) : ("MATCH_ONLY" as const)
       };
       const job = archiveFile
         ? await postGedcomImportArchiveJob({ archive: archiveFile, indiMatches, importOptions })
@@ -308,7 +309,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
       {statusNote ? <p className="hint hint--tight-below">{statusNote}</p> : null}
       <div className="stack evidence-panel-stack">
         <p className="hint hint--tight-below">
-          Import only attaches data to people already in Immich. Server needs{" "}
+          Import can attach GEDCOM data to existing Treemich people or create missing people. Server needs{" "}
           <code className="inline-code">TREEMICH_GEDCOM_IMPORT_ENABLED</code> for preview and jobs.
         </p>
         {importApiAvailable === false ? (
@@ -365,13 +366,22 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                 type="checkbox"
                 checked={allowPartialMatches}
                 onChange={(e) => setAllowPartialMatches(e.target.checked)}
-                disabled={busy}
+                disabled={busy || createMissingPeople}
               />
               <span>Import only matched people (skip unmatched families)</span>
             </label>
+            <label className="field-group inline-checkbox-row">
+              <input
+                type="checkbox"
+                checked={createMissingPeople}
+                onChange={(e) => setCreateMissingPeople(e.target.checked)}
+                disabled={busy}
+              />
+              <span>Create missing Treemich people from unmatched GEDCOM INDI records</span>
+            </label>
             {preview ? (
               <div className="stack evidence-panel-divider">
-                <div className="field-label">Match each INDI to an Immich person</div>
+                <div className="field-label">Match each INDI to a Treemich person</div>
                 {preview.media.length > 0 || preview.archiveMediaFiles.length > 0 ? (
                   <p className="hint hint--tight-below">
                     Media in GEDCOM: {preview.media.length} OBJE records
@@ -412,7 +422,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                             value={matchByXref[row.xref] ?? ""}
                             onChange={(e) => setMatch(row.xref, e.target.value)}
                             disabled={busy}
-                            aria-label={`Immich match for ${row.xref}`}
+                            aria-label={`Treemich person match for ${row.xref}`}
                           >
                             <option value="">- choose -</option>
                             {matchablePeopleOptions.map((p) => (
@@ -421,8 +431,10 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                               </option>
                             ))}
                           </select>
-                          {row.immichHint ? (
-                            <p className="hint hint--tight-below">Hint in file: {row.immichHint}</p>
+                          {(row.personHint ?? row.immichHint) ? (
+                            <p className="hint hint--tight-below">
+                              Hint in file: {row.personHint ?? row.immichHint}
+                            </p>
                           ) : null}
                         </td>
                       </tr>
@@ -432,15 +444,15 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                 {getVisibleRows(preview).length === 0 ? (
                   <p className="hint hint--tight-below">No rows to show for the current filter.</p>
                 ) : null}
-                {allowPartialMatches ? (
+                {allowPartialMatches && !createMissingPeople ? (
                   <p className="hint hint--tight-below">
                     Unmatched INDI/FAM rows are skipped during import and logged as warnings.
                   </p>
                 ) : null}
-                {preview.unmatchedIndiPolicy === "MATCH_ONLY" ? (
+                {createMissingPeople ? (
                   <p className="hint hint--tight-below">
-                    Unmatched GEDCOM people remain match-only in Phase 5; Treemich will not create Immich
-                    people.
+                    Unmatched GEDCOM people will be created as Treemich people before family and life-event
+                    import.
                   </p>
                 ) : null}
                 {preview.lineLog.length > 0 ? (

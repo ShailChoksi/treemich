@@ -1,4 +1,4 @@
-import { CooccurrenceJobStatus, PrismaClient } from "@prisma/client";
+import { CooccurrenceJobStatus, PrismaClient, type Prisma } from "@prisma/client";
 import type {
   CooccurrenceEdgeRecord,
   CooccurrenceJobResponse,
@@ -8,6 +8,7 @@ import type {
 } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import type { ImmichClient } from "../integrations/immich/client.js";
+import type { ImmichAssetPeople } from "../integrations/immich/client.js";
 import {
   buildPhotoCooccurrenceResult,
   buildPhotoCooccurrenceStats,
@@ -160,7 +161,8 @@ export class CooccurrenceService {
   private buildPersistedEdges(
     userId: string,
     stats: ReturnType<typeof buildPhotoCooccurrenceStats>,
-    computedAt: Date
+    computedAt: Date,
+    options?: { sourceProvider?: "IMMICH"; sourceMetadata?: Record<string, unknown> }
   ) {
     const rows: Array<{
       userId: string;
@@ -171,6 +173,9 @@ export class CooccurrenceService {
       personAPhotoCount: number;
       personBPhotoCount: number;
       computedAt: Date;
+      sourceProvider?: "IMMICH";
+      sourceImportedAt?: Date;
+      sourceMetadata?: Prisma.InputJsonValue;
     }> = [];
 
     for (const [key, sharedPhotos] of stats.pairSharedCounts.entries()) {
@@ -193,7 +198,14 @@ export class CooccurrenceService {
         score,
         personAPhotoCount,
         personBPhotoCount,
-        computedAt
+        computedAt,
+        ...(options?.sourceProvider
+          ? {
+              sourceProvider: options.sourceProvider,
+              sourceImportedAt: computedAt,
+              sourceMetadata: (options.sourceMetadata ?? {}) as Prisma.InputJsonValue
+            }
+          : {})
       });
     }
 
@@ -206,6 +218,66 @@ export class CooccurrenceService {
     );
 
     return rows;
+  }
+
+  private async mapImmichAssetsToTreemichPeople(userId: string, assets: ImmichAssetPeople[]) {
+    const providerPersonIds = [
+      ...new Set(assets.flatMap((asset) => asset.personIds).filter((personId) => personId.trim().length > 0))
+    ];
+    if (providerPersonIds.length === 0) {
+      return {
+        mappedAssets: [] as ImmichAssetPeople[],
+        linkedImmichPersonCount: 0,
+        skippedImmichPersonCount: 0
+      };
+    }
+
+    const [identities, legacyProfiles] = await Promise.all([
+      this.prismaClient.personExternalIdentity.findMany({
+        where: {
+          userId,
+          provider: "IMMICH",
+          providerPersonId: { in: providerPersonIds }
+        },
+        select: { providerPersonId: true, personId: true }
+      }),
+      this.prismaClient.personProfile.findMany({
+        where: {
+          userId,
+          immichPersonId: { in: providerPersonIds }
+        },
+        select: { id: true, immichPersonId: true }
+      })
+    ]);
+
+    const personIdByImmichId = new Map<string, string>();
+    for (const identity of identities) {
+      personIdByImmichId.set(identity.providerPersonId, identity.personId);
+    }
+    for (const profile of legacyProfiles) {
+      if (profile.immichPersonId && !personIdByImmichId.has(profile.immichPersonId)) {
+        personIdByImmichId.set(profile.immichPersonId, profile.id);
+      }
+    }
+
+    const mappedAssets = assets
+      .map((asset) => ({
+        assetId: asset.assetId,
+        personIds: [
+          ...new Set(
+            asset.personIds
+              .map((providerPersonId) => personIdByImmichId.get(providerPersonId))
+              .filter((personId): personId is string => Boolean(personId))
+          )
+        ]
+      }))
+      .filter((asset) => asset.personIds.length > 0);
+
+    return {
+      mappedAssets,
+      linkedImmichPersonCount: personIdByImmichId.size,
+      skippedImmichPersonCount: providerPersonIds.length - personIdByImmichId.size
+    };
   }
 
   private async executeComputation(jobId: string, userId: string, immichClient: ImmichClient) {
@@ -222,9 +294,18 @@ export class CooccurrenceService {
 
     try {
       const assets = await immichClient.listAssetsWithPeople();
-      const stats = buildPhotoCooccurrenceStats(assets);
+      const mapped = await this.mapImmichAssetsToTreemichPeople(userId, assets);
+      const stats = buildPhotoCooccurrenceStats(mapped.mappedAssets);
       const computedAt = this.now();
-      const rows = this.buildPersistedEdges(userId, stats, computedAt);
+      const rows = this.buildPersistedEdges(userId, stats, computedAt, {
+        sourceProvider: "IMMICH",
+        sourceMetadata: {
+          sourceAssetCount: assets.length,
+          mappedAssetCount: mapped.mappedAssets.length,
+          linkedImmichPersonCount: mapped.linkedImmichPersonCount,
+          skippedImmichPersonCount: mapped.skippedImmichPersonCount
+        }
+      });
 
       await this.prismaClient.cooccurrenceEdge.deleteMany({
         where: { userId }
@@ -245,7 +326,7 @@ export class CooccurrenceService {
         where: { id: jobId },
         data: {
           status: CooccurrenceJobStatus.COMPLETED,
-          sourcePhotoCount: stats.sourcePhotoCount,
+          sourcePhotoCount: assets.length,
           edgeCount: rows.length,
           progress: 1,
           completedAt: computedAt,
@@ -445,6 +526,14 @@ export class CooccurrenceService {
         id: row.id,
         personAId: row.personAId,
         personBId: row.personBId,
+        sourceProvider: row.sourceProvider,
+        sourceImportedAt: toIsoStringOrNull(row.sourceImportedAt),
+        sourceMetadata:
+          row.sourceMetadata != null &&
+          typeof row.sourceMetadata === "object" &&
+          !Array.isArray(row.sourceMetadata)
+            ? (row.sourceMetadata as Record<string, unknown>)
+            : {},
         sharedPhotos: row.sharedPhotos,
         score: row.score,
         personAPhotoCount: row.personAPhotoCount,
@@ -475,6 +564,14 @@ export class CooccurrenceService {
       id: row.id,
       personAId: row.personAId,
       personBId: row.personBId,
+      sourceProvider: row.sourceProvider,
+      sourceImportedAt: toIsoStringOrNull(row.sourceImportedAt),
+      sourceMetadata:
+        row.sourceMetadata != null &&
+        typeof row.sourceMetadata === "object" &&
+        !Array.isArray(row.sourceMetadata)
+          ? (row.sourceMetadata as Record<string, unknown>)
+          : {},
       sharedPhotos: row.sharedPhotos,
       score: row.score,
       personAPhotoCount: row.personAPhotoCount,

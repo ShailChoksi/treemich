@@ -29,6 +29,7 @@ import { registerCooccurrenceEdgesGetRoute } from "./routes/cooccurrence-edges.g
 import { registerCooccurrencePairGetRoute } from "./routes/cooccurrence-pair.get.js";
 import { registerCooccurrenceStatusGetRoute } from "./routes/cooccurrence-status.get.js";
 import { registerGraphLayoutPostRoute } from "./routes/graph-layout.post.js";
+import { registerImmichProviderRoutes } from "./routes/immich-provider.js";
 import { registerPeopleGetRoute } from "./routes/people.get.js";
 import { registerPeopleCooccurrenceGetRoute } from "./routes/people-cooccurrence.get.js";
 import { registerPeopleRelationshipsDeleteRoute } from "./routes/people-relationships.delete.js";
@@ -218,6 +219,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerCooccurrencePairGetRoute);
   app.register(registerCooccurrenceStatusGetRoute);
   app.register(registerGraphLayoutPostRoute);
+  app.register(registerImmichProviderRoutes);
   app.register(registerPeopleGetRoute);
   app.register(registerPeopleCooccurrenceGetRoute);
   app.register(registerPeopleThumbnailGetRoute);

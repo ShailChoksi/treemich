@@ -80,7 +80,9 @@ describe("AddRelativePopup", () => {
     const onSubmit = renderPopup();
 
     await typeName("Alice");
-    const submit = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Add");
+    const submit = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Add"
+    );
     expect(submit).toBeTruthy();
 
     await act(async () => {

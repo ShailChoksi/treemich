@@ -4,18 +4,36 @@
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { Gender, LifeEvent } from "@prisma/client";
+import type {
+  Gender,
+  LifeEvent,
+  PersonExternalIdentity,
+  PersonProfile,
+  PersonThumbnail
+} from "@prisma/client";
+import type { PersonRecord } from "@treemich/shared";
 import type { AgeFilter, InterpreterIntent } from "@treemich/shared/search/interpreter";
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";
 import { partialDateToComparableDate } from "../lifeEvents/dateValue.js";
 import { parseUserPreferences } from "../preferences.js";
 import { RuleBasedInterpreter } from "../search/interpreter/ruleBasedInterpreter.js";
-import { getImmichClientForRequest } from "../services.js";
+import { personToJson } from "../people/service.js";
 
 const querySchema = z.object({
   q: z.string().min(1)
 });
+
+type SearchPersonRow = PersonProfile & {
+  externalIdentities: PersonExternalIdentity[];
+  personNames: Array<{
+    prefix: string | null;
+    givenName: string | null;
+    surname: string | null;
+    suffix: string | null;
+  }>;
+  thumbnails: PersonThumbnail[];
+};
 
 function resolveBirthDate(
   birthEvent?: Pick<LifeEvent, "year" | "month" | "day"> | null,
@@ -73,6 +91,59 @@ function matchesAgeFilter(birthDate: Date, filter: AgeFilter, now: Date): boolea
   }
 }
 
+const compactLower = (values: Array<string | null | undefined>) =>
+  values.map((value) => value?.trim().toLowerCase()).filter((value): value is string => Boolean(value));
+
+const formatNameParts = (parts: Array<string | null | undefined>) => parts.filter(Boolean).join(" ").trim();
+
+const alternateNameText = (name: SearchPersonRow["personNames"][number]) =>
+  formatNameParts([name.prefix, name.givenName, name.surname, name.suffix]);
+
+const searchTextsForPerson = (
+  row: SearchPersonRow,
+  person: PersonRecord,
+  options: { includeAlternateNames: boolean }
+) => {
+  const texts = compactLower([
+    person.name,
+    person.displayName,
+    row.displayNameOverride,
+    row.givenName,
+    row.surname,
+    row.nicknames,
+    formatNameParts([row.givenName, row.surname]),
+    ...row.externalIdentities.map((identity) => identity.displayName)
+  ]);
+  if (options.includeAlternateNames) {
+    texts.push(...compactLower(row.personNames.map(alternateNameText)));
+  }
+  return texts;
+};
+
+const loadSearchPeople = async (userId: string) => {
+  const rows = (await prisma.personProfile.findMany({
+    where: { userId },
+    include: {
+      externalIdentities: true,
+      personNames: {
+        select: {
+          prefix: true,
+          givenName: true,
+          surname: true,
+          suffix: true
+        }
+      },
+      thumbnails: { orderBy: { updatedAt: "desc" }, take: 1 }
+    },
+    orderBy: [{ surname: "asc" }, { givenName: "asc" }, { createdAt: "asc" }]
+  })) as SearchPersonRow[];
+
+  return rows.map((row) => ({
+    row,
+    person: personToJson(row)
+  }));
+};
+
 export const registerSearchGetRoute = (app: FastifyInstance) => {
   const interpreter = new RuleBasedInterpreter();
 
@@ -85,44 +156,21 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
       return reply.code(400).send(interpreted);
     }
 
-    const immichClient = await getImmichClientForRequest(request);
     const userRow = await prisma.treemichUser.findUniqueOrThrow({
       where: { id: auth.user.id },
       select: { preferences: true }
     });
     const includeAlternateNames =
       parseUserPreferences(userRow.preferences).searchIncludeAlternateNames === true;
-    const alternateNameTextsByPerson = includeAlternateNames
-      ? await app.services.personNameService.getAllFormattedForUser(auth.user.id)
-      : null;
     const normalizedSourceName = interpreted.parsed.sourceName.trim().toLowerCase();
-    const sourceNameMatches = (nameLower: string) => nameLower.includes(normalizedSourceName);
-    let allPeopleFallbackPromise: ReturnType<typeof immichClient.listPeople> | null = null;
-    const allPeopleFallback = async () => {
-      allPeopleFallbackPromise ??= immichClient.listPeople();
-      return allPeopleFallbackPromise;
-    };
-    const primarySourceCandidates =
-      "findPeopleByName" in immichClient && typeof immichClient.findPeopleByName === "function"
-        ? await immichClient.findPeopleByName(normalizedSourceName)
-        : (await allPeopleFallback()).filter((person) =>
-            person.name.toLowerCase().includes(normalizedSourceName)
-          );
-    const sourceCandidatesById = new Map(primarySourceCandidates.map((person) => [person.id, person]));
-    if (includeAlternateNames && alternateNameTextsByPerson) {
-      const alternateMatchedPersonIds = [...alternateNameTextsByPerson.entries()]
-        .filter(([, alternateNames]) => alternateNames.some((name) => sourceNameMatches(name.toLowerCase())))
-        .map(([personId]) => personId);
-      const alternateCandidates =
-        "getPeopleByIds" in immichClient && typeof immichClient.getPeopleByIds === "function"
-          ? await immichClient.getPeopleByIds(alternateMatchedPersonIds)
-          : (await allPeopleFallback()).filter((person) => alternateMatchedPersonIds.includes(person.id));
-      for (const person of alternateCandidates) {
-        sourceCandidatesById.set(person.id, person);
-      }
-    }
-
-    const sourceCandidates = [...sourceCandidatesById.values()];
+    const searchablePeople = await loadSearchPeople(auth.user.id);
+    const sourceCandidates = searchablePeople
+      .filter(({ row, person }) =>
+        searchTextsForPerson(row, person, { includeAlternateNames }).some((text) =>
+          text.includes(normalizedSourceName)
+        )
+      )
+      .map(({ person }) => person);
     if (sourceCandidates.length === 0) {
       return {
         parsed: interpreted.parsed,
@@ -158,11 +206,7 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
       auth.user.id,
       profileInternalIds
     );
-    const matchedPeople =
-      "getPeopleByIds" in immichClient && typeof immichClient.getPeopleByIds === "function"
-        ? await immichClient.getPeopleByIds(targetIds)
-        : (await allPeopleFallback()).filter((person) => targetIds.includes(person.id));
-    const peopleById = new Map(matchedPeople.map((person) => [person.id, person]));
+    const peopleById = new Map(searchablePeople.map(({ person }) => [person.id, person]));
     const now = new Date();
 
     const matches = targetIds

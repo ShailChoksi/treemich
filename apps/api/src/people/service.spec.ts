@@ -96,7 +96,12 @@ describe("PersonService", () => {
 
       expect(mocks.personProfileCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ userId: "user-1", givenName: "Alice", surname: "Smith", gender: "UNKNOWN" }),
+          data: expect.objectContaining({
+            userId: "user-1",
+            givenName: "Alice",
+            surname: "Smith",
+            gender: "UNKNOWN"
+          }),
           include: expect.objectContaining({ externalIdentities: true, thumbnails: true })
         })
       );
@@ -175,7 +180,9 @@ describe("PersonService", () => {
       mocks.personExternalIdentityFindFirst.mockResolvedValue(null);
 
       const { PersonService } = await import("./service.js");
-      await expect(new PersonService().resolvePersonId("user-1", "missing-id")).rejects.toThrow("Person not found");
+      await expect(new PersonService().resolvePersonId("user-1", "missing-id")).rejects.toThrow(
+        "Person not found"
+      );
     });
   });
 
@@ -204,7 +211,10 @@ describe("PersonService", () => {
 
   describe("list", () => {
     it("returns all people when no query is provided", async () => {
-      mocks.personProfileFindMany.mockResolvedValue([makeProfile(), makeProfile({ id: "pp-2", givenName: "Bob" })]);
+      mocks.personProfileFindMany.mockResolvedValue([
+        makeProfile(),
+        makeProfile({ id: "pp-2", givenName: "Bob" })
+      ]);
 
       const { PersonService } = await import("./service.js");
       const results = await new PersonService().list("user-1");
@@ -301,7 +311,10 @@ describe("PersonService", () => {
   describe("listExternalIdentities", () => {
     it("returns all identities for a person", async () => {
       mocks.personProfileFindFirst.mockResolvedValueOnce({ id: "pp-1" }); // resolvePersonId
-      mocks.personExternalIdentityFindMany.mockResolvedValue([makeIdentity(), makeIdentity({ id: "ident-2" })]);
+      mocks.personExternalIdentityFindMany.mockResolvedValue([
+        makeIdentity(),
+        makeIdentity({ id: "ident-2" })
+      ]);
 
       const { PersonService } = await import("./service.js");
       const results = await new PersonService().listExternalIdentities("user-1", "pp-1");
@@ -333,9 +346,9 @@ describe("PersonService", () => {
       mocks.personExternalIdentityDeleteMany.mockResolvedValue({ count: 0 });
 
       const { PersonService } = await import("./service.js");
-      await expect(
-        new PersonService().deleteExternalIdentity("user-1", "pp-1", "ghost-id")
-      ).rejects.toThrow("External identity not found");
+      await expect(new PersonService().deleteExternalIdentity("user-1", "pp-1", "ghost-id")).rejects.toThrow(
+        "External identity not found"
+      );
     });
   });
 

@@ -1,5 +1,6 @@
 import type { CreateResearchTaskBody, PatchResearchTaskBody, ResearchTaskRecord } from "@treemich/shared";
 import { prisma } from "../db/client.js";
+import { PersonService } from "../people/service.js";
 
 const toJson = (row: {
   id: string;
@@ -22,11 +23,16 @@ const toJson = (row: {
 });
 
 export class ResearchTaskService {
+  constructor(private readonly personService = new PersonService()) {}
+
   async list(userId: string, personId?: string): Promise<ResearchTaskRecord[]> {
+    const resolvedPersonId = personId
+      ? await this.personService.resolvePersonId(userId, personId)
+      : undefined;
     const rows = await prisma.researchTask.findMany({
       where: {
         userId,
-        ...(personId ? { OR: [{ personId }, { personId: null }] } : {})
+        ...(resolvedPersonId ? { OR: [{ personId: resolvedPersonId }, { personId: null }] } : {})
       },
       orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }]
     });
@@ -34,12 +40,13 @@ export class ResearchTaskService {
   }
 
   async create(userId: string, body: CreateResearchTaskBody): Promise<ResearchTaskRecord> {
+    const personId = body.personId ? await this.personService.resolvePersonId(userId, body.personId) : null;
     const created = await prisma.researchTask.create({
       data: {
         userId,
         title: body.title,
         status: body.status ?? "OPEN",
-        personId: body.personId ?? null,
+        personId,
         dueDate: body.dueDate ?? null,
         notes: body.notes ?? null
       }
@@ -56,12 +63,16 @@ export class ResearchTaskService {
       (error as Error & { statusCode: number }).statusCode = 404;
       throw error;
     }
+    const personId =
+      body.personId !== undefined && body.personId !== null
+        ? await this.personService.resolvePersonId(userId, body.personId)
+        : body.personId;
     const updated = await prisma.researchTask.update({
       where: { id: taskId },
       data: {
         ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.status !== undefined ? { status: body.status } : {}),
-        ...(body.personId !== undefined ? { personId: body.personId } : {}),
+        ...(body.personId !== undefined ? { personId } : {}),
         ...(body.dueDate !== undefined ? { dueDate: body.dueDate } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {})
       }

@@ -20,6 +20,10 @@ import type {
   GraphLayoutRequest,
   GraphLayoutResponse,
   GenderValue as Gender,
+  ImmichImportDecision,
+  ImmichImportPreviewResponse,
+  ImmichPeopleImportResponse,
+  ImmichThumbnailImportResponse,
   LifeEventListResponse,
   LifeEventRecord,
   LinkStatus,
@@ -60,6 +64,10 @@ export type {
   GraphLayoutRequest,
   GraphLayoutResponse,
   Gender,
+  ImmichImportDecision,
+  ImmichImportPreviewResponse,
+  ImmichPeopleImportResponse,
+  ImmichThumbnailImportResponse,
   LinkStatus,
   LifeEventRecord,
   MediaObjectRecord,
@@ -401,6 +409,54 @@ export const searchRelationships = async (query: string): Promise<SearchRelation
 /** Absolute URL for Treemich-proxied person thumbnail image. */
 export const personThumbnailUrl = (personId: string) =>
   `${treemichApi}/people/${encodeURIComponent(personId)}/thumbnail`;
+
+export const getImmichImportPreview = async (): Promise<ImmichImportPreviewResponse> => {
+  const response = await fetchWithRetry(`${treemichApi}/providers/immich/people/preview`, {
+    cache: "no-store"
+  });
+  await ensureOk(response, "Failed to load Immich import preview");
+  return (await response.json()) as ImmichImportPreviewResponse;
+};
+
+export const importImmichPeople = async (
+  decisions: ImmichImportDecision[],
+  options?: { importThumbnails?: boolean }
+): Promise<ImmichPeopleImportResponse> => {
+  const response = await fetch(
+    `${treemichApi}/providers/immich/people/import`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decisions, importThumbnails: options?.importThumbnails })
+    })
+  );
+  await ensureOk(response, "Failed to import Immich people");
+  return (await response.json()) as ImmichPeopleImportResponse;
+};
+
+export const importImmichThumbnails = async (
+  personIds?: string[]
+): Promise<ImmichThumbnailImportResponse> => {
+  const response = await fetch(
+    `${treemichApi}/providers/immich/thumbnails/import`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ personIds })
+    })
+  );
+  await ensureOk(response, "Failed to import Immich thumbnails");
+  return (await response.json()) as ImmichThumbnailImportResponse;
+};
+
+export const importImmichCooccurrence = async (): Promise<{ jobId: string; status: string }> => {
+  const response = await fetch(
+    `${treemichApi}/providers/immich/cooccurrence/import`,
+    withSession({ method: "POST" })
+  );
+  await ensureOk(response, "Failed to start Immich co-occurrence import");
+  return (await response.json()) as { jobId: string; status: string };
+};
 
 /** Deep link to Immich person page when base URL is known (strips trailing `/api`). */
 export const immichPersonUrl = (personId: string, immichBaseUrl?: string | null) => {
@@ -1045,7 +1101,9 @@ export const createEvidenceMediaObject = async (body: CreateMediaObjectBody): Pr
 export type GedcomImportPreviewIndiRow = {
   xref: string;
   displayName: string | null;
-  immichHint: string | null;
+  personHint: string | null;
+  /** @deprecated Use personHint. */
+  immichHint?: string | null;
 };
 
 export type GedcomImportPreviewResponse = {
@@ -1054,7 +1112,7 @@ export type GedcomImportPreviewResponse = {
   media: { xref: string; file: string | null; title: string | null; form: string | null }[];
   archiveMediaFiles: { path: string; byteSize: number; mimeType: string | null }[];
   unmatchedIndis: GedcomImportPreviewIndiRow[];
-  unmatchedIndiPolicy?: "MATCH_ONLY";
+  unmatchedIndiPolicy?: "MATCH_ONLY" | "CREATE";
   famMatchError: string | null;
   lineLog: unknown[];
 };
@@ -1107,7 +1165,7 @@ export type GedcomImportJobCreateBody = {
     dryRun?: boolean;
     skipAlreadyImportedIndis?: boolean;
     allowPartialMatches?: boolean;
-    unmatchedIndiPolicy?: "MATCH_ONLY";
+    unmatchedIndiPolicy?: "MATCH_ONLY" | "CREATE";
   };
 };
 
@@ -1133,7 +1191,7 @@ export const postGedcomImportArchiveJob = async (body: {
     dryRun?: boolean;
     skipAlreadyImportedIndis?: boolean;
     allowPartialMatches?: boolean;
-    unmatchedIndiPolicy?: "MATCH_ONLY";
+    unmatchedIndiPolicy?: "MATCH_ONLY" | "CREATE";
   };
 }): Promise<{ id: string; status: string; createdAt: string }> => {
   const form = new FormData();

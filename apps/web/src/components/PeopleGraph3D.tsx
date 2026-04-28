@@ -95,9 +95,9 @@ type GraphViewPreferencesState = {
 export const canLoadPersonThumbnail = (person: ImmichPerson) =>
   Boolean(
     person.thumbnailPath?.trim() ||
-      person.thumbnail?.storageUrl?.trim() ||
-      person.profile?.immichPersonId?.trim() ||
-      person.externalIdentities?.some((identity) => identity.provider === "IMMICH")
+    person.thumbnail?.storageUrl?.trim() ||
+    person.profile?.immichPersonId?.trim() ||
+    person.externalIdentities?.some((identity) => identity.provider === "IMMICH")
   );
 
 export const resolveAddRelativeRelationshipType = (

@@ -206,6 +206,48 @@ describe("Treemich API routes", () => {
     listAssetsWithPeople: listAssetsWithPeopleMock
   };
 
+  const makeSearchPersonRow = (person: {
+    id: string;
+    name: string;
+    gender?: string;
+    externalDisplayName?: string | null;
+  }) => {
+    const [givenName, ...surnameParts] = person.name.split(/\s+/);
+    return {
+      id: person.id,
+      userId: "user-1",
+      immichPersonId: null,
+      gender: person.gender ?? "UNKNOWN",
+      displayNameOverride: null,
+      givenName: givenName ?? person.name,
+      surname: surnameParts.join(" ") || null,
+      nicknames: null,
+      externalIds: {},
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      externalIdentities: person.externalDisplayName
+        ? [
+            {
+              id: `identity-${person.id}`,
+              userId: "user-1",
+              personId: person.id,
+              provider: "IMMICH",
+              providerPersonId: `immich-${person.id}`,
+              providerBaseUrl: "http://localhost:2283/api",
+              displayName: person.externalDisplayName,
+              thumbnailImportedAt: null,
+              lastSeenAt: null,
+              metadata: {},
+              createdAt: new Date("2026-01-01T00:00:00.000Z"),
+              updatedAt: new Date("2026-01-01T00:00:00.000Z")
+            }
+          ]
+        : [],
+      personNames: [],
+      thumbnails: []
+    };
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     lifeEventServiceMock.getBirthDeathByPersonProfileIds.mockResolvedValue(new Map());
@@ -228,7 +270,15 @@ describe("Treemich API routes", () => {
     queryRawMock.mockResolvedValue([1]);
     countForExportMock.mockResolvedValue(0);
     treemichUserFindUniqueMock.mockResolvedValue(null);
-    personProfileFindManyMock.mockResolvedValue([]);
+    personProfileFindManyMock.mockImplementation(async (args?: { include?: Record<string, unknown> }) => {
+      if (args?.include && "externalIdentities" in args.include && "personNames" in args.include) {
+        const people = (await listPeopleMock()) as
+          | Array<{ id: string; name: string; gender?: string }>
+          | undefined;
+        return (people ?? []).map(makeSearchPersonRow);
+      }
+      return [];
+    });
     relationshipFindManyForExportMock.mockResolvedValue([]);
     placeFindManyMock.mockResolvedValue([]);
     lifeEventFindManyForExportMock.mockResolvedValue([]);
@@ -566,6 +616,57 @@ describe("Treemich API routes", () => {
     const json = response.json();
     expect(json.matches).toHaveLength(1);
     expect(json.matches[0].person.name).toBe("John");
+  });
+
+  it("searches standalone Treemich relatives without an Immich-linked session", async () => {
+    requireSessionMock.mockResolvedValueOnce({
+      ...authContext,
+      linkedAccount: null,
+      user: { ...authContext.user, linkedAccount: null }
+    });
+    personProfileFindManyMock.mockResolvedValueOnce([
+      makeSearchPersonRow({ id: "mike-id", name: "Mike" }),
+      makeSearchPersonRow({ id: "zoe-id", name: "Zoe" })
+    ]);
+    traverseRelationshipChainMock.mockResolvedValueOnce(["zoe-id"]);
+    getProfilesForPersonIdsMock.mockResolvedValueOnce(
+      new Map([["zoe-id", { id: "zoe-id", gender: "FEMALE" }]])
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/search?q=daughter%20of%20Mike"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(getClientMock).not.toHaveBeenCalled();
+    expect(listPeopleMock).not.toHaveBeenCalled();
+    expect(traverseRelationshipChainMock).toHaveBeenCalledWith("user-1", ["mike-id"], ["CHILD_OF"]);
+    const json = response.json();
+    expect(json.matches).toHaveLength(1);
+    expect(json.matches[0].person.name).toBe("Zoe");
+  });
+
+  it("matches NL search sources by linked external identity display name", async () => {
+    personProfileFindManyMock.mockResolvedValueOnce([
+      makeSearchPersonRow({ id: "source-id", name: "Person source-id", externalDisplayName: "Mike" }),
+      makeSearchPersonRow({ id: "target-id", name: "Jane" })
+    ]);
+    traverseRelationshipChainMock.mockResolvedValueOnce(["target-id"]);
+    getProfilesForPersonIdsMock.mockResolvedValueOnce(
+      new Map([["target-id", { id: "target-id", gender: "FEMALE" }]])
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/search?q=daughter%20of%20Mike"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(traverseRelationshipChainMock).toHaveBeenCalledWith("user-1", ["source-id"], ["CHILD_OF"]);
+    const json = response.json();
+    expect(json.sourceCandidates[0].name).toBe("Person source-id");
+    expect(json.matches[0].person.name).toBe("Jane");
   });
 
   it("searches adopted children via family pedigree instead of graph hops", async () => {
@@ -916,15 +1017,15 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it("falls back to immich birthDate when profile has no override", async () => {
+    it("uses person-native birth events for age filters", async () => {
       traverseRelationshipChainMock.mockResolvedValueOnce(["c-1"]);
       getProfilesForPersonIdsMock.mockResolvedValueOnce(new Map([["c-1", { id: "pp-c1", gender: "MALE" }]]));
       lifeEventServiceMock.getBirthDeathByPersonProfileIds.mockResolvedValueOnce(
-        new Map([["pp-c1", { birth: null, death: null }]])
+        new Map([["pp-c1", { birth: { year: 1990, month: 5, day: 15 }, death: null }]])
       );
       listPeopleMock.mockResolvedValueOnce([
         { id: "mike-id", name: "Mike" },
-        { id: "c-1", name: "Cousin With Immich Date", birthDate: "1990-05-15" }
+        { id: "c-1", name: "Cousin With Person Date" }
       ]);
 
       const response = await app.inject({
@@ -935,7 +1036,7 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       const json = response.json();
       expect(json.matches).toHaveLength(1);
-      expect(json.matches[0].person.name).toBe("Cousin With Immich Date");
+      expect(json.matches[0].person.name).toBe("Cousin With Person Date");
     });
   });
 
@@ -1082,7 +1183,11 @@ describe("Treemich API routes", () => {
   it("defaults POST /auth/login to provider=treemich when provider is omitted", async () => {
     loginWithPasswordMock.mockResolvedValueOnce({
       sessionToken: "tok",
-      state: { authenticated: true, user: { id: "u1", email: "a@b.com", name: "A" }, linkStatus: { linked: false } }
+      state: {
+        authenticated: true,
+        user: { id: "u1", email: "a@b.com", name: "A" },
+        linkStatus: { linked: false }
+      }
     });
 
     const response = await app.inject({

@@ -27,7 +27,9 @@ describe("CreatePersonDialog", () => {
 
   it("renders when open and hides when closed", () => {
     act(() => {
-      root.render(<CreatePersonDialog open title="New Person" onConfirm={() => undefined} onCancel={() => undefined} />);
+      root.render(
+        <CreatePersonDialog open title="New Person" onConfirm={() => undefined} onCancel={() => undefined} />
+      );
     });
 
     expect(container.querySelector('[role="dialog"]')).toBeTruthy();
@@ -35,7 +37,12 @@ describe("CreatePersonDialog", () => {
 
     act(() => {
       root.render(
-        <CreatePersonDialog open={false} title="New Person" onConfirm={() => undefined} onCancel={() => undefined} />
+        <CreatePersonDialog
+          open={false}
+          title="New Person"
+          onConfirm={() => undefined}
+          onCancel={() => undefined}
+        />
       );
     });
 

@@ -303,7 +303,9 @@ export class RelationshipService {
         }
       });
       const pedigreeByPair = new Map(
-        rows.filter((row) => row.childPersonId != null).map((row) => [pairKey(row.familyId, row.childPersonId!), row.pedigree])
+        rows
+          .filter((row) => row.childPersonId != null)
+          .map((row) => [pairKey(row.familyId, row.childPersonId!), row.pedigree])
       );
       for (const edge of parentEdges) {
         const pedigree = pedigreeByPair.get(pairKey(edge.familyId as string, edge.toPersonId));

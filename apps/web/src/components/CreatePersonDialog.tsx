@@ -175,7 +175,11 @@ export const CreatePersonDialog = ({
           </label>
           <label className="field-group">
             <span className="field-label">Surname</span>
-            <input value={surname} onChange={(event) => setSurname(event.target.value)} placeholder="Surname" />
+            <input
+              value={surname}
+              onChange={(event) => setSurname(event.target.value)}
+              placeholder="Surname"
+            />
           </label>
           <label className="field-group">
             <span className="field-label">Gender</span>

@@ -44,9 +44,7 @@ describe("RelationshipService.listRelationships", () => {
     relationshipFindMany.mockResolvedValue([
       { id: "pe1", fromPersonId: "p1", toPersonId: "c1", type: "PARENT_OF", familyId: "fam-1" }
     ]);
-    familyChildFindMany.mockResolvedValue([
-      { familyId: "fam-1", childPersonId: "c1", pedigree: "ADOPTED" }
-    ]);
+    familyChildFindMany.mockResolvedValue([{ familyId: "fam-1", childPersonId: "c1", pedigree: "ADOPTED" }]);
     const { RelationshipService } = await import("./service.js");
     const service = new RelationshipService(mockLifeEventService as never);
     const result = await service.listRelationships("user-1");

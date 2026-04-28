@@ -148,9 +148,9 @@ describe("AuthService.loginWithPassword", () => {
     mocks.treemichUserCount.mockResolvedValue(1);
 
     const { AuthService, TreemichAuthError } = await import("./service.js");
-    await expect(new AuthService().loginWithPassword("alice@example.com", "wrongpass")).rejects.toBeInstanceOf(
-      TreemichAuthError
-    );
+    await expect(
+      new AuthService().loginWithPassword("alice@example.com", "wrongpass")
+    ).rejects.toBeInstanceOf(TreemichAuthError);
     expect(mocks.treemichSessionCreate).not.toHaveBeenCalled();
   });
 

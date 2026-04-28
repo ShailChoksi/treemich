@@ -207,6 +207,8 @@ model PersonProfile {
   familiesAsParent1   Family[]       @relation("FamilyParent1")
   familiesAsParent2   Family[]       @relation("FamilyParent2")
   familiesAsChild     FamilyChild[]  @relation("FamilyChild")
+  cooccurrenceAsA     CooccurrenceEdge[] @relation("CooccurrencePersonA")
+  cooccurrenceAsB     CooccurrenceEdge[] @relation("CooccurrencePersonB")
 
   @@unique([userId, immichPersonId])
   @@index([userId])
@@ -530,6 +532,9 @@ model CooccurrenceEdge {
   userId            String
   personAId         String
   personBId         String
+  sourceProvider    PersonExternalIdentityProvider?
+  sourceImportedAt  DateTime?
+  sourceMetadata    Json         @default("{}")
   sharedPhotos      Int
   score             Float
   personAPhotoCount Int
@@ -538,6 +543,8 @@ model CooccurrenceEdge {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   user              TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personA           PersonProfile @relation("CooccurrencePersonA", fields: [personAId], references: [id], onDelete: Cascade)
+  personB           PersonProfile @relation("CooccurrencePersonB", fields: [personBId], references: [id], onDelete: Cascade)
 
   @@unique([userId, personAId, personBId])
   @@index([userId])

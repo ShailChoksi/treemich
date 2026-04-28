@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { FamilyChildPedigree } from "./families.js";
 import type { AgeFilter, InterpreterIntent } from "./search/interpreter.js";
 
-/** Canonical relationship kinds stored in Treemich (Immich person id endpoints). */
+/** Canonical relationship kinds stored in Treemich person-id space. */
 export const relationshipTypes = [
   "PARENT_OF",
   "CHILD_OF",
@@ -146,7 +146,7 @@ export type TreemichPersonProfile = {
   externalIds?: Record<string, string> | null;
 };
 
-/** Directed relationship edge between two Immich person ids. */
+/** Directed relationship edge between two Treemich person ids. */
 export type RelationshipRecord = {
   /** Present when returned from GET /relationships (Treemich relationship row id). */
   id?: string;
@@ -200,6 +200,9 @@ export type CooccurrenceEdgeRecord = {
   id: string;
   personAId: string;
   personBId: string;
+  sourceProvider?: PersonExternalIdentityProvider | null;
+  sourceImportedAt?: string | null;
+  sourceMetadata?: Record<string, unknown>;
   sharedPhotos: number;
   score: number;
   personAPhotoCount: number;
@@ -211,6 +214,100 @@ export type CooccurrenceEdgeRecord = {
 export type CooccurrenceEdgesResponse = {
   edges: CooccurrenceEdgeRecord[];
   nextCursor: string | null;
+};
+
+export type ImmichImportCandidate = {
+  personId: string;
+  name: string;
+  score: number;
+  reason: "externalIdentity" | "exactName" | "partialName";
+};
+
+export type ImmichImportPreviewRow = {
+  immichPersonId: string;
+  name: string;
+  birthDate?: string | null;
+  thumbnailPath?: string | null;
+  linkedPersonId?: string | null;
+  linkedPersonName?: string | null;
+  candidates: ImmichImportCandidate[];
+};
+
+export type ImmichImportPreviewResponse = {
+  linked: boolean;
+  people: ImmichImportPreviewRow[];
+  totals: {
+    immichPeople: number;
+    linkedPeople: number;
+    unlinkedPeople: number;
+  };
+};
+
+export const immichImportDecisionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("skip"),
+    immichPersonId: z.string().trim().min(1)
+  }),
+  z.object({
+    action: z.literal("link"),
+    immichPersonId: z.string().trim().min(1),
+    personId: z.string().trim().min(1)
+  }),
+  z.object({
+    action: z.literal("create"),
+    immichPersonId: z.string().trim().min(1),
+    givenName: z.string().trim().min(1).nullable().optional(),
+    surname: z.string().trim().min(1).nullable().optional(),
+    gender: genderSchema.optional()
+  })
+]);
+
+export const immichPeopleImportBodySchema = z.object({
+  decisions: z.array(immichImportDecisionSchema).min(1),
+  importThumbnails: z.boolean().optional()
+});
+
+export const immichThumbnailImportBodySchema = z.object({
+  personIds: z.array(z.string().trim().min(1)).optional()
+});
+
+export type ImmichImportDecision = z.infer<typeof immichImportDecisionSchema>;
+export type ImmichPeopleImportBody = z.infer<typeof immichPeopleImportBodySchema>;
+export type ImmichThumbnailImportBody = z.infer<typeof immichThumbnailImportBodySchema>;
+
+export type ImmichImportApplyResult = {
+  immichPersonId: string;
+  action: ImmichImportDecision["action"];
+  personId?: string;
+  status: "created" | "linked" | "skipped" | "alreadyLinked" | "error";
+  message?: string;
+};
+
+export type ImmichPeopleImportResponse = {
+  results: ImmichImportApplyResult[];
+  summary: {
+    created: number;
+    linked: number;
+    skipped: number;
+    alreadyLinked: number;
+    errors: number;
+    thumbnailsImported: number;
+  };
+};
+
+export type ImmichThumbnailImportResponse = {
+  results: Array<{
+    personId: string;
+    immichPersonId: string;
+    status: "imported" | "skipped" | "error";
+    thumbnail?: PersonThumbnailRecord;
+    message?: string;
+  }>;
+  summary: {
+    imported: number;
+    skipped: number;
+    errors: number;
+  };
 };
 
 /** User-facing schedule metadata for automatic co-occurrence refresh. */

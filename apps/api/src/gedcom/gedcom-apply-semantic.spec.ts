@@ -282,11 +282,13 @@ describe("GEDCOM export/import semantic apply coverage", () => {
       lineLog: []
     });
 
-    const createPerson = vi.fn().mockImplementation(async (_userId: string, body: { givenName?: string | null }) => ({
-      id: `new-person-${body.givenName ?? "unknown"}`,
-      name: body.givenName ?? "Unknown",
-      profile: null
-    }));
+    const createPerson = vi
+      .fn()
+      .mockImplementation(async (_userId: string, body: { givenName?: string | null }) => ({
+        id: `new-person-${body.givenName ?? "unknown"}`,
+        name: body.givenName ?? "Unknown",
+        profile: null
+      }));
 
     const services = {
       evidenceService: {

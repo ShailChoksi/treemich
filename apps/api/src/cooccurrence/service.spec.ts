@@ -14,6 +14,8 @@ const createMockPrisma = () => {
   const cooccurrenceEdgeCreateMany = vi.fn();
   const cooccurrenceEdgeFindMany = vi.fn();
   const cooccurrenceEdgeFindUnique = vi.fn();
+  const personExternalIdentityFindMany = vi.fn();
+  const personProfileFindMany = vi.fn();
   const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
     callback({
       cooccurrenceEdge: {
@@ -48,6 +50,12 @@ const createMockPrisma = () => {
         findMany: cooccurrenceEdgeFindMany,
         findUnique: cooccurrenceEdgeFindUnique
       },
+      personExternalIdentity: {
+        findMany: personExternalIdentityFindMany
+      },
+      personProfile: {
+        findMany: personProfileFindMany
+      },
       $transaction: transaction
     },
     mocks: {
@@ -63,6 +71,8 @@ const createMockPrisma = () => {
       cooccurrenceEdgeCreateMany,
       cooccurrenceEdgeFindMany,
       cooccurrenceEdgeFindUnique,
+      personExternalIdentityFindMany,
+      personProfileFindMany,
       transaction
     }
   };
@@ -100,6 +110,13 @@ describe("CooccurrenceService", () => {
       userId: "user-1",
       status: "PENDING"
     });
+    mocks.personExternalIdentityFindMany.mockResolvedValue(
+      Array.from({ length: 2502 }, (_, index) => ({
+        providerPersonId: `person-${index}`,
+        personId: `profile-${index}`
+      }))
+    );
+    mocks.personProfileFindMany.mockResolvedValue([]);
 
     const immichClient = {
       listAssetsWithPeople: vi.fn().mockResolvedValue(
@@ -121,6 +138,11 @@ describe("CooccurrenceService", () => {
     expect(mocks.cooccurrenceEdgeCreateMany).toHaveBeenCalledTimes(2);
     expect(mocks.cooccurrenceEdgeCreateMany.mock.calls[0]?.[0]?.data).toHaveLength(1000);
     expect(mocks.cooccurrenceEdgeCreateMany.mock.calls[1]?.[0]?.data).toHaveLength(1);
+    expect(mocks.cooccurrenceEdgeCreateMany.mock.calls[0]?.[0]?.data[0]).toMatchObject({
+      personAId: "profile-0",
+      personBId: "profile-1500",
+      sourceProvider: "IMMICH"
+    });
     expect(mocks.cooccurrenceJobUpdate).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -153,6 +175,65 @@ describe("CooccurrenceService", () => {
     await expect(
       service.triggerComputation("user-1", { listAssetsWithPeople: vi.fn() } as never)
     ).rejects.toBeInstanceOf(CooccurrenceConflictError);
+  });
+
+  it("skips Immich co-occurrence people that are not linked to Treemich people", async () => {
+    const { prisma, mocks } = createMockPrisma();
+    let backgroundTask: (() => Promise<void>) | undefined;
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const service = new CooccurrenceService({
+      prismaClient: prisma as never,
+      now: () => now,
+      runBackgroundTask: (task) => {
+        backgroundTask = task;
+      }
+    });
+
+    mocks.cooccurrenceJobFindFirst.mockResolvedValue(null);
+    mocks.cooccurrenceScheduleFindUnique.mockResolvedValue({
+      id: "schedule-1",
+      userId: "user-1",
+      enabled: true,
+      intervalDays: 7,
+      nextRunAt: now,
+      lastRunAt: null
+    });
+    mocks.cooccurrenceScheduleUpdate.mockResolvedValue({});
+    mocks.cooccurrenceJobCreate.mockResolvedValue({
+      id: "job-1",
+      userId: "user-1",
+      status: "PENDING"
+    });
+    mocks.personExternalIdentityFindMany.mockResolvedValue([
+      { providerPersonId: "immich-a", personId: "person-a" },
+      { providerPersonId: "immich-b", personId: "person-b" }
+    ]);
+    mocks.personProfileFindMany.mockResolvedValue([]);
+
+    const immichClient = {
+      listAssetsWithPeople: vi.fn().mockResolvedValue([
+        { assetId: "asset-1", personIds: ["immich-a", "immich-b", "unlinked"] },
+        { assetId: "asset-2", personIds: ["unlinked", "other-unlinked"] }
+      ])
+    };
+
+    await service.triggerComputation("user-1", immichClient as never);
+    await backgroundTask?.();
+
+    expect(mocks.cooccurrenceEdgeCreateMany).toHaveBeenCalledTimes(1);
+    expect(mocks.cooccurrenceEdgeCreateMany.mock.calls[0]?.[0]?.data).toEqual([
+      expect.objectContaining({
+        personAId: "person-a",
+        personBId: "person-b",
+        sharedPhotos: 1,
+        sourceMetadata: expect.objectContaining({
+          sourceAssetCount: 2,
+          mappedAssetCount: 1,
+          linkedImmichPersonCount: 2,
+          skippedImmichPersonCount: 2
+        })
+      })
+    ]);
   });
 
   it("normalizes pair lookups before querying storage", async () => {

@@ -79,6 +79,7 @@ import { RELATIONSHIP_TYPES } from "../lib/relationshipConstants";
 import { EvidenceLibrariesSection } from "../components/EvidenceLibrariesSection";
 import { EvidenceMediaSection } from "../components/EvidenceMediaSection";
 import { GedcomInterchangeSection } from "../components/GedcomInterchangeSection";
+import { ImmichImportWorkspace } from "../components/ImmichImportWorkspace";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
 import { CreatePersonDialog } from "../components/CreatePersonDialog";
 import { MapPlacesPanel } from "../components/MapPlacesPanel";
@@ -537,112 +538,115 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     }
   }, []);
 
-  const refreshGraphData = useCallback(async (options: RefreshGraphDataOptions = {}) => {
-    if (!options.bypassSaveGuard && profileDraftDirtyRef.current) {
-      setStatus("Save your profile changes before refreshing the tree.");
-      return;
-    }
-    if (
-      !options.bypassSaveGuard &&
-      (isSavingProfileRef.current || isSavingRelationshipRef.current || savingFamilyIdRef.current)
-    ) {
-      setStatus("Wait for the current save to finish before refreshing the tree.");
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const [peopleResponse, relationshipsResponse, preferencesResponse] = await Promise.all([
-        getPeople(),
-        getRelationships(),
-        getUserPreferences().catch(() => ({}) as UserPreferences)
-      ]);
-      const sortedPeople = sortPeopleStable(peopleResponse);
-      const sortedRelationships = sortRelationshipsStable(relationshipsResponse);
-      setPeople((current) => (samePeopleList(current, sortedPeople) ? current : sortedPeople));
-      setRelationships((current) =>
-        sameRelationshipList(current, sortedRelationships) ? current : sortedRelationships
-      );
-      setSavedPreferences((current) => current ?? preferencesResponse);
-      setLoadError(null);
-      setLifeEventsByPersonId({});
-      setRelationshipLifeEventsById({});
-      setProfileEventFieldsByPersonId({});
-      setPersonTimelineById({});
-      setResearchTasksByPersonId({});
-      setFamiliesByPersonId({});
-      setFamilyLifeEventsById({});
-      setGenderByPersonId(
-        sortedPeople.reduce<Record<string, Gender>>((acc, person) => {
-          acc[person.id] = person.profile?.gender ?? "UNKNOWN";
-          return acc;
-        }, {})
-      );
-      setGivenNameByPersonId(
-        sortedPeople.reduce<Record<string, string>>((acc, person) => {
-          acc[person.id] = person.profile?.givenName ?? "";
-          return acc;
-        }, {})
-      );
-      setSurnameByPersonId(
-        sortedPeople.reduce<Record<string, string>>((acc, person) => {
-          acc[person.id] = person.profile?.surname ?? "";
-          return acc;
-        }, {})
-      );
-      setNicknamesByPersonId(
-        sortedPeople.reduce<Record<string, string>>((acc, person) => {
-          acc[person.id] = person.profile?.nicknames ?? "";
-          return acc;
-        }, {})
-      );
-      const nextSelection = resolvePeopleSelection({
-        people: sortedPeople,
-        relationships: sortedRelationships,
-        currentSelectedPersonId: selectedPersonIdRef.current,
-        lastSelectedPersonId: preferencesResponse.lastSelectedPersonId,
-        currentUserName
-      });
-      setSelectedPersonId(nextSelection.selectedPersonId);
-      setGraphCameraFocusPersonId(nextSelection.cameraFocusPersonId);
-
-      const layoutRequestId = layoutRequestIdRef.current + 1;
-      layoutRequestIdRef.current = layoutRequestId;
-      setServerLayout(null);
-      setGraphLayoutError(null);
-      computeGraphLayout({
-        people: sortedPeople.map((person) => ({
-          id: person.id,
-          name: getPersonNameForGraphLayout(person)
-        })),
-        relationships: filterGraphLayoutTopologyRelationships(sortedRelationships),
-        viewMode: "family",
-        familyViewStyle: preferencesResponse.familyViewStyle,
-        selectedPersonId: nextSelection.selectedPersonId,
-        primaryFamilyUnitByPersonId: preferencesResponse.primaryFamilyUnitByPersonId
-      })
-        .then((layout) => {
-          if (layoutRequestIdRef.current !== layoutRequestId) {
-            return;
-          }
-          setServerLayout(layout);
-          setGraphLayoutError(null);
-        })
-        .catch((err: unknown) => {
-          if (layoutRequestIdRef.current !== layoutRequestId) {
-            return;
-          }
-          setServerLayout(null);
-          const message = `Server layout failed: ${getErrorMessage(err)}. Using a local graph layout.`;
-          setGraphLayoutError(message);
-          setStatus(message);
+  const refreshGraphData = useCallback(
+    async (options: RefreshGraphDataOptions = {}) => {
+      if (!options.bypassSaveGuard && profileDraftDirtyRef.current) {
+        setStatus("Save your profile changes before refreshing the tree.");
+        return;
+      }
+      if (
+        !options.bypassSaveGuard &&
+        (isSavingProfileRef.current || isSavingRelationshipRef.current || savingFamilyIdRef.current)
+      ) {
+        setStatus("Wait for the current save to finish before refreshing the tree.");
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const [peopleResponse, relationshipsResponse, preferencesResponse] = await Promise.all([
+          getPeople(),
+          getRelationships(),
+          getUserPreferences().catch(() => ({}) as UserPreferences)
+        ]);
+        const sortedPeople = sortPeopleStable(peopleResponse);
+        const sortedRelationships = sortRelationshipsStable(relationshipsResponse);
+        setPeople((current) => (samePeopleList(current, sortedPeople) ? current : sortedPeople));
+        setRelationships((current) =>
+          sameRelationshipList(current, sortedRelationships) ? current : sortedRelationships
+        );
+        setSavedPreferences((current) => current ?? preferencesResponse);
+        setLoadError(null);
+        setLifeEventsByPersonId({});
+        setRelationshipLifeEventsById({});
+        setProfileEventFieldsByPersonId({});
+        setPersonTimelineById({});
+        setResearchTasksByPersonId({});
+        setFamiliesByPersonId({});
+        setFamilyLifeEventsById({});
+        setGenderByPersonId(
+          sortedPeople.reduce<Record<string, Gender>>((acc, person) => {
+            acc[person.id] = person.profile?.gender ?? "UNKNOWN";
+            return acc;
+          }, {})
+        );
+        setGivenNameByPersonId(
+          sortedPeople.reduce<Record<string, string>>((acc, person) => {
+            acc[person.id] = person.profile?.givenName ?? "";
+            return acc;
+          }, {})
+        );
+        setSurnameByPersonId(
+          sortedPeople.reduce<Record<string, string>>((acc, person) => {
+            acc[person.id] = person.profile?.surname ?? "";
+            return acc;
+          }, {})
+        );
+        setNicknamesByPersonId(
+          sortedPeople.reduce<Record<string, string>>((acc, person) => {
+            acc[person.id] = person.profile?.nicknames ?? "";
+            return acc;
+          }, {})
+        );
+        const nextSelection = resolvePeopleSelection({
+          people: sortedPeople,
+          relationships: sortedRelationships,
+          currentSelectedPersonId: selectedPersonIdRef.current,
+          lastSelectedPersonId: preferencesResponse.lastSelectedPersonId,
+          currentUserName
         });
-    } catch (error: unknown) {
-      setLoadError(getErrorMessage(error));
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentUserName]);
+        setSelectedPersonId(nextSelection.selectedPersonId);
+        setGraphCameraFocusPersonId(nextSelection.cameraFocusPersonId);
+
+        const layoutRequestId = layoutRequestIdRef.current + 1;
+        layoutRequestIdRef.current = layoutRequestId;
+        setServerLayout(null);
+        setGraphLayoutError(null);
+        computeGraphLayout({
+          people: sortedPeople.map((person) => ({
+            id: person.id,
+            name: getPersonNameForGraphLayout(person)
+          })),
+          relationships: filterGraphLayoutTopologyRelationships(sortedRelationships),
+          viewMode: "family",
+          familyViewStyle: preferencesResponse.familyViewStyle,
+          selectedPersonId: nextSelection.selectedPersonId,
+          primaryFamilyUnitByPersonId: preferencesResponse.primaryFamilyUnitByPersonId
+        })
+          .then((layout) => {
+            if (layoutRequestIdRef.current !== layoutRequestId) {
+              return;
+            }
+            setServerLayout(layout);
+            setGraphLayoutError(null);
+          })
+          .catch((err: unknown) => {
+            if (layoutRequestIdRef.current !== layoutRequestId) {
+              return;
+            }
+            setServerLayout(null);
+            const message = `Server layout failed: ${getErrorMessage(err)}. Using a local graph layout.`;
+            setGraphLayoutError(message);
+            setStatus(message);
+          });
+      } catch (error: unknown) {
+        setLoadError(getErrorMessage(error));
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [currentUserName]
+  );
 
   const handleFamilyPatch = useCallback(
     async (familyId: string, body: PatchFamilyBody) => {
@@ -1889,8 +1893,14 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         <section className="workspace-main-stack workspace-main-stack--interchange">
           <section className="card stack workspace-intro-card">
             <h2>Interchange workspace</h2>
-            <p className="hint">Use this space for GEDCOM import/export without crowding person editing.</p>
+            <p className="hint">
+              Use this space for GEDCOM import/export and optional Immich provider imports.
+            </p>
           </section>
+          <ImmichImportWorkspace
+            people={people}
+            onImported={() => void refreshGraphData({ bypassSaveGuard: true })}
+          />
           <GedcomInterchangeSection people={people} onTreeChanged={() => void refreshGraphData()} />
         </section>
       );

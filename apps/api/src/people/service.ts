@@ -233,32 +233,10 @@ export class PersonService {
   async delete(userId: string, personId: string): Promise<void> {
     const person = await prisma.personProfile.findFirst({
       where: { id: personId, userId },
-      select: {
-        id: true,
-        immichPersonId: true,
-        externalIdentities: { select: { providerPersonId: true } }
-      }
+      select: { id: true }
     });
     if (!person) {
       throw new HttpNotFoundError("Person not found");
-    }
-
-    const cooccurrenceIds = [
-      person.id,
-      person.immichPersonId,
-      ...person.externalIdentities.map((identity) => identity.providerPersonId)
-    ].filter((id): id is string => Boolean(id));
-
-    if (cooccurrenceIds.length > 0) {
-      await prisma.cooccurrenceEdge.deleteMany({
-        where: {
-          userId,
-          OR: [
-            { personAId: { in: cooccurrenceIds } },
-            { personBId: { in: cooccurrenceIds } }
-          ]
-        }
-      });
     }
 
     const deleted = await prisma.personProfile.deleteMany({

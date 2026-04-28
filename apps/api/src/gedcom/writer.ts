@@ -147,7 +147,7 @@ export type GedcomExportInput = {
 export type GedcomExportOptions = {
   /** When true, omit person-scoped events for individuals without a DEATH life event. */
   redactLiving?: boolean;
-  /** Emit `1 _TREEMICH_IMMICH_PERSON_ID` (and similar) for interchange; default true. */
+  /** Emit canonical `1 _TREEMICH_PERSON_ID` interchange tags; default true. */
   includeTreemichCustomTags?: boolean;
 };
 

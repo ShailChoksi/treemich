@@ -1,6 +1,6 @@
 /**
  * @packageDocumentation
- * GEDCOM import preview + async job apply (match-only into existing PersonProfile records).
+ * GEDCOM import preview + async job apply into Treemich-owned Person records.
  */
 
 import type { FamilyChildPedigree, Gender, LifeEventType } from "@prisma/client";

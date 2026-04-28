@@ -86,9 +86,9 @@ describe("GedcomInterchangeSection", () => {
     root.unmount();
   });
 
-  it("submits dry-runs with match-only policy and displays structured diff output", async () => {
+  it("submits dry-runs with create-missing policy and displays structured diff output", async () => {
     apiMocks.postGedcomImportPreview.mockResolvedValue({
-      indis: [{ xref: "@I1@", displayName: "Pat Fixture", immichHint: "person-1" }],
+      indis: [{ xref: "@I1@", displayName: "Pat Fixture", personHint: "person-1" }],
       fams: [],
       media: [],
       archiveMediaFiles: [],
@@ -158,7 +158,7 @@ describe("GedcomInterchangeSection", () => {
 
     expect(apiMocks.postGedcomImportJob).toHaveBeenCalledWith(
       expect.objectContaining({
-        importOptions: expect.objectContaining({ dryRun: true, unmatchedIndiPolicy: "MATCH_ONLY" })
+        importOptions: expect.objectContaining({ dryRun: true, unmatchedIndiPolicy: "CREATE" })
       })
     );
     expect(container.textContent).toContain("Dry-run complete");

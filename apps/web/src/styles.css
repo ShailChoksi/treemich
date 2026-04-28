@@ -557,6 +557,50 @@ body {
   max-width: 72ch;
 }
 
+.section-heading,
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.error-text {
+  color: #fca5a5;
+  margin: 0;
+}
+
+.import-table {
+  display: grid;
+  gap: 10px;
+}
+
+.import-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(120px, 160px) minmax(160px, 240px);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.import-row__thumbnail {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: #334155;
+}
+
+.import-row__body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .graph-card {
   grid-column: auto;
   display: flex;

@@ -50,7 +50,7 @@ export const buildServices = (): AppServices => {
     familyService: new FamilyService(relationshipService, personService),
     lifeEventService,
     personNameService: new PersonNameService(),
-    researchTaskService: new ResearchTaskService(),
+    researchTaskService: new ResearchTaskService(personService),
     evidenceService: new EvidenceService()
   };
 };
