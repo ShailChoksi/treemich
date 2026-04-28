@@ -22,9 +22,9 @@ export const registerPeopleThumbnailGetRoute = (app: FastifyInstance) => {
     const immichIdentity = person.externalIdentities.find((identity) => identity.provider === "IMMICH");
     if (immichIdentity) {
       try {
-        const thumbnail = await (await getImmichClientForRequest(request)).getPersonThumbnail(
-          immichIdentity.providerPersonId
-        );
+        const thumbnail = await (
+          await getImmichClientForRequest(request)
+        ).getPersonThumbnail(immichIdentity.providerPersonId);
         return reply
           .header("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
           .type(thumbnail.contentType)
@@ -33,7 +33,8 @@ export const registerPeopleThumbnailGetRoute = (app: FastifyInstance) => {
         // Fall through to generated placeholder; Immich is optional.
       }
     }
-    const label = [person.givenName, person.surname].filter(Boolean).join(" ") || person.displayNameOverride || "Person";
+    const label =
+      [person.givenName, person.surname].filter(Boolean).join(" ") || person.displayNameOverride || "Person";
     const initials = label
       .split(/\s+/)
       .filter(Boolean)

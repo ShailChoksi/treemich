@@ -8,10 +8,12 @@ const includeProfile = async (userId: string, personId: string) =>
   (await prisma.personProfile.findFirst({
     where: { userId, id: personId }
   })) ??
-  (await prisma.personExternalIdentity.findFirst({
-    where: { userId, providerPersonId: personId },
-    include: { person: true }
-  }))?.person ??
+  (
+    await prisma.personExternalIdentity.findFirst({
+      where: { userId, providerPersonId: personId },
+      include: { person: true }
+    })
+  )?.person ??
   (await prisma.personProfile.findFirst({
     where: { userId, immichPersonId: personId }
   }));

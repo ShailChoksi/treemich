@@ -18,7 +18,7 @@ export async function computeTreeValidationForUser(userId: string): Promise<Life
   const [profiles, relationships] = await Promise.all([
     prisma.personProfile.findMany({
       where: { userId },
-      select: { id: true, immichPersonId: true }
+      select: { id: true }
     }),
     prisma.relationship.findMany({
       where: { userId }
@@ -83,8 +83,6 @@ export async function computeTreeValidationForUser(userId: string): Promise<Life
     eventsByRelationshipId.set(event.relationshipId, events);
   }
 
-  const profileIdByImmichId = new Map(profiles.map((profile) => [profile.immichPersonId, profile.id]));
-
   for (const p of profiles) {
     const events = eventsByProfileId.get(p.id) ?? [];
     findings.push(
@@ -95,7 +93,7 @@ export async function computeTreeValidationForUser(userId: string): Promise<Life
           month: e.month,
           day: e.day
         })),
-        { immichPersonId: p.immichPersonId }
+        { personId: p.id }
       )
     );
   }
@@ -115,10 +113,10 @@ export async function computeTreeValidationForUser(userId: string): Promise<Life
     if (r.type !== "PARENT_OF" && r.type !== "CHILD_OF") {
       continue;
     }
-    const parentImmich = r.type === "PARENT_OF" ? r.fromPersonId : r.toPersonId;
-    const childImmich = r.type === "PARENT_OF" ? r.toPersonId : r.fromPersonId;
-    const parentEvents = eventsByProfileId.get(profileIdByImmichId.get(parentImmich) ?? "") ?? [];
-    const childEvents = eventsByProfileId.get(profileIdByImmichId.get(childImmich) ?? "") ?? [];
+    const parentPersonId = r.type === "PARENT_OF" ? r.fromPersonId : r.toPersonId;
+    const childPersonId = r.type === "PARENT_OF" ? r.toPersonId : r.fromPersonId;
+    const parentEvents = eventsByProfileId.get(parentPersonId) ?? [];
+    const childEvents = eventsByProfileId.get(childPersonId) ?? [];
     const pBirth = parentEvents.find((e) => e.eventType === "BIRTH");
     const cBirth = childEvents.find((e) => e.eventType === "BIRTH");
     if (!pBirth || !cBirth) {
@@ -129,8 +127,8 @@ export async function computeTreeValidationForUser(userId: string): Promise<Life
         { year: pBirth.year, month: pBirth.month, day: pBirth.day },
         { year: cBirth.year, month: cBirth.month, day: cBirth.day },
         {
-          parentImmichPersonId: parentImmich,
-          childImmichPersonId: childImmich,
+          parentPersonId,
+          childPersonId,
           relationshipId: r.id
         }
       )
@@ -141,9 +139,7 @@ export async function computeTreeValidationForUser(userId: string): Promise<Life
 }
 
 const findingKey = (f: LifeEventValidationFinding) =>
-  [f.code, f.immichPersonId ?? "", f.relationshipId ?? "", f.relatedImmichPersonId ?? "", f.message].join(
-    "|"
-  );
+  [f.code, f.personId ?? "", f.relationshipId ?? "", f.relatedPersonId ?? "", f.message].join("|");
 
 function dedupeFindings(list: LifeEventValidationFinding[]): LifeEventValidationFinding[] {
   const seen = new Set<string>();

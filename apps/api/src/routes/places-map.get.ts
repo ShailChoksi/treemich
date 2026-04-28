@@ -45,7 +45,7 @@ export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
         year: true,
         personProfile: {
           select: {
-            immichPersonId: true
+            id: true
           }
         },
         place: {
@@ -71,14 +71,7 @@ export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
     )
       .map((row) => row.personProfileId)
       .filter((value): value is string => value != null);
-    const deceasedProfiles =
-      deceasedProfileIds.length > 0
-        ? await prisma.personProfile.findMany({
-            where: { id: { in: deceasedProfileIds } },
-            select: { immichPersonId: true }
-          })
-        : [];
-    const deceased = new Set<string>(deceasedProfiles.map((row) => row.immichPersonId));
+    const deceased = new Set<string>(deceasedProfileIds);
 
     const byPlace = new Map<string, PlaceAggregate & { personIds: Set<string> }>();
     for (const event of events) {
@@ -86,8 +79,8 @@ export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
       if (!place || place.latitude == null || place.longitude == null) {
         continue;
       }
-      const immichPersonId = event.personProfile?.immichPersonId ?? null;
-      if (!includeLivingPeople && immichPersonId && !deceased.has(immichPersonId)) {
+      const personId = event.personProfile?.id ?? null;
+      if (!includeLivingPeople && personId && !deceased.has(personId)) {
         continue;
       }
       const existing = byPlace.get(place.id) ?? {
@@ -101,8 +94,8 @@ export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
         personIds: new Set<string>()
       };
       existing.eventCount += 1;
-      if (immichPersonId) {
-        existing.personIds.add(immichPersonId);
+      if (personId) {
+        existing.personIds.add(personId);
       }
       if (event.year != null && (existing.lastEventYear == null || event.year > existing.lastEventYear)) {
         existing.lastEventYear = event.year;

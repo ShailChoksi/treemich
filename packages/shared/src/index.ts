@@ -73,10 +73,9 @@ export const createPersonBodySchema = z.object({
   deathDate: z.string().trim().min(1).nullable().optional()
 });
 
-export const patchPersonBodySchema = createPersonBodySchema.partial().refine(
-  (body) => Object.keys(body).length > 0,
-  { message: "At least one person field must be provided" }
-);
+export const patchPersonBodySchema = createPersonBodySchema
+  .partial()
+  .refine((body) => Object.keys(body).length > 0, { message: "At least one person field must be provided" });
 
 export const createPersonExternalIdentityBodySchema = z.object({
   provider: personExternalIdentityProviderSchema,
@@ -239,10 +238,10 @@ export type CooccurrenceJobResponse = {
   schedule: CooccurrenceScheduleInfo;
 };
 
-/** Logged-in Treemich user (linked Immich account). */
+/** Logged-in Treemich user. `immichUserId` is only present for Immich-linked accounts. */
 export type AuthUser = {
   id: string;
-  immichUserId: string;
+  immichUserId?: string;
   email: string;
   name: string;
 };

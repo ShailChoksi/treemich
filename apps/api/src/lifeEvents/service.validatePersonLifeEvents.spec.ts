@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const personProfileFindFirstMock = vi.fn();
 const personProfileFindUniqueMock = vi.fn();
+const personExternalIdentityFindFirstMock = vi.fn().mockResolvedValue(null);
 const lifeEventFindManyMock = vi.fn();
 
 vi.mock("../db/client.js", () => ({
   prisma: {
-    personProfile: { findUnique: personProfileFindUniqueMock },
+    personProfile: { findFirst: personProfileFindFirstMock, findUnique: personProfileFindUniqueMock },
+    personExternalIdentity: { findFirst: personExternalIdentityFindFirstMock },
     lifeEvent: { findMany: lifeEventFindManyMock }
   }
 }));
@@ -16,6 +19,7 @@ describe("LifeEventService.validatePersonLifeEvents", () => {
   });
 
   it("returns empty findings when the person has no Treemich profile", async () => {
+    personProfileFindFirstMock.mockResolvedValueOnce(null);
     personProfileFindUniqueMock.mockResolvedValueOnce(null);
 
     const { LifeEventService } = await import("./service.js");
@@ -27,6 +31,7 @@ describe("LifeEventService.validatePersonLifeEvents", () => {
   });
 
   it("maps listPersonLifeEvents rows through computePersonLifeEventFindings", async () => {
+    personProfileFindFirstMock.mockResolvedValueOnce({ id: "pp-1" });
     personProfileFindUniqueMock.mockResolvedValueOnce({ id: "pp-1" });
     lifeEventFindManyMock.mockResolvedValueOnce([
       {
@@ -63,6 +68,7 @@ describe("LifeEventService.validatePersonLifeEvents", () => {
   });
 
   it("returns empty findings when birth and death dates are consistent", async () => {
+    personProfileFindFirstMock.mockResolvedValueOnce({ id: "pp-1" });
     personProfileFindUniqueMock.mockResolvedValueOnce({ id: "pp-1" });
     lifeEventFindManyMock.mockResolvedValueOnce([
       {

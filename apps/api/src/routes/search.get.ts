@@ -134,7 +134,7 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
 
     const sourceIds = sourceCandidates.map((person) => person.id);
     const targetIds = adoptedSearchIntents.has(interpreted.parsed.intent)
-      ? await app.services.familyService.findAdoptedChildImmichPersonIds(auth.user.id, sourceIds)
+      ? await app.services.familyService.findAdoptedChildPersonIds(auth.user.id, sourceIds)
       : await app.services.relationshipService.traverseRelationshipChain(
           auth.user.id,
           sourceIds,

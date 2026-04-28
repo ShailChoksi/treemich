@@ -1,6 +1,6 @@
 /**
  * @packageDocumentation
- * Phase 5b: GEDCOM import preview + async job apply (match-only into existing Immich-linked profiles).
+ * GEDCOM import preview + async job apply (match-only into existing PersonProfile records).
  */
 
 import type { FamilyChildPedigree, Gender, LifeEventType } from "@prisma/client";
@@ -89,9 +89,12 @@ const gedTagToLifeEventType = (tag: string): LifeEventType | null => {
   return map[tag] ?? null;
 };
 
-const extractImmichHint = (lines: GedcomPlainLine[]): string | null => {
+const extractPersonHint = (lines: GedcomPlainLine[]): string | null => {
   for (const ln of lines) {
-    if (ln.level === 1 && (ln.tag === "_TREEMICH_IMMICH_PERSON_ID" || ln.tag === "_IMMICH")) {
+    if (
+      ln.level === 1 &&
+      (ln.tag === "_TREEMICH_PERSON_ID" || ln.tag === "_TREEMICH_IMMICH_PERSON_ID" || ln.tag === "_IMMICH")
+    ) {
       const v = ln.value.trim();
       return v || null;
     }
@@ -102,7 +105,8 @@ const extractImmichHint = (lines: GedcomPlainLine[]): string | null => {
 export type GedcomImportPreviewIndi = {
   xref: string;
   displayName: string | null;
-  immichHint: string | null;
+  /** Treemich PersonProfile.id or legacy Immich person ID embedded in the GEDCOM as a custom tag. */
+  personHint: string | null;
 };
 
 export type GedcomImportPreviewFam = {
@@ -139,7 +143,7 @@ const summarizeIndi = (block: GedcomRecordBlock): GedcomImportPreviewIndi => {
       }
     }
   }
-  return { xref, displayName: display, immichHint: extractImmichHint(block.lines) };
+  return { xref, displayName: display, personHint: extractPersonHint(block.lines) };
 };
 
 const summarizeFam = (block: GedcomRecordBlock): GedcomImportPreviewFam => {
@@ -207,7 +211,7 @@ export const mergeIndiMatches = (
     if (block.recordTag !== "INDI" || !block.xref) {
       continue;
     }
-    const hint = extractImmichHint(block.lines);
+    const hint = extractPersonHint(block.lines);
     if (hint && !out.has(block.xref)) {
       put(block.xref, hint);
     }
@@ -434,10 +438,10 @@ const chunkToFamilyLifeEventBody = (chunk: GedcomPlainLine[]): CreateFamilyLifeE
 
 async function findSpouseRelationshipId(
   userId: string,
-  immichA: string,
-  immichB: string
+  personA: string,
+  personB: string
 ): Promise<string | null> {
-  const [lo, hi] = immichA < immichB ? [immichA, immichB] : [immichB, immichA];
+  const [lo, hi] = personA < personB ? [personA, personB] : [personB, personA];
   const rel = await prisma.relationship.findFirst({
     where: {
       userId,
@@ -798,23 +802,43 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       );
     }
 
+    // Build a map from GEDCOM xref → resolved Treemich PersonProfile.id.
+    // indiMap contains either Treemich PersonProfile.ids (via _TREEMICH_PERSON_ID) or legacy Immich
+    // person IDs (via _TREEMICH_IMMICH_PERSON_ID / _IMMICH).  We resolve each to a canonical
+    // PersonProfile.id here so that downstream family creation always uses Treemich IDs.
+    const indiPersonIdMap = new Map<string, string>();
+    for (const [xref, rawId] of indiMap.entries()) {
+      const profile = await prisma.personProfile.findFirst({
+        where: {
+          userId: job.userId,
+          OR: [{ id: rawId }, { immichPersonId: rawId }]
+        },
+        select: { id: true }
+      });
+      if (profile) {
+        indiPersonIdMap.set(xref, profile.id);
+      }
+    }
+
     for (const block of records) {
       if (block.recordTag !== "FAM" || !block.xref) {
         continue;
       }
       const fam = summarizeFam(block);
-      const husbImmich = fam.husbXref ? indiMap.get(fam.husbXref) : undefined;
-      const wifeImmich = fam.wifeXref ? indiMap.get(fam.wifeXref) : undefined;
-      const childImmichs = fam.childXrefs.map((cx) => indiMap.get(cx)).filter((x): x is string => Boolean(x));
+      const husbPersonId = fam.husbXref ? indiPersonIdMap.get(fam.husbXref) : undefined;
+      const wifePersonId = fam.wifeXref ? indiPersonIdMap.get(fam.wifeXref) : undefined;
+      const childPersonIds = fam.childXrefs
+        .map((cx) => indiPersonIdMap.get(cx))
+        .filter((x): x is string => Boolean(x));
       const missingPointers: string[] = [];
-      if (fam.husbXref && !husbImmich) {
+      if (fam.husbXref && !husbPersonId) {
         missingPointers.push(`HUSB ${fam.husbXref}`);
       }
-      if (fam.wifeXref && !wifeImmich) {
+      if (fam.wifeXref && !wifePersonId) {
         missingPointers.push(`WIFE ${fam.wifeXref}`);
       }
       for (const cx of fam.childXrefs) {
-        if (!indiMap.get(cx)) {
+        if (!indiPersonIdMap.get(cx)) {
           missingPointers.push(`CHIL ${cx}`);
         }
       }
@@ -836,7 +860,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         );
         const pedi = chLines ? findSubValue(chLines, "PEDI") : null;
         return {
-          childImmichPersonId: childImmichs[i]!,
+          childPersonId: childPersonIds[i]!,
           pedigree: pediToPedigree(pedi)
         };
       });
@@ -844,8 +868,8 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       const famNotes = famNotesLine?.value?.trim() ?? null;
 
       const body: CreateFamilyBody = {
-        parent1ImmichPersonId: husbImmich ?? null,
-        parent2ImmichPersonId: wifeImmich ?? null,
+        parent1PersonId: husbPersonId ?? null,
+        parent2PersonId: wifePersonId ?? null,
         notes: famNotes,
         children: childPayload
       };
@@ -853,13 +877,13 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       const gedFamKey = fam.xref.replace(/^@|@$/g, "");
 
       const parentsMatchFamily = (
-        row: { parent1ImmichPersonId: string | null; parent2ImmichPersonId: string | null },
+        row: { parent1PersonId: string | null; parent2PersonId: string | null },
         a: string | null | undefined,
         b: string | null | undefined
       ): boolean => {
         const want = new Set([a, b].filter((x): x is string => Boolean(x)));
         const have = new Set(
-          [row.parent1ImmichPersonId, row.parent2ImmichPersonId].filter((x): x is string => Boolean(x))
+          [row.parent1PersonId, row.parent2PersonId].filter((x): x is string => Boolean(x))
         );
         if (want.size !== have.size) {
           return false;
@@ -872,11 +896,11 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         return true;
       };
 
-      const childrenMatch = (rows: { childImmichPersonId: string }[], wantIds: string[]): boolean => {
+      const childrenMatch = (rows: { childPersonId: string | null }[], wantIds: string[]): boolean => {
         if (rows.length !== wantIds.length) {
           return false;
         }
-        const have = new Set(rows.map((r) => r.childImmichPersonId));
+        const have = new Set(rows.map((r) => r.childPersonId).filter(Boolean));
         return wantIds.every((id) => have.has(id));
       };
 
@@ -889,17 +913,17 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       });
       if (!existingFam) {
         const parentFilters =
-          husbImmich && wifeImmich
+          husbPersonId && wifePersonId
             ? [
-                { parent1ImmichPersonId: husbImmich, parent2ImmichPersonId: wifeImmich },
-                { parent1ImmichPersonId: wifeImmich, parent2ImmichPersonId: husbImmich }
+                { parent1PersonId: husbPersonId, parent2PersonId: wifePersonId },
+                { parent1PersonId: wifePersonId, parent2PersonId: husbPersonId }
               ]
-            : husbImmich || wifeImmich
+            : husbPersonId || wifePersonId
               ? [
-                  { parent1ImmichPersonId: husbImmich ?? wifeImmich ?? null, parent2ImmichPersonId: null },
-                  { parent1ImmichPersonId: null, parent2ImmichPersonId: husbImmich ?? wifeImmich ?? null }
+                  { parent1PersonId: husbPersonId ?? wifePersonId ?? null, parent2PersonId: null },
+                  { parent1PersonId: null, parent2PersonId: husbPersonId ?? wifePersonId ?? null }
                 ]
-              : [{ parent1ImmichPersonId: null, parent2ImmichPersonId: null }];
+              : [{ parent1PersonId: null, parent2PersonId: null }];
         const sameShapeFam = await prisma.family.findFirst({
           where: {
             userId: job.userId,
@@ -909,8 +933,8 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         });
         if (
           sameShapeFam &&
-          parentsMatchFamily(sameShapeFam, husbImmich ?? null, wifeImmich ?? null) &&
-          childrenMatch(sameShapeFam.children, childImmichs)
+          parentsMatchFamily(sameShapeFam, husbPersonId ?? null, wifePersonId ?? null) &&
+          childrenMatch(sameShapeFam.children, childPersonIds)
         ) {
           existingFam = sameShapeFam;
           if (!dryRun) {
@@ -934,8 +958,8 @@ export async function processGedcomImportJob(jobId: string, services: AppService
 
       if (existingFam) {
         if (
-          !parentsMatchFamily(existingFam, husbImmich ?? null, wifeImmich ?? null) ||
-          !childrenMatch(existingFam.children, childImmichs)
+          !parentsMatchFamily(existingFam, husbPersonId ?? null, wifePersonId ?? null) ||
+          !childrenMatch(existingFam.children, childPersonIds)
         ) {
           pushLog(lineLog, {
             severity: "warn",
@@ -946,8 +970,8 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         treemichFamilyId = existingFam.id;
         famXrefToTreemichFamilyId.set(fam.xref, existingFam.id);
         summary.familiesReused += 1;
-        if (husbImmich && wifeImmich) {
-          relId = await findSpouseRelationshipId(job.userId, husbImmich, wifeImmich);
+        if (husbPersonId && wifePersonId) {
+          relId = await findSpouseRelationshipId(job.userId, husbPersonId, wifePersonId);
           if (relId) {
             summary.spouseRelationshipsResolved += 1;
           }
@@ -959,8 +983,8 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         });
         treemichFamilyId = created.id;
         famXrefToTreemichFamilyId.set(fam.xref, created.id);
-        if (husbImmich && wifeImmich) {
-          relId = await findSpouseRelationshipId(job.userId, husbImmich, wifeImmich);
+        if (husbPersonId && wifePersonId) {
+          relId = await findSpouseRelationshipId(job.userId, husbPersonId, wifePersonId);
           if (relId) {
             summary.spouseRelationshipsResolved += 1;
           }
@@ -1049,24 +1073,25 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       if (block.recordTag !== "INDI" || !block.xref) {
         continue;
       }
-      const immichId = indiMap.get(block.xref);
-      if (!immichId) {
+      const rawId = indiMap.get(block.xref);
+      if (!rawId) {
         summary.indisSkipped += 1;
         pushLog(lineLog, {
           severity: "warn",
           lineNo: block.startLineNo,
-          message: `Unmatched INDI ${block.xref} skipped; Phase 5 GEDCOM import is match-only and does not create Immich people`
+          message: `Unmatched INDI ${block.xref} skipped; import is match-only and does not create people for unmatched entries`
         });
         continue;
       }
-      const profile = await prisma.personProfile.findUnique({
-        where: { userId_immichPersonId: { userId: job.userId, immichPersonId: immichId } }
-      });
+      const resolvedPersonId = indiPersonIdMap.get(block.xref);
+      const profile = resolvedPersonId
+        ? await prisma.personProfile.findFirst({ where: { id: resolvedPersonId, userId: job.userId } })
+        : null;
       if (!profile) {
         pushLog(lineLog, {
           severity: "warn",
           lineNo: block.startLineNo,
-          message: `No PersonProfile for matched Immich id ${immichId} (${block.xref}); skipping INDI`
+          message: `No PersonProfile found for matched id ${rawId} (${block.xref}); skipping INDI`
         });
         continue;
       }
@@ -1089,7 +1114,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       }
 
       if (!dryRun) {
-        await services.relationshipService.upsertProfile(job.userId, immichId, {
+        await services.personService.update(job.userId, profile.id, {
           gender: sexToGender(sex)
         });
         let primaryNameParsed: { given: string | null; surname: string | null } | null = null;
@@ -1100,7 +1125,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
           }
         }
         if (primaryNameParsed?.given || primaryNameParsed?.surname) {
-          await services.relationshipService.upsertProfile(job.userId, immichId, {
+          await services.personService.update(job.userId, profile.id, {
             givenName: primaryNameParsed.given,
             surname: primaryNameParsed.surname
           });
@@ -1134,7 +1159,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
             };
             const { given, surname } = parseNameSlash(ch[0]!.value);
             await tryCatchLog(`alt name ${block.xref} #${idx}`, async () => {
-              await services.personNameService.create(job.userId, immichId, {
+              await services.personNameService.create(job.userId, profile.id, {
                 type: mapType(typ),
                 givenName: given,
                 surname: surname,
@@ -1169,7 +1194,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
               await tryCatchLog(`person ${block.xref} ${tag}`, async () => {
                 const created = await services.lifeEventService.createPersonLifeEvent(
                   job.userId,
-                  immichId,
+                  profile.id,
                   b
                 );
                 summary.personLifeEventsCreated += 1;
@@ -1279,14 +1304,14 @@ export const validateFamMatches = (
 ): string | null => {
   for (const fam of preview.fams) {
     if (fam.husbXref && !indiMap.get(fam.husbXref)) {
-      return `FAM ${fam.xref}: missing Immich match for HUSB ${fam.husbXref}`;
+      return `FAM ${fam.xref}: missing person match for HUSB ${fam.husbXref}`;
     }
     if (fam.wifeXref && !indiMap.get(fam.wifeXref)) {
-      return `FAM ${fam.xref}: missing Immich match for WIFE ${fam.wifeXref}`;
+      return `FAM ${fam.xref}: missing person match for WIFE ${fam.wifeXref}`;
     }
     for (const cx of fam.childXrefs) {
       if (!indiMap.get(cx)) {
-        return `FAM ${fam.xref}: missing Immich match for CHIL ${cx}`;
+        return `FAM ${fam.xref}: missing person match for CHIL ${cx}`;
       }
     }
   }

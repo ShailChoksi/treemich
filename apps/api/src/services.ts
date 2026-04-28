@@ -47,7 +47,7 @@ export const buildServices = (): AppServices => {
     immichClientFactory: new ImmichClientFactory(),
     personService,
     relationshipService,
-    familyService: new FamilyService(relationshipService),
+    familyService: new FamilyService(relationshipService, personService),
     lifeEventService,
     personNameService: new PersonNameService(),
     researchTaskService: new ResearchTaskService(),

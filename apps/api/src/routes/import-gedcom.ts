@@ -117,7 +117,7 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
         .map((i) => ({
           xref: i.xref,
           displayName: i.displayName,
-          immichHint: i.immichHint
+          personHint: i.personHint
         }));
       const famError = validateFamMatches(preview, merged);
       return {
@@ -147,7 +147,7 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
         .map((i) => ({
           xref: i.xref,
           displayName: i.displayName,
-          immichHint: i.immichHint
+          personHint: i.personHint
         }));
       const famError = validateFamMatches(preview, merged);
       return {

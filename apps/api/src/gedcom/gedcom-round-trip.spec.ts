@@ -14,7 +14,6 @@ describe("GEDCOM export → import preview (Phase 5 round-trip sanity)", () => {
         personProfiles: [
           {
             id: "pp-1",
-            immichPersonId: "immich-a",
             gender: "MALE",
             givenName: "Pat",
             surname: "Fixture",
@@ -26,8 +25,8 @@ describe("GEDCOM export → import preview (Phase 5 round-trip sanity)", () => {
         families: [
           {
             id: "fam-x",
-            parent1ImmichPersonId: "immich-a",
-            parent2ImmichPersonId: null,
+            parent1PersonId: "pp-1",
+            parent2PersonId: null,
             notes: null,
             externalIds: { gedcomFam: "F9" },
             children: []
@@ -50,7 +49,7 @@ describe("GEDCOM export → import preview (Phase 5 round-trip sanity)", () => {
     expect(validateFamMatches(preview, merged)).toBeNull();
     expect(preview.fams.length).toBe(1);
     const norm = normalizeGedcomForTest(gedcomUtf8);
-    expect(norm).toMatch(/_TREEMICH_IMMICH_PERSON_ID/);
+    expect(norm).toMatch(/_TREEMICH_PERSON_ID/);
   });
 
   it("checked-in minimal UTF-8 fixture parses and matches when INDI is wired to Immich", () => {
@@ -67,7 +66,7 @@ describe("GEDCOM export → import preview (Phase 5 round-trip sanity)", () => {
     const preview = buildGedcomImportPreview(ged);
     const merged = mergeIndiMatches({}, preview.records);
 
-    expect(preview.indis.map((row) => row.immichHint).sort()).toEqual(["immich-ana", "immich-jose"]);
+    expect(preview.indis.map((row) => row.personHint).sort()).toEqual(["immich-ana", "immich-jose"]);
     expect(preview.fams).toEqual([
       {
         xref: "@F1@",

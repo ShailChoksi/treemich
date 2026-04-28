@@ -8,7 +8,6 @@ describe("buildGedcomDocument", () => {
         personProfiles: [
           {
             id: "pp-dad",
-            immichPersonId: "dad",
             gender: "MALE",
             givenName: "Ann",
             surname: "Other",
@@ -17,7 +16,6 @@ describe("buildGedcomDocument", () => {
           },
           {
             id: "pp-mom",
-            immichPersonId: "mom",
             gender: "FEMALE",
             givenName: "Bob",
             surname: "Other",
@@ -26,7 +24,6 @@ describe("buildGedcomDocument", () => {
           },
           {
             id: "pp-child",
-            immichPersonId: "kid",
             gender: "UNKNOWN",
             givenName: "Kid",
             surname: "Other",
@@ -35,15 +32,15 @@ describe("buildGedcomDocument", () => {
           }
         ],
         relationships: [
-          { id: "rel-sp", fromPersonId: "dad", toPersonId: "mom", type: "SPOUSE_OF", familyId: null }
+          { id: "rel-sp", fromPersonId: "pp-dad", toPersonId: "pp-mom", type: "SPOUSE_OF", familyId: null }
         ],
         families: [
           {
             id: "fam-1",
-            parent1ImmichPersonId: "dad",
-            parent2ImmichPersonId: "mom",
+            parent1PersonId: "pp-dad",
+            parent2PersonId: "pp-mom",
             notes: "nuclear",
-            children: [{ childImmichPersonId: "kid", pedigree: "ADOPTED" }]
+            children: [{ childPersonId: "pp-child", pedigree: "ADOPTED" }]
           }
         ],
         lifeEvents: [
@@ -123,14 +120,16 @@ describe("buildGedcomDocument", () => {
     );
 
     expect(xrefs.treemichGedcomXrefMapVersion).toBe(1);
-    expect(xrefs.indi["I0001"]).toEqual({ immichPersonId: "dad", personProfileId: "pp-dad" });
+    // Profiles are sorted by id: pp-child < pp-dad < pp-mom
+    expect(xrefs.indi["I0001"]).toEqual({ personProfileId: "pp-child" });
+    expect(xrefs.indi["I0002"]).toEqual({ personProfileId: "pp-dad" });
     expect(xrefs.fam["F0001"]?.familyId).toBe("fam-1");
 
     const norm = normalizeGedcomForTest(gedcomUtf8);
     expect(norm).toContain("0 @I0001@ INDI");
-    expect(norm).toContain("1 _TREEMICH_IMMICH_PERSON_ID dad");
+    expect(norm).toContain("1 _TREEMICH_PERSON_ID pp-dad");
     expect(norm).toContain("0 @F0001@ FAM");
-    expect(norm).toContain("1 CHIL @I0002@");
+    expect(norm).toContain("1 CHIL @I0001@");
     expect(norm).toContain("2 PEDI adopted");
     expect(norm).toContain("1 BIRT");
     expect(norm).toContain("2 DATE 1 JUN 2010");
@@ -151,7 +150,6 @@ describe("buildGedcomDocument", () => {
         personProfiles: [
           {
             id: "pp-live",
-            immichPersonId: "live",
             gender: "FEMALE",
             givenName: "Live",
             surname: "Person",
@@ -200,7 +198,6 @@ describe("buildGedcomDocument", () => {
       personProfiles: [
         {
           id: "pp-1",
-          immichPersonId: "p1",
           gender: "UNKNOWN",
           givenName: "Ann",
           surname: "Smith",
@@ -275,7 +272,6 @@ describe("buildGedcomDocument", () => {
         personProfiles: [
           {
             id: "pp-a",
-            immichPersonId: "a",
             gender: "MALE",
             givenName: "A",
             surname: "One",
@@ -284,7 +280,6 @@ describe("buildGedcomDocument", () => {
           },
           {
             id: "pp-b",
-            immichPersonId: "b",
             gender: "FEMALE",
             givenName: "B",
             surname: "Two",
@@ -293,13 +288,13 @@ describe("buildGedcomDocument", () => {
           }
         ],
         relationships: [
-          { id: "rel-sp", fromPersonId: "a", toPersonId: "b", type: "SPOUSE_OF", familyId: null }
+          { id: "rel-sp", fromPersonId: "pp-a", toPersonId: "pp-b", type: "SPOUSE_OF", familyId: null }
         ],
         families: [
           {
             id: "fam-stable",
-            parent1ImmichPersonId: "a",
-            parent2ImmichPersonId: "b",
+            parent1PersonId: "pp-a",
+            parent2PersonId: "pp-b",
             notes: null,
             externalIds: { gedcomFam: "IMPORTFAM1" },
             children: []
@@ -324,7 +319,6 @@ describe("buildGedcomDocument", () => {
         personProfiles: [
           {
             id: "pp-1",
-            immichPersonId: "p1",
             gender: "UNKNOWN",
             givenName: "A",
             surname: "B",
@@ -343,6 +337,6 @@ describe("buildGedcomDocument", () => {
       },
       { includeTreemichCustomTags: false }
     );
-    expect(gedcomUtf8).not.toContain("_TREEMICH_IMMICH_PERSON_ID");
+    expect(gedcomUtf8).not.toContain("_TREEMICH_PERSON_ID");
   });
 });

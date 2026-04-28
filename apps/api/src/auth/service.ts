@@ -138,18 +138,18 @@ export class AuthService {
         data: {
           email: normalizedEmail,
           name: normalizedEmail,
-          passwordHash: hashPassword(password),
-          immichBaseUrl: "optional://local",
-          immichUserId: `local-${hashToken(normalizedEmail).slice(0, 24)}`,
-          immichEmail: normalizedEmail,
-          immichName: normalizedEmail
+          passwordHash: hashPassword(password)
         }
       }));
 
     if (!user.passwordHash) {
       await prisma.treemichUser.update({
         where: { id: user.id },
-        data: { passwordHash: hashPassword(password), email: normalizedEmail, name: user.name ?? user.immichName }
+        data: {
+          passwordHash: hashPassword(password),
+          email: normalizedEmail,
+          name: user.name ?? user.immichName ?? normalizedEmail
+        }
       });
     } else if (!verifyPassword(password, user.passwordHash)) {
       throw new TreemichAuthError("Invalid email or password");
@@ -170,9 +170,9 @@ export class AuthService {
         authenticated: true,
         user: {
           id: user.id,
-          immichUserId: user.immichUserId,
-          email: user.email ?? user.immichEmail,
-          name: user.name ?? user.immichName
+          immichUserId: user.immichUserId ?? undefined,
+          email: user.email ?? user.immichEmail ?? normalizedEmail,
+          name: user.name ?? user.immichName ?? normalizedEmail
         },
         linkStatus: {
           linked: false
@@ -259,15 +259,15 @@ export class AuthService {
         authenticated: true,
         user: {
           id: user.id,
-          immichUserId: user.immichUserId,
-          email: user.email ?? user.immichEmail,
-          name: user.name ?? user.immichName
+          immichUserId: user.immichUserId ?? undefined,
+          email: user.email ?? user.immichEmail ?? login.userEmail,
+          name: user.name ?? user.immichName ?? login.name
         },
         linkStatus: {
           linked: true,
-          immichBaseUrl: user.immichBaseUrl,
-          immichEmail: user.immichEmail,
-          immichName: user.immichName
+          immichBaseUrl: user.immichBaseUrl ?? undefined,
+          immichEmail: user.immichEmail ?? undefined,
+          immichName: user.immichName ?? undefined
         }
       }
     };
@@ -292,9 +292,9 @@ export class AuthService {
       authenticated: true,
       user: {
         id: context.user.id,
-        immichUserId: context.user.immichUserId,
-        email: context.user.email ?? context.user.immichEmail,
-        name: context.user.name ?? context.user.immichName
+        immichUserId: context.user.immichUserId ?? undefined,
+        email: context.user.email ?? context.user.immichEmail ?? context.user.id,
+        name: context.user.name ?? context.user.immichName ?? context.user.id
       },
       linkStatus: linkedAccount
         ? {

@@ -30,9 +30,7 @@ const toIsoOrNull = (value?: Date | null) => value?.toISOString() ?? null;
 const normalizeOptionalString = (value: string | null | undefined) =>
   value === undefined ? undefined : value?.trim() ? value.trim() : null;
 
-export const personExternalIdentityToJson = (
-  row: PersonExternalIdentity
-): PersonExternalIdentityRecord => ({
+export const personExternalIdentityToJson = (row: PersonExternalIdentity): PersonExternalIdentityRecord => ({
   id: row.id,
   personId: row.personId,
   provider: row.provider,
@@ -67,7 +65,10 @@ const fallbackName = (person: Pick<PersonProfile, "id" | "givenName" | "surname"
   [person.givenName, person.surname].filter(Boolean).join(" ").trim() ||
   `Person ${person.id.slice(0, 8)}`;
 
-export const personToJson = (person: PersonWithIncludes, options?: { birthDate?: string | null }): PersonRecord => {
+export const personToJson = (
+  person: PersonWithIncludes,
+  options?: { birthDate?: string | null }
+): PersonRecord => {
   const externalIdentities = person.externalIdentities.map(personExternalIdentityToJson);
   const thumbnail = person.thumbnails[0] ? personThumbnailToJson(person.thumbnails[0]) : null;
   const legacyImmich = externalIdentities.find((identity) => identity.provider === "IMMICH") ?? null;
@@ -93,7 +94,9 @@ export const personToJson = (person: PersonWithIncludes, options?: { birthDate?:
       surname: person.surname,
       nicknames: person.nicknames,
       externalIds:
-        person.externalIds != null && typeof person.externalIds === "object" && !Array.isArray(person.externalIds)
+        person.externalIds != null &&
+        typeof person.externalIds === "object" &&
+        !Array.isArray(person.externalIds)
           ? (person.externalIds as Record<string, string>)
           : {}
     },

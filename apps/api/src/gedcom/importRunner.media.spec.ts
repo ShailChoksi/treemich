@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   gedcomImportJobUpdateMany: vi.fn(),
   gedcomImportJobFindUnique: vi.fn(),
   gedcomImportJobUpdate: vi.fn(),
+  personProfileFindFirst: vi.fn(),
   personProfileFindUnique: vi.fn(),
   personProfileUpdate: vi.fn()
 }));
@@ -23,6 +24,7 @@ vi.mock("../db/client.js", () => ({
       update: mocks.gedcomImportJobUpdate
     },
     personProfile: {
+      findFirst: mocks.personProfileFindFirst,
       findUnique: mocks.personProfileFindUnique,
       update: mocks.personProfileUpdate
     },
@@ -70,12 +72,9 @@ describe("processGedcomImportJob media import", () => {
       importOptions: {},
       lineLog: []
     });
-    mocks.personProfileFindUnique.mockResolvedValueOnce({
-      id: "profile-1",
-      userId: "user-1",
-      immichPersonId: "immich-1",
-      externalIds: {}
-    });
+    const mockProfile = { id: "profile-1", userId: "user-1", immichPersonId: "immich-1", externalIds: {} };
+    mocks.personProfileFindFirst.mockResolvedValue(mockProfile);
+    mocks.personProfileFindUnique.mockResolvedValue(mockProfile);
     mocks.personProfileUpdate.mockResolvedValueOnce({});
 
     const createMediaObject = vi
@@ -90,8 +89,8 @@ describe("processGedcomImportJob media import", () => {
         createMediaObject,
         createMediaLink
       },
-      relationshipService: {
-        upsertProfile: vi.fn()
+      personService: {
+        update: vi.fn().mockResolvedValue({ id: "profile-1" })
       },
       lifeEventService: {
         createPersonLifeEvent

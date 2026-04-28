@@ -15,8 +15,6 @@ export const createResearchTaskBodySchema = z.object({
   title: z.string().trim().min(1).max(200),
   status: researchTaskStatusSchema.optional().default("OPEN"),
   personId: z.string().trim().min(1).nullable().optional(),
-  /** @deprecated Use personId. */
-  immichPersonId: z.string().trim().min(1).nullable().optional(),
   dueDate: z.string().trim().min(1).nullable().optional(),
   notes: z.string().trim().min(1).max(5000).nullable().optional()
 });
@@ -26,8 +24,6 @@ export const patchResearchTaskBodySchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   status: researchTaskStatusSchema.optional(),
   personId: z.string().trim().min(1).nullable().optional(),
-  /** @deprecated Use personId. */
-  immichPersonId: z.string().trim().min(1).nullable().optional(),
   dueDate: z.string().trim().min(1).nullable().optional(),
   notes: z.string().trim().min(1).max(5000).nullable().optional()
 });
@@ -47,8 +43,6 @@ export type ResearchTaskRecord = {
   title: string;
   status: ResearchTaskStatus;
   personId: string | null;
-  /** @deprecated Use personId. */
-  immichPersonId: string | null;
   dueDate: string | null;
   notes: string | null;
   createdAt: string;

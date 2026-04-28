@@ -116,6 +116,7 @@ describe("cooccurrence routes", () => {
       immichClientFactory: {
         getClient: getClientMock
       } as unknown as AppServices["immichClientFactory"],
+      personService: {} as unknown as AppServices["personService"],
       relationshipService: {
         getPhotoCooccurrence: getPhotoCooccurrenceMock,
         getProfilesForPersonIds: vi.fn().mockResolvedValue(new Map()),
@@ -187,7 +188,7 @@ describe("cooccurrence routes", () => {
         createFamily: vi.fn(),
         patchFamily: vi.fn(),
         deleteFamily: vi.fn(),
-        findAdoptedChildImmichPersonIds: vi.fn().mockResolvedValue([])
+        findAdoptedChildPersonIds: vi.fn().mockResolvedValue([])
       } as unknown as AppServices["familyService"]
     };
 

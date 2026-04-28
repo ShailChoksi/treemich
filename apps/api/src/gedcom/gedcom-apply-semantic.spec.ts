@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   gedcomImportJobUpdateMany: vi.fn(),
   gedcomImportJobFindUnique: vi.fn(),
   gedcomImportJobUpdate: vi.fn(),
+  personProfileFindFirst: vi.fn(),
   personProfileFindUnique: vi.fn(),
   familyFindFirst: vi.fn(),
   familyUpdate: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock("../db/client.js", () => ({
       update: mocks.gedcomImportJobUpdate
     },
     personProfile: {
+      findFirst: mocks.personProfileFindFirst,
       findUnique: mocks.personProfileFindUnique,
       update: vi.fn()
     },
@@ -62,12 +64,23 @@ describe("GEDCOM export/import semantic apply coverage", () => {
     });
     mocks.familyFindFirst.mockResolvedValue(null);
     mocks.relationshipFindFirst.mockResolvedValue(null);
-    mocks.personProfileFindUnique.mockImplementation(async ({ where }) => ({
-      id: where.userId_immichPersonId.immichPersonId === "immich-jose" ? "profile-jose" : "profile-ana",
+    const profileByImmichId = (immichId: string) => ({
+      id: immichId === "immich-jose" ? "profile-jose" : "profile-ana",
       userId: "user-1",
-      immichPersonId: where.userId_immichPersonId.immichPersonId,
+      immichPersonId: immichId,
       externalIds: {}
-    }));
+    });
+    mocks.personProfileFindFirst.mockImplementation(
+      async ({ where }: { where: { OR?: Array<{ immichPersonId?: string }>; id?: string } }) => {
+        // First call pattern: buildIndiPersonIdMap uses OR: [{id}, {immichPersonId}]
+        const immichId = where.OR?.find((c) => c.immichPersonId != null)?.immichPersonId;
+        if (immichId) return profileByImmichId(immichId);
+        // Second call pattern: INDI loop resolves by canonical id
+        if (where.id === "profile-jose") return profileByImmichId("immich-jose");
+        if (where.id === "profile-ana") return profileByImmichId("immich-ana");
+        return null;
+      }
+    );
 
     const services = {
       evidenceService: {
@@ -76,8 +89,8 @@ describe("GEDCOM export/import semantic apply coverage", () => {
         createMediaObject: vi.fn(),
         createMediaLink: vi.fn()
       },
-      relationshipService: {
-        upsertProfile: vi.fn()
+      personService: {
+        update: vi.fn().mockResolvedValue({ id: "profile-jose" })
       },
       lifeEventService: {
         createPersonLifeEvent: vi.fn(),
@@ -144,19 +157,25 @@ describe("GEDCOM export/import semantic apply coverage", () => {
     });
     mocks.familyFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
       id: "family-existing",
-      parent1ImmichPersonId: "parent-1",
-      parent2ImmichPersonId: null,
+      parent1PersonId: "profile-parent-1",
+      parent2PersonId: null,
       externalIds: {},
-      children: [{ childImmichPersonId: "child-1" }]
+      children: [{ childPersonId: "profile-child-1" }]
     });
     mocks.familyUpdate.mockResolvedValueOnce({});
     mocks.relationshipFindFirst.mockResolvedValue(null);
-    mocks.personProfileFindUnique.mockImplementation(async ({ where }) => ({
-      id: `profile-${where.userId_immichPersonId.immichPersonId}`,
-      userId: "user-1",
-      immichPersonId: where.userId_immichPersonId.immichPersonId,
-      externalIds: {}
-    }));
+    mocks.personProfileFindFirst.mockImplementation(
+      async ({ where }: { where: { OR?: Array<{ immichPersonId?: string }>; id?: string } }) => {
+        const immichId = where.OR?.find((c) => c.immichPersonId != null)?.immichPersonId;
+        if (!immichId) return null;
+        return {
+          id: `profile-${immichId}`,
+          userId: "user-1",
+          immichPersonId: immichId,
+          externalIds: {}
+        };
+      }
+    );
 
     const createFamily = vi.fn();
     const services = {
@@ -166,8 +185,8 @@ describe("GEDCOM export/import semantic apply coverage", () => {
         createMediaObject: vi.fn(),
         createMediaLink: vi.fn()
       },
-      relationshipService: {
-        upsertProfile: vi.fn()
+      personService: {
+        update: vi.fn().mockResolvedValue({ id: "profile-parent-1" })
       },
       lifeEventService: {
         createPersonLifeEvent: vi.fn(),

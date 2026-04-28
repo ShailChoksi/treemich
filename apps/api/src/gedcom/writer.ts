@@ -22,7 +22,6 @@ const GEDCOM_MONTHS = [
 
 export type GedcomExportPersonProfile = {
   id: string;
-  immichPersonId: string;
   gender: Gender;
   givenName: string | null;
   surname: string | null;
@@ -89,14 +88,14 @@ export type GedcomExportRelationship = {
 };
 
 export type GedcomExportFamilyChild = {
-  childImmichPersonId: string;
+  childPersonId: string | null;
   pedigree: FamilyChildPedigree;
 };
 
 export type GedcomExportFamily = {
   id: string;
-  parent1ImmichPersonId: string | null;
-  parent2ImmichPersonId: string | null;
+  parent1PersonId: string | null;
+  parent2PersonId: string | null;
   notes: string | null;
   children: GedcomExportFamilyChild[];
   externalIds?: Record<string, unknown>;
@@ -154,7 +153,7 @@ export type GedcomExportOptions = {
 
 export type GedcomXrefSidecarV1 = {
   treemichGedcomXrefMapVersion: 1;
-  indi: Record<string, { immichPersonId: string; personProfileId: string }>;
+  indi: Record<string, { personProfileId: string }>;
   fam: Record<
     string,
     { familyId: string | null; syntheticSpouseOnly: boolean; spousePair: [string, string] | null }
@@ -336,7 +335,7 @@ const spousePairKey = (a: string, b: string): string => {
 const husbWifeForParents = (
   parent1: string | null,
   parent2: string | null,
-  genderByImmich: Map<string, Gender>
+  genderById: Map<string, Gender>
 ): { husb: string | null; wife: string | null } => {
   const ids = [parent1, parent2].filter((x): x is string => Boolean(x?.length));
   if (ids.length === 0) {
@@ -346,8 +345,8 @@ const husbWifeForParents = (
     return { husb: ids[0]!, wife: null };
   }
   const [x, y] = ids;
-  const gx = genderByImmich.get(x!);
-  const gy = genderByImmich.get(y!);
+  const gx = genderById.get(x!);
+  const gy = genderById.get(y!);
   if (gx === "MALE" && gy !== "MALE") {
     return { husb: x!, wife: y! };
   }
@@ -367,10 +366,8 @@ export function buildGedcomDocument(
   const redactLiving = options.redactLiving === true;
   const includeTreemichCustomTags = options.includeTreemichCustomTags !== false;
 
-  const profilesSorted = [...input.personProfiles].sort((a, b) =>
-    a.immichPersonId.localeCompare(b.immichPersonId)
-  );
-  const immichToIndi = new Map<string, string>();
+  const profilesSorted = [...input.personProfiles].sort((a, b) => a.id.localeCompare(b.id));
+  const profileIdToIndi = new Map<string, string>();
   const xrefs: GedcomXrefSidecarV1 = {
     treemichGedcomXrefMapVersion: 1,
     indi: {},
@@ -382,11 +379,11 @@ export function buildGedcomDocument(
 
   profilesSorted.forEach((p, i) => {
     const xref = padXref("I", i + 1);
-    immichToIndi.set(p.immichPersonId, xref);
-    xrefs.indi[xref] = { immichPersonId: p.immichPersonId, personProfileId: p.id };
+    profileIdToIndi.set(p.id, xref);
+    xrefs.indi[xref] = { personProfileId: p.id };
   });
 
-  const genderByImmich = new Map(input.personProfiles.map((p) => [p.immichPersonId, p.gender]));
+  const genderById = new Map(input.personProfiles.map((p) => [p.id, p.gender]));
 
   const livingByProfileId = new Map<string, boolean>();
   for (const p of input.personProfiles) {
@@ -445,8 +442,8 @@ export function buildGedcomDocument(
   for (const f of familiesSorted) {
     const xref = allocateFamXref(f);
     familyIdToXref.set(f.id, xref);
-    const p1 = f.parent1ImmichPersonId;
-    const p2 = f.parent2ImmichPersonId;
+    const p1 = f.parent1PersonId;
+    const p2 = f.parent2PersonId;
     let pair: [string, string] | null = null;
     if (p1 && p2) {
       const s = [p1, p2].sort();
@@ -462,8 +459,8 @@ export function buildGedcomDocument(
   const spouseRelationships = input.relationships.filter((r) => r.type === "SPOUSE_OF");
   const familiesByPair = new Map<string, GedcomExportFamily[]>();
   for (const f of input.families) {
-    const a = f.parent1ImmichPersonId;
-    const b = f.parent2ImmichPersonId;
+    const a = f.parent1PersonId;
+    const b = f.parent2PersonId;
     if (!a || !b) {
       continue;
     }
@@ -527,27 +524,25 @@ export function buildGedcomDocument(
 
   for (const f of familiesSorted) {
     const xref = familyIdToXref.get(f.id)!;
-    const { husb, wife } = husbWifeForParents(
-      f.parent1ImmichPersonId,
-      f.parent2ImmichPersonId,
-      genderByImmich
-    );
+    const { husb, wife } = husbWifeForParents(f.parent1PersonId, f.parent2PersonId, genderById);
     const lines = famLinesByXref.get(xref)!;
     if (husb) {
-      const ix = immichToIndi.get(husb);
+      const ix = profileIdToIndi.get(husb);
       if (ix) {
         lines.push(line(1, "HUSB", `@${ix}@`));
       }
     }
     if (wife) {
-      const ix = immichToIndi.get(wife);
+      const ix = profileIdToIndi.get(wife);
       if (ix) {
         lines.push(line(1, "WIFE", `@${ix}@`));
       }
     }
-    const kids = [...f.children].sort((a, b) => a.childImmichPersonId.localeCompare(b.childImmichPersonId));
+    const kids = [...f.children]
+      .filter((c): c is typeof c & { childPersonId: string } => c.childPersonId != null)
+      .sort((a, b) => a.childPersonId.localeCompare(b.childPersonId));
     for (const c of kids) {
-      const ix = immichToIndi.get(c.childImmichPersonId);
+      const ix = profileIdToIndi.get(c.childPersonId);
       if (!ix) {
         continue;
       }
@@ -565,16 +560,16 @@ export function buildGedcomDocument(
   for (const pairKey of syntheticPairs) {
     const xref = syntheticPairToXref.get(pairKey)!;
     const [lo, hi] = pairKey.split("|") as [string, string];
-    const { husb, wife } = husbWifeForParents(lo, hi, genderByImmich);
+    const { husb, wife } = husbWifeForParents(lo, hi, genderById);
     const lines = famLinesByXref.get(xref)!;
     if (husb) {
-      const ix = immichToIndi.get(husb);
+      const ix = profileIdToIndi.get(husb);
       if (ix) {
         lines.push(line(1, "HUSB", `@${ix}@`));
       }
     }
     if (wife) {
-      const ix = immichToIndi.get(wife);
+      const ix = profileIdToIndi.get(wife);
       if (ix) {
         lines.push(line(1, "WIFE", `@${ix}@`));
       }
@@ -755,11 +750,11 @@ export function buildGedcomDocument(
   const indiBlocks: string[][] = [];
 
   for (const p of profilesSorted) {
-    const ix = immichToIndi.get(p.immichPersonId)!;
+    const ix = profileIdToIndi.get(p.id)!;
     const indiX = `@${ix}@`;
     const block: string[] = [line(0, indiX, "INDI")];
     if (includeTreemichCustomTags) {
-      block.push(line(1, "_TREEMICH_IMMICH_PERSON_ID", p.immichPersonId));
+      block.push(line(1, "_TREEMICH_PERSON_ID", p.id));
     }
     const primaryName =
       input.personNames.find((n) => n.personProfileId === p.id && n.isPrimary) ??
@@ -814,22 +809,20 @@ export function buildGedcomDocument(
 
     for (const f of familiesSorted) {
       const xref = familyIdToXref.get(f.id)!;
-      const p1 = f.parent1ImmichPersonId;
-      const p2 = f.parent2ImmichPersonId;
-      if (p1 === p.immichPersonId || p2 === p.immichPersonId) {
+      if (f.parent1PersonId === p.id || f.parent2PersonId === p.id) {
         block.push(line(1, "FAMS", `@${xref}@`));
       }
     }
     for (const k of syntheticPairs) {
       const [lo, hi] = k.split("|") as [string, string];
-      if (lo === p.immichPersonId || hi === p.immichPersonId) {
+      if (lo === p.id || hi === p.id) {
         const sx = syntheticPairToXref.get(k)!;
         block.push(line(1, "FAMS", `@${sx}@`));
       }
     }
     for (const f of familiesSorted) {
       const xref = familyIdToXref.get(f.id)!;
-      if (f.children.some((c) => c.childImmichPersonId === p.immichPersonId)) {
+      if (f.children.some((c) => c.childPersonId === p.id)) {
         block.push(line(1, "FAMC", `@${xref}@`));
       }
     }

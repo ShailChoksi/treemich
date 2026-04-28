@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpValidationError } from "./errors.js";
 
 const {
+  personProfileFindFirstMock,
   personProfileFindUniqueMock,
+  personExternalIdentityFindFirstMock,
   relationshipFindFirstMock,
   prismaTransactionMock,
   prismaLifeEventFindFirstMock,
@@ -11,7 +13,9 @@ const {
   txLifeEventFindFirstOrThrowMock,
   txCitationDeleteManyMock
 } = vi.hoisted(() => ({
+  personProfileFindFirstMock: vi.fn(),
   personProfileFindUniqueMock: vi.fn(),
+  personExternalIdentityFindFirstMock: vi.fn().mockResolvedValue(null),
   relationshipFindFirstMock: vi.fn(),
   prismaTransactionMock: vi.fn(),
   prismaLifeEventFindFirstMock: vi.fn(),
@@ -23,7 +27,8 @@ const {
 
 vi.mock("../db/client.js", () => ({
   prisma: {
-    personProfile: { findUnique: personProfileFindUniqueMock },
+    personProfile: { findFirst: personProfileFindFirstMock, findUnique: personProfileFindUniqueMock },
+    personExternalIdentity: { findFirst: personExternalIdentityFindFirstMock },
     relationship: { findFirst: relationshipFindFirstMock },
     $transaction: prismaTransactionMock,
     lifeEvent: { findFirst: prismaLifeEventFindFirstMock },
@@ -58,7 +63,9 @@ const fullEventRow = (overrides: Record<string, unknown> = {}) =>
 describe("LifeEventService CUSTOM customLabel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    personProfileFindFirstMock.mockResolvedValue({ id: "pp-1" });
     personProfileFindUniqueMock.mockResolvedValue({ id: "pp-1" });
+    personExternalIdentityFindFirstMock.mockResolvedValue(null);
     relationshipFindFirstMock.mockResolvedValue({ id: "rel-1", userId: "u1" });
     prismaLifeEventFindFirstMock.mockReset();
     prismaLifeEventFindFirstMock.mockResolvedValue(null);

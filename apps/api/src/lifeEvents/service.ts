@@ -47,10 +47,12 @@ export class LifeEventService {
   private async getPersonProfile(userId: string, personId: string) {
     return (
       (await prisma.personProfile.findFirst({ where: { userId, id: personId } })) ??
-      (await prisma.personExternalIdentity.findFirst({
-        where: { userId, providerPersonId: personId },
-        include: { person: true }
-      }))?.person ??
+      (
+        await prisma.personExternalIdentity.findFirst({
+          where: { userId, providerPersonId: personId },
+          include: { person: true }
+        })
+      )?.person ??
       (await prisma.personProfile.findFirst({ where: { userId, immichPersonId: personId } }))
     );
   }
@@ -315,7 +317,7 @@ export class LifeEventService {
         month: e.month,
         day: e.day
       })),
-      { immichPersonId: personId }
+      { personId }
     );
     return { findings };
   }

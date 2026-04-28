@@ -91,8 +91,12 @@ export const loadGedcomExportInput = async (userId: string): Promise<GedcomExpor
     prisma.mediaLink.findMany({ where: { userId } })
   ]);
 
-  const externalIdsList = personProfiles.map((p) => ({
-    ...p,
+  const mappedProfiles = personProfiles.map((p) => ({
+    id: p.id,
+    gender: p.gender,
+    givenName: p.givenName,
+    surname: p.surname,
+    displayNameOverride: p.displayNameOverride,
     externalIds:
       p.externalIds != null && typeof p.externalIds === "object" && !Array.isArray(p.externalIds)
         ? (p.externalIds as Record<string, unknown>)
@@ -100,7 +104,7 @@ export const loadGedcomExportInput = async (userId: string): Promise<GedcomExpor
   }));
 
   return {
-    personProfiles: externalIdsList,
+    personProfiles: mappedProfiles,
     relationships: relationships.map((r) => ({
       id: r.id,
       fromPersonId: r.fromPersonId,
@@ -110,15 +114,15 @@ export const loadGedcomExportInput = async (userId: string): Promise<GedcomExpor
     })),
     families: familyRows.map((f) => ({
       id: f.id,
-      parent1ImmichPersonId: f.parent1ImmichPersonId,
-      parent2ImmichPersonId: f.parent2ImmichPersonId,
+      parent1PersonId: f.parent1PersonId,
+      parent2PersonId: f.parent2PersonId,
       notes: f.notes,
       externalIds:
         f.externalIds != null && typeof f.externalIds === "object" && !Array.isArray(f.externalIds)
           ? (f.externalIds as Record<string, unknown>)
           : {},
       children: f.children.map((c) => ({
-        childImmichPersonId: c.childImmichPersonId,
+        childPersonId: c.childPersonId,
         pedigree: c.pedigree
       }))
     })),

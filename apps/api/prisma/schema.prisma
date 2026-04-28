@@ -114,10 +114,10 @@ enum PersonThumbnailSource {
 
 model TreemichUser {
   id                  String                @id @default(cuid())
-  immichBaseUrl       String
-  immichUserId        String
-  immichEmail         String
-  immichName          String
+  immichBaseUrl       String?
+  immichUserId        String?
+  immichEmail         String?
+  immichName          String?
   email               String?
   name                String?
   passwordHash        String?
@@ -204,6 +204,9 @@ model PersonProfile {
   lifeEvents          LifeEvent[]
   personNames         PersonName[]
   researchTasks       ResearchTask[]
+  familiesAsParent1   Family[]       @relation("FamilyParent1")
+  familiesAsParent2   Family[]       @relation("FamilyParent2")
+  familiesAsChild     FamilyChild[]  @relation("FamilyChild")
 
   @@unique([userId, immichPersonId])
   @@index([userId])
@@ -274,21 +277,19 @@ model PersonName {
 }
 
 model ResearchTask {
-  id             String             @id @default(cuid())
-  userId         String
-  personId       String?
-  immichPersonId String?
-  title          String
-  status         ResearchTaskStatus @default(OPEN)
-  dueDate        String?
-  notes          String?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  user           TreemichUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  person         PersonProfile?     @relation(fields: [personId], references: [id], onDelete: Cascade)
+  id        String             @id @default(cuid())
+  userId    String
+  personId  String?
+  title     String
+  status    ResearchTaskStatus @default(OPEN)
+  dueDate   String?
+  notes     String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  user      TreemichUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person    PersonProfile?     @relation(fields: [personId], references: [id], onDelete: Cascade)
 
   @@index([userId, personId])
-  @@index([userId, immichPersonId])
   @@index([userId, status])
   @@index([userId, createdAt])
 }
@@ -318,42 +319,39 @@ model Relationship {
 
 /// Union of up to two parents plus children (FAM-style). Canonical for children in this union; parent/child graph edges with {@link Relationship#familyId} are derived.
 model Family {
-  id                     String         @id @default(cuid())
-  userId                 String
-  parent1PersonId        String?
-  parent2PersonId        String?
-  parent1ImmichPersonId  String?
-  parent2ImmichPersonId String?
-  notes                  String?
+  id              String         @id @default(cuid())
+  userId          String
+  parent1PersonId String?
+  parent2PersonId String?
+  notes           String?
   /// Optional map for interchange (e.g. `{ "gedcomFam": "F12" }` from GEDCOM import for idempotent FAM rows).
-  externalIds            Json           @default("{}")
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
-  user                   TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  children               FamilyChild[]
-  derivedRelationships   Relationship[]
-  lifeEvents             LifeEvent[]
+  externalIds     Json           @default("{}")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  user            TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent1         PersonProfile? @relation("FamilyParent1", fields: [parent1PersonId], references: [id], onDelete: SetNull)
+  parent2         PersonProfile? @relation("FamilyParent2", fields: [parent2PersonId], references: [id], onDelete: SetNull)
+  children        FamilyChild[]
+  derivedRelationships Relationship[]
+  lifeEvents      LifeEvent[]
 
   @@index([userId])
   @@index([userId, parent1PersonId])
   @@index([userId, parent2PersonId])
-  @@index([userId, parent1ImmichPersonId])
-  @@index([userId, parent2ImmichPersonId])
 }
 
 model FamilyChild {
-  id                  String               @id @default(cuid())
-  familyId            String
-  childPersonId       String?
-  childImmichPersonId String?
-  pedigree            FamilyChildPedigree @default(UNKNOWN)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  family              Family               @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  id            String              @id @default(cuid())
+  familyId      String
+  childPersonId String?
+  pedigree      FamilyChildPedigree @default(UNKNOWN)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  family        Family              @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  child         PersonProfile?      @relation("FamilyChild", fields: [childPersonId], references: [id], onDelete: SetNull)
 
-  @@unique([familyId, childImmichPersonId])
+  @@unique([familyId, childPersonId])
   @@index([childPersonId])
-  @@index([childImmichPersonId])
 }
 
 model Place {
