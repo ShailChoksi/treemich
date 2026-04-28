@@ -153,6 +153,10 @@ const sameRelationshipList = (left: RelationshipRecord[], right: RelationshipRec
     );
   });
 
+type RefreshGraphDataOptions = {
+  bypassSaveGuard?: boolean;
+};
+
 export {
   deriveProfileDisplayValuesFromLifeEvents,
   parseDateInputToParts,
@@ -533,12 +537,15 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     }
   }, []);
 
-  const refreshGraphData = useCallback(async () => {
-    if (profileDraftDirtyRef.current) {
+  const refreshGraphData = useCallback(async (options: RefreshGraphDataOptions = {}) => {
+    if (!options.bypassSaveGuard && profileDraftDirtyRef.current) {
       setStatus("Save your profile changes before refreshing the tree.");
       return;
     }
-    if (isSavingProfileRef.current || isSavingRelationshipRef.current || savingFamilyIdRef.current) {
+    if (
+      !options.bypassSaveGuard &&
+      (isSavingProfileRef.current || isSavingRelationshipRef.current || savingFamilyIdRef.current)
+    ) {
       setStatus("Wait for the current save to finish before refreshing the tree.");
       return;
     }
@@ -647,7 +654,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           body.parent1PersonId !== undefined ||
           body.parent2PersonId !== undefined;
         if (structureChanged) {
-          await refreshGraphData();
+          await refreshGraphData({ bypassSaveGuard: true });
         } else {
           const pid = selectedPersonIdRef.current;
           if (pid) {
@@ -668,7 +675,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       try {
         await deleteFamily(familyId);
         setFamiliesByPersonId({});
-        await refreshGraphData();
+        await refreshGraphData({ bypassSaveGuard: true });
       } finally {
         setSavingFamilyId(null);
       }
@@ -1243,7 +1250,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setIsSavingRelationship(true);
       try {
         await createRelationship(sourcePersonId, targetPersonId, relationshipType);
-        await refreshGraphData();
+        await refreshGraphData({ bypassSaveGuard: true });
         setStatus("Relationship saved");
       } catch (error: unknown) {
         setStatus(getErrorMessage(error));
@@ -1303,7 +1310,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setIsSavingRelationship(true);
       try {
         await deleteRelationship(relationship.fromPersonId, relationship.toPersonId, relationship.type);
-        await refreshGraphData();
+        await refreshGraphData({ bypassSaveGuard: true });
         setStatus("Relationship deleted");
       } catch (error: unknown) {
         setStatus(getErrorMessage(error));
@@ -1429,13 +1436,13 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
             ...current,
             [rid]: next
           }));
-          await refreshGraphData();
+          await refreshGraphData({ bypassSaveGuard: true });
           setStatus("Relationship updated");
           return;
         }
         await deleteRelationship(relationship.fromPersonId, relationship.toPersonId, relationship.type);
         await createRelationship(selectedPerson.id, relatedPersonId, relationshipType);
-        await refreshGraphData();
+        await refreshGraphData({ bypassSaveGuard: true });
         setStatus("Relationship updated");
       } catch (error: unknown) {
         setStatus(getErrorMessage(error));
@@ -1568,7 +1575,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         setStatus("Life event saved");
         const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
         setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
-        await refreshGraphData();
+        await refreshGraphData({ bypassSaveGuard: true });
       } catch (error: unknown) {
         setStatus(getErrorMessage(error));
         throw error;
@@ -1584,7 +1591,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         setStatus("Life event saved");
         const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
         setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
-        await refreshGraphData();
+        await refreshGraphData({ bypassSaveGuard: true });
       } catch (error: unknown) {
         setStatus(getErrorMessage(error));
         throw error;
@@ -1600,7 +1607,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         setStatus("Life event deleted");
         const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
         setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
-        await refreshGraphData();
+        await refreshGraphData({ bypassSaveGuard: true });
       } catch (error: unknown) {
         setStatus(getErrorMessage(error));
         throw error;

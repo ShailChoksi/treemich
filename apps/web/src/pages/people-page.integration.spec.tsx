@@ -2,12 +2,20 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PeoplePage } from "./people";
+import type { PersonRecord, RelationshipRecord, RelationshipType } from "../lib/api";
 import type { GraphUiSnapshot, MapUiSnapshot } from "../lib/workspaceUiState";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 type GraphProps = {
+  people?: PersonRecord[];
+  relationships?: RelationshipRecord[];
+  onCreateRelationship?: (
+    sourcePersonId: string,
+    targetPersonId: string,
+    relationshipType: RelationshipType
+  ) => Promise<void>;
   initialUiState?: GraphUiSnapshot;
   onUiStateChange?: (next: GraphUiSnapshot) => void;
 };
@@ -72,6 +80,8 @@ const birthEventPayload = {
 describe("PeoplePage + life events (integration)", () => {
   const originalFetch = globalThis.fetch;
   let placesMapCallCount = 0;
+  let peopleLoadCount = 0;
+  let relationshipsLoadCount = 0;
 
   beforeEach(() => {
     try {
@@ -82,6 +92,8 @@ describe("PeoplePage + life events (integration)", () => {
     latestMapPanelProps = null;
     latestGraphProps = null;
     placesMapCallCount = 0;
+    peopleLoadCount = 0;
+    relationshipsLoadCount = 0;
     globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       const method = init?.method ?? "GET";
@@ -98,6 +110,16 @@ describe("PeoplePage + life events (integration)", () => {
       }
 
       if (method === "GET" && url.includes("/relationships?")) {
+        relationshipsLoadCount += 1;
+        if (relationshipsLoadCount > 1) {
+          return jsonResponse({
+            relationships: [
+              { id: "r1", fromPersonId: "p1", toPersonId: "p2", type: "PARENT_OF" },
+              { id: "r2", fromPersonId: "p1", toPersonId: "p3", type: "SIBLING_OF" }
+            ],
+            nextCursor: null
+          });
+        }
         return jsonResponse({
           relationships: [{ id: "r1", fromPersonId: "p1", toPersonId: "p2", type: "PARENT_OF" }],
           nextCursor: null
@@ -109,12 +131,26 @@ describe("PeoplePage + life events (integration)", () => {
       }
 
       if (method === "GET" && /\/people$/.test(url)) {
+        peopleLoadCount += 1;
+        if (peopleLoadCount > 1) {
+          return jsonResponse({
+            people: [
+              { id: "p1", name: "Alex", hasRelationship: true, birthDate: "1990-01-01" },
+              { id: "p2", name: "Blair", hasRelationship: true, birthDate: null },
+              { id: "p3", name: "Charlie Brown", hasRelationship: true, birthDate: null }
+            ]
+          });
+        }
         return jsonResponse({
           people: [
             { id: "p1", name: "Alex", hasRelationship: true, birthDate: "1990-01-01" },
             { id: "p2", name: "Blair", hasRelationship: true, birthDate: null }
           ]
         });
+      }
+
+      if (method === "POST" && url.includes("/people/p1/relationships")) {
+        return jsonResponse({ id: "r2", fromPersonId: "p1", toPersonId: "p3", type: "SIBLING_OF" });
       }
 
       if (method === "GET" && url.includes("/people/p1/life-events/validation")) {
@@ -328,6 +364,52 @@ describe("PeoplePage + life events (integration)", () => {
           longitude: -71.0589
         })
       ])
+    );
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("refreshes people and relationships after creating a relationship while save state is active", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (latestGraphProps?.onCreateRelationship) {
+        break;
+      }
+    }
+
+    await act(async () => {
+      await latestGraphProps?.onCreateRelationship?.("p1", "p3", "SIBLING_OF");
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (latestGraphProps?.people?.some((person) => person.id === "p3")) {
+        break;
+      }
+    }
+
+    expect(peopleLoadCount).toBeGreaterThanOrEqual(2);
+    expect(relationshipsLoadCount).toBeGreaterThanOrEqual(2);
+    expect(latestGraphProps?.people).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "p3", name: "Charlie Brown" })])
+    );
+    expect(latestGraphProps?.relationships).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "r2", toPersonId: "p3" })])
     );
 
     act(() => {

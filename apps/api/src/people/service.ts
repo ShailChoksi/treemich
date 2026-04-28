@@ -9,6 +9,7 @@ import type {
 import type {
   CreatePersonBody,
   CreatePersonExternalIdentityBody,
+  ImmichPerson,
   PatchPersonBody,
   PersonExternalIdentityRecord,
   PersonRecord,
@@ -23,6 +24,12 @@ type DbClient = Prisma.TransactionClient | typeof prisma;
 type PersonWithIncludes = PersonProfile & {
   externalIdentities: PersonExternalIdentity[];
   thumbnails: PersonThumbnail[];
+};
+
+export type ImmichExternalIdentityNameSyncResult = {
+  matched: number;
+  updated: number;
+  skippedUnnamed: number;
 };
 
 const toIsoOrNull = (value?: Date | null) => value?.toISOString() ?? null;
@@ -260,6 +267,62 @@ export class PersonService {
     if (deleted.count === 0) {
       throw new HttpNotFoundError("Person not found");
     }
+  }
+
+  async syncImmichExternalIdentityNames(
+    userId: string,
+    people: Pick<ImmichPerson, "id" | "name">[],
+    db: DbClient = prisma
+  ): Promise<ImmichExternalIdentityNameSyncResult> {
+    const namesByImmichId = new Map(
+      people
+        .map((person) => [person.id, String(person.name ?? "").trim()] as const)
+        .filter((entry): entry is readonly [string, string] => Boolean(entry[0]))
+    );
+    if (namesByImmichId.size === 0) {
+      return { matched: 0, updated: 0, skippedUnnamed: 0 };
+    }
+
+    const identities = await db.personExternalIdentity.findMany({
+      where: {
+        userId,
+        provider: "IMMICH",
+        providerPersonId: { in: [...namesByImmichId.keys()] }
+      },
+      select: {
+        id: true,
+        providerPersonId: true,
+        displayName: true
+      }
+    });
+
+    const now = new Date();
+    let updated = 0;
+    let skippedUnnamed = 0;
+    for (const identity of identities) {
+      const immichName = namesByImmichId.get(identity.providerPersonId)?.trim();
+      if (!immichName) {
+        skippedUnnamed += 1;
+        continue;
+      }
+      if (identity.displayName?.trim() === immichName) {
+        continue;
+      }
+      await db.personExternalIdentity.update({
+        where: { id: identity.id },
+        data: {
+          displayName: immichName,
+          lastSeenAt: now
+        }
+      });
+      updated += 1;
+    }
+
+    return {
+      matched: identities.length,
+      updated,
+      skippedUnnamed
+    };
   }
 
   async addExternalIdentity(

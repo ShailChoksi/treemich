@@ -3,7 +3,8 @@ import type { AuthState } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import { env } from "../config/env.js";
 import { createOpaqueToken, encryptSecret, hashPassword, hashToken, verifyPassword } from "./crypto.js";
-import { loginToImmich } from "../integrations/immich/client.js";
+import { ImmichClient, loginToImmich } from "../integrations/immich/client.js";
+import { PersonService } from "../people/service.js";
 
 const authSessionIncludeLight = {
   user: true
@@ -56,6 +57,13 @@ type ResolvedSessionContext<TOptions extends SessionResolutionOptions | undefine
   : AuthenticatedRequestContext;
 
 type CachedContext = AuthenticatedRequestContext | LinkedAuthenticatedRequestContext | null;
+
+type ImmichPeopleClient = Pick<ImmichClient, "listPeople" | "dispose">;
+
+type AuthServiceOptions = {
+  personService?: Pick<PersonService, "syncImmichExternalIdentityNames">;
+  createImmichClientFromToken?: (accessToken: string) => ImmichPeopleClient;
+};
 
 class SessionContextCache {
   private readonly cache = new Map<string, { expiresAt: number; context: CachedContext }>();
@@ -112,6 +120,11 @@ export class AuthService {
     this.sessionCacheTtlMs,
     this.maxSessionCacheEntries
   );
+  private readonly personService: Pick<PersonService, "syncImmichExternalIdentityNames">;
+
+  constructor(private readonly options: AuthServiceOptions = {}) {
+    this.personService = options.personService ?? new PersonService();
+  }
 
   async loginWithPassword(
     email: string,
@@ -244,6 +257,8 @@ export class AuthService {
       }
     });
 
+    await this.syncImmichPersonNamesAfterLogin(user.id, login.accessToken);
+
     const sessionToken = createOpaqueToken();
     await prisma.treemichSession.create({
       data: {
@@ -346,6 +361,32 @@ export class AuthService {
     });
 
     return result.count;
+  }
+
+  private createImmichClientFromToken(accessToken: string): ImmichPeopleClient {
+    return (
+      this.options.createImmichClientFromToken?.(accessToken) ??
+      new ImmichClient({
+        baseUrl: env.IMMICH_BASE_URL,
+        accessToken,
+        peoplePageSize: env.IMMICH_PEOPLE_PAGE_SIZE,
+        timeoutMs: env.IMMICH_HTTP_TIMEOUT_MS,
+        maxRetries: env.IMMICH_HTTP_MAX_RETRIES,
+        retryBaseDelayMs: env.IMMICH_HTTP_RETRY_BASE_DELAY_MS
+      })
+    );
+  }
+
+  private async syncImmichPersonNamesAfterLogin(userId: string, accessToken: string) {
+    const client = this.createImmichClientFromToken(accessToken);
+    try {
+      const people = await client.listPeople();
+      await this.personService.syncImmichExternalIdentityNames(userId, people);
+    } catch {
+      // Name recovery should not prevent a successful Immich login.
+    } finally {
+      client.dispose();
+    }
   }
 
   private async resolveSession<TOptions extends SessionResolutionOptions | undefined = undefined>(

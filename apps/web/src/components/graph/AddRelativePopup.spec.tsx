@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RELATIONSHIP_TYPES } from "../../lib/relationshipConstants";
+import type { AddRelativeSlot } from "./NodeActionButtons";
 import { AddRelativePopup } from "./AddRelativePopup";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
@@ -31,11 +32,14 @@ describe("AddRelativePopup", () => {
     vi.restoreAllMocks();
   });
 
-  const renderPopup = (onSubmit = vi.fn().mockResolvedValue(undefined)) => {
+  const renderPopup = (
+    onSubmit = vi.fn().mockResolvedValue(undefined),
+    slot: AddRelativeSlot = "siblingOrSpouse"
+  ) => {
     act(() => {
       root.render(
         <AddRelativePopup
-          slot="siblingOrSpouse"
+          slot={slot}
           selectedPersonName="Selected Person"
           people={people}
           busy={false}
@@ -89,6 +93,66 @@ describe("AddRelativePopup", () => {
       relationshipType: RELATIONSHIP_TYPES.siblingOf
     });
   });
+
+  it("creates a new person when submitting an unmatched typed name directly", async () => {
+    const onSubmit = renderPopup();
+
+    await typeName("Charlie Brown");
+    const submit = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Create & Add")
+    );
+    expect(submit).toBeTruthy();
+
+    await act(async () => {
+      submit!.click();
+    });
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      type: "new",
+      givenName: "Charlie",
+      surname: "Brown",
+      gender: "UNKNOWN",
+      relationshipType: RELATIONSHIP_TYPES.siblingOf
+    });
+  });
+
+  it.each([
+    {
+      slot: "parent" as const,
+      expectedRelationshipType: undefined
+    },
+    {
+      slot: "child" as const,
+      expectedRelationshipType: undefined
+    },
+    {
+      slot: "siblingOrSpouse" as const,
+      expectedRelationshipType: RELATIONSHIP_TYPES.siblingOf
+    }
+  ])(
+    "creates a new person when submitting an unmatched typed name directly for the $slot slot",
+    async ({ slot, expectedRelationshipType }) => {
+      const onSubmit = renderPopup(undefined, slot);
+
+      await typeName("Charlie Brown");
+      const submit = Array.from(container.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes("Create & Add")
+      );
+      expect(submit).toBeTruthy();
+
+      await act(async () => {
+        submit!.click();
+      });
+
+      expect(onSubmit).toHaveBeenCalledWith({
+        type: "new",
+        givenName: "Charlie",
+        surname: "Brown",
+        gender: "UNKNOWN",
+        relationshipType: expectedRelationshipType
+      });
+    }
+  );
 
   it("switches to create mode and submits new person payload", async () => {
     const onSubmit = renderPopup();

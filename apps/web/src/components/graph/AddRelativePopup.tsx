@@ -40,6 +40,19 @@ const normalizeOptionalString = (value: string) => {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 };
+const splitTypedPersonName = (fullName: string) => {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return { givenName: null, surname: null };
+  }
+  if (parts.length === 1) {
+    return { givenName: parts[0] ?? null, surname: null };
+  }
+  return {
+    givenName: parts[0] ?? null,
+    surname: parts.slice(1).join(" ") || null
+  };
+};
 
 export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCancel, onSubmit }: Props) => {
   const [personName, setPersonName] = useState("");
@@ -155,6 +168,18 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
             gender: newGender,
             relationshipType: relationshipTypeForSubmit
           });
+        } else if (!matchingPerson) {
+          const parsedName = splitTypedPersonName(trimmedPersonName);
+          if (!parsedName.givenName && !parsedName.surname) {
+            throw new Error("Enter a name for the new person.");
+          }
+          await onSubmit({
+            type: "new",
+            givenName: parsedName.givenName,
+            surname: parsedName.surname,
+            gender: "UNKNOWN",
+            relationshipType: relationshipTypeForSubmit
+          });
         } else {
           await onSubmit({
             type: "existing",
@@ -171,8 +196,10 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
       newGender,
       newGivenName,
       newSurname,
+      matchingPerson,
       onSubmit,
       personName,
+      trimmedPersonName,
       relationshipTypeForSubmit
     ]
   );
@@ -295,7 +322,7 @@ export const AddRelativePopup = ({ slot, selectedPersonName, people, busy, onCan
                   : !personName.trim())
               }
             >
-              {busy ? "Adding..." : createMode ? "Create & Add" : "Add"}
+              {busy ? "Adding..." : createMode || showCreateOffer ? "Create & Add" : "Add"}
             </button>
             {createMode ? (
               <button

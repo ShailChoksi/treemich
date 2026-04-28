@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   personExternalIdentityCreate: vi.fn(),
   personExternalIdentityFindFirst: vi.fn(),
   personExternalIdentityFindMany: vi.fn(),
+  personExternalIdentityUpdate: vi.fn(),
   personExternalIdentityDeleteMany: vi.fn()
 }));
 
@@ -28,6 +29,7 @@ vi.mock("../db/client.js", () => ({
       create: mocks.personExternalIdentityCreate,
       findFirst: mocks.personExternalIdentityFindFirst,
       findMany: mocks.personExternalIdentityFindMany,
+      update: mocks.personExternalIdentityUpdate,
       deleteMany: mocks.personExternalIdentityDeleteMany
     }
   }
@@ -384,6 +386,58 @@ describe("PersonService", () => {
 
       const { PersonService } = await import("./service.js");
       await expect(new PersonService().delete("user-1", "pp-1")).rejects.toThrow("Person not found");
+    });
+  });
+
+  describe("syncImmichExternalIdentityNames", () => {
+    it("updates matched Immich identity display names from the provider list", async () => {
+      mocks.personExternalIdentityFindMany.mockResolvedValueOnce([
+        makeIdentity({ id: "ident-1", providerPersonId: "immich-abc", displayName: null }),
+        makeIdentity({ id: "ident-2", providerPersonId: "immich-def", displayName: "Old Name" }),
+        makeIdentity({ id: "ident-3", providerPersonId: "immich-unnamed", displayName: null })
+      ]);
+      mocks.personExternalIdentityUpdate.mockResolvedValue(makeIdentity());
+
+      const { PersonService } = await import("./service.js");
+      const result = await new PersonService().syncImmichExternalIdentityNames("user-1", [
+        { id: "immich-abc", name: "Alice Smith" },
+        { id: "immich-def", name: "Alice Jones" },
+        { id: "immich-unnamed", name: "  " },
+        { id: "immich-missing", name: "Missing Person" }
+      ]);
+
+      expect(mocks.personExternalIdentityFindMany).toHaveBeenCalledWith({
+        where: {
+          userId: "user-1",
+          provider: "IMMICH",
+          providerPersonId: { in: ["immich-abc", "immich-def", "immich-unnamed", "immich-missing"] }
+        },
+        select: { id: true, providerPersonId: true, displayName: true }
+      });
+      expect(mocks.personExternalIdentityUpdate).toHaveBeenCalledTimes(2);
+      expect(mocks.personExternalIdentityUpdate).toHaveBeenCalledWith({
+        where: { id: "ident-1" },
+        data: { displayName: "Alice Smith", lastSeenAt: expect.any(Date) }
+      });
+      expect(mocks.personExternalIdentityUpdate).toHaveBeenCalledWith({
+        where: { id: "ident-2" },
+        data: { displayName: "Alice Jones", lastSeenAt: expect.any(Date) }
+      });
+      expect(result).toEqual({ matched: 3, updated: 2, skippedUnnamed: 1 });
+    });
+
+    it("does not update already-current names", async () => {
+      mocks.personExternalIdentityFindMany.mockResolvedValueOnce([
+        makeIdentity({ id: "ident-1", providerPersonId: "immich-abc", displayName: "Alice Smith" })
+      ]);
+
+      const { PersonService } = await import("./service.js");
+      const result = await new PersonService().syncImmichExternalIdentityNames("user-1", [
+        { id: "immich-abc", name: "Alice Smith" }
+      ]);
+
+      expect(mocks.personExternalIdentityUpdate).not.toHaveBeenCalled();
+      expect(result).toEqual({ matched: 1, updated: 0, skippedUnnamed: 0 });
     });
   });
 

@@ -5,9 +5,14 @@ const mocks = vi.hoisted(() => ({
   treemichUserCount: vi.fn(),
   treemichUserCreate: vi.fn(),
   treemichUserUpdate: vi.fn(),
+  treemichUserUpsert: vi.fn(),
   treemichSessionCreate: vi.fn(),
   treemichSessionFindFirst: vi.fn(),
-  treemichSessionDelete: vi.fn()
+  treemichSessionDelete: vi.fn(),
+  linkedImmichAccountUpsert: vi.fn(),
+  personProfileCount: vi.fn(),
+  relationshipCount: vi.fn(),
+  transaction: vi.fn()
 }));
 
 vi.mock("../db/client.js", () => ({
@@ -16,13 +21,24 @@ vi.mock("../db/client.js", () => ({
       findFirst: mocks.treemichUserFindFirst,
       count: mocks.treemichUserCount,
       create: mocks.treemichUserCreate,
-      update: mocks.treemichUserUpdate
+      update: mocks.treemichUserUpdate,
+      upsert: mocks.treemichUserUpsert
     },
     treemichSession: {
       create: mocks.treemichSessionCreate,
       findFirst: mocks.treemichSessionFindFirst,
       delete: mocks.treemichSessionDelete
-    }
+    },
+    linkedImmichAccount: {
+      upsert: mocks.linkedImmichAccountUpsert
+    },
+    personProfile: {
+      count: mocks.personProfileCount
+    },
+    relationship: {
+      count: mocks.relationshipCount
+    },
+    $transaction: mocks.transaction
   }
 }));
 
@@ -31,11 +47,15 @@ vi.mock("../config/env.js", () => ({
     TREEMICH_SESSION_TTL_MS: 2_592_000_000,
     TREEMICH_ENCRYPTION_KEY: "a".repeat(64),
     IMMICH_BASE_URL: "https://immich.example",
-    IMMICH_HTTP_TIMEOUT_MS: 5000
+    IMMICH_HTTP_TIMEOUT_MS: 5000,
+    IMMICH_PEOPLE_PAGE_SIZE: 1000,
+    IMMICH_HTTP_MAX_RETRIES: 2,
+    IMMICH_HTTP_RETRY_BASE_DELAY_MS: 200
   }
 }));
 
 vi.mock("../integrations/immich/client.js", () => ({
+  ImmichClient: vi.fn(),
   loginToImmich: vi.fn()
 }));
 
@@ -159,5 +179,87 @@ describe("AuthService.loginWithPassword", () => {
     const { state } = await new AuthService().loginWithPassword("alice@example.com", "pw");
 
     expect(state.user?.immichUserId).toBeUndefined();
+  });
+});
+
+describe("AuthService.loginWithImmich", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.treemichSessionCreate.mockResolvedValue({ id: "session-1" });
+    mocks.treemichUserUpsert.mockResolvedValue(
+      makeUser({
+        id: "user-1",
+        immichBaseUrl: "https://immich.example",
+        immichUserId: "immich-user-1",
+        immichEmail: "alice@example.com",
+        immichName: "Alice"
+      })
+    );
+    mocks.linkedImmichAccountUpsert.mockResolvedValue({ id: "linked-1" });
+    mocks.personProfileCount.mockResolvedValue(1);
+    mocks.relationshipCount.mockResolvedValue(0);
+  });
+
+  it("syncs Immich person names after storing a fresh linked account token", async () => {
+    const { loginToImmich } = await import("../integrations/immich/client.js");
+    vi.mocked(loginToImmich).mockResolvedValue({
+      accessToken: "fresh-token",
+      userId: "immich-user-1",
+      userEmail: "alice@example.com",
+      name: "Alice",
+      isAdmin: false,
+      shouldChangePassword: false,
+      isOnboarded: true
+    });
+    const listPeople = vi.fn().mockResolvedValue([{ id: "immich-person-1", name: "Alice Smith" }]);
+    const dispose = vi.fn();
+    const syncImmichExternalIdentityNames = vi.fn().mockResolvedValue({
+      matched: 1,
+      updated: 1,
+      skippedUnnamed: 0
+    });
+
+    const { AuthService } = await import("./service.js");
+    await new AuthService({
+      personService: { syncImmichExternalIdentityNames },
+      createImmichClientFromToken: () => ({ listPeople, dispose })
+    }).loginWithImmich("alice@example.com", "password");
+
+    expect(mocks.linkedImmichAccountUpsert).toHaveBeenCalledTimes(1);
+    expect(listPeople).toHaveBeenCalledTimes(1);
+    expect(syncImmichExternalIdentityNames).toHaveBeenCalledWith("user-1", [
+      { id: "immich-person-1", name: "Alice Smith" }
+    ]);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(mocks.treemichSessionCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fail login when the post-login name sync fails", async () => {
+    const { loginToImmich } = await import("../integrations/immich/client.js");
+    vi.mocked(loginToImmich).mockResolvedValue({
+      accessToken: "fresh-token",
+      userId: "immich-user-1",
+      userEmail: "alice@example.com",
+      name: "Alice",
+      isAdmin: false,
+      shouldChangePassword: false,
+      isOnboarded: true
+    });
+    const dispose = vi.fn();
+    const syncImmichExternalIdentityNames = vi.fn();
+
+    const { AuthService } = await import("./service.js");
+    const result = await new AuthService({
+      personService: { syncImmichExternalIdentityNames },
+      createImmichClientFromToken: () => ({
+        listPeople: vi.fn().mockRejectedValue(new Error("Immich list failed")),
+        dispose
+      })
+    }).loginWithImmich("alice@example.com", "password");
+
+    expect(result.state.authenticated).toBe(true);
+    expect(syncImmichExternalIdentityNames).not.toHaveBeenCalled();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(mocks.treemichSessionCreate).toHaveBeenCalledTimes(1);
   });
 });

@@ -92,6 +92,27 @@ type GraphViewPreferencesState = {
   showSingleFamilyTree: boolean;
 };
 
+export const canLoadPersonThumbnail = (person: ImmichPerson) =>
+  Boolean(
+    person.thumbnailPath?.trim() ||
+      person.thumbnail?.storageUrl?.trim() ||
+      person.profile?.immichPersonId?.trim() ||
+      person.externalIdentities?.some((identity) => identity.provider === "IMMICH")
+  );
+
+export const resolveAddRelativeRelationshipType = (
+  slot: AddRelativeSlot,
+  selectedRelationshipType?: RelationshipType
+): RelationshipType => {
+  if (slot === "parent") {
+    return RELATIONSHIP_TYPES.childOf;
+  }
+  if (slot === "child") {
+    return RELATIONSHIP_TYPES.parentOf;
+  }
+  return selectedRelationshipType ?? RELATIONSHIP_TYPES.siblingOf;
+};
+
 const resolveInitialGraphViewPreferences = (
   savedPreferences: UserPreferences | null,
   defaultToNoRelationshipsGraphState: boolean,
@@ -218,7 +239,10 @@ const PeopleGraph3DComponent = ({
     serverLayoutAlgorithmVersion,
     renderLimit: DEFAULT_RENDER_LIMIT
   });
-  const peopleIds = useMemo(() => people.map((person) => person.id), [people]);
+  const thumbnailCandidatePersonIds = useMemo(
+    () => people.filter(canLoadPersonThumbnail).map((person) => person.id),
+    [people]
+  );
 
   const handleSearchFallback = useCallback(async (query: string) => {
     const response = await searchRelationships(query);
@@ -469,14 +493,10 @@ const PeopleGraph3DComponent = ({
       targetName = match.name;
     }
 
-    let nextRelationshipType: RelationshipType;
-    if (addRelativeIntent.slot === "parent") {
-      nextRelationshipType = RELATIONSHIP_TYPES.childOf;
-    } else if (addRelativeIntent.slot === "child") {
-      nextRelationshipType = RELATIONSHIP_TYPES.parentOf;
-    } else {
-      nextRelationshipType = payload.relationshipType ?? RELATIONSHIP_TYPES.siblingOf;
-    }
+    const nextRelationshipType = resolveAddRelativeRelationshipType(
+      addRelativeIntent.slot,
+      payload.relationshipType
+    );
 
     await onCreateRelationship(addRelativeIntent.selectedPersonId, targetId, nextRelationshipType);
     setAddRelativeIntent(null);
@@ -595,7 +615,7 @@ const PeopleGraph3DComponent = ({
             showNodeActionButtons={!addRelativeIntent}
             hoveredPersonId={hoveredPersonId}
             highlightedPersonIds={highlightedPersonIds}
-            peopleIds={peopleIds}
+            peopleIds={thumbnailCandidatePersonIds}
             prioritizedNodeIds={prioritizedNodeIds}
             renderNearPersonIds={renderNearPersonIds}
             setHoveredPersonId={setHoveredPersonId}

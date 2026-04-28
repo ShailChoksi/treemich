@@ -108,4 +108,42 @@ describe("GraphSearchOverlay", () => {
     });
     container.remove();
   });
+
+  it("includes standalone Treemich people in search suggestions", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <GraphSearchOverlay
+          searchTerm="stand"
+          onSearchTermChange={() => undefined}
+          onSearchSubmit={(event) => event.preventDefault()}
+          onClearSearch={() => undefined}
+          onCenterView={() => undefined}
+          people={[
+            { id: "standalone-1", name: "Standalone Person" },
+            { id: "immich-1", name: "Immich Person" }
+          ]}
+          searchFeedback={null}
+          treeValidationIssueCount={null}
+          treeValidationEngineDisabled={false}
+          searchIncludeAlternateNames={false}
+          onSearchIncludeAlternateNamesChange={() => undefined}
+        />
+      );
+    });
+
+    const options = [...container.querySelectorAll<HTMLOptionElement>("datalist option")].map(
+      (option) => option.value
+    );
+    expect(options).toContain("Standalone Person");
+    expect(options).not.toContain("Immich Person");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
 });

@@ -98,11 +98,10 @@ WHERE p."userId" = f."userId"
 
 UPDATE "FamilyChild" fc
 SET "childPersonId" = p."id"
-FROM "Family" f
-JOIN "PersonProfile" p
-  ON p."userId" = f."userId"
- AND p."immichPersonId" = fc."childImmichPersonId"
-WHERE f."id" = fc."familyId";
+FROM "Family" f, "PersonProfile" p
+WHERE f."id" = fc."familyId"
+  AND p."userId" = f."userId"
+  AND p."immichPersonId" = fc."childImmichPersonId";
 
 UPDATE "ResearchTask" rt
 SET "personId" = p."id"
