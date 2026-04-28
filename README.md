@@ -1,13 +1,14 @@
 # Treemich
 
-Treemich is a standalone service and web UI that extends [Immich](https://immich.app/) with family-tree relationships, natural-language relationship queries, and a 3D interactive graph.
-
-Immich remains the system of record for photos, faces, and people. Treemich adds a per-user relationship graph on top, stored in its own PostgreSQL database.
+Treemich is a standalone genealogy service and web UI for building and navigating family trees — relationships, life events, natural-language queries, GEDCOM import/export, and a 3D interactive graph.
+No external account is required to get started: create a Treemich account with an email and password, then add people and relationships directly.
+Optionally link an [Immich](https://immich.app/) account to import face thumbnails and photo co-occurrence suggestions.
 
 ## Features
 
-- **Relationship management** -- create parent/child, sibling, spouse, friend, and pet links between Immich people.
-- **Per-person profiles** -- set gender, names, and Treemich **life events** (BIRTH/DEATH with optional places) on any Immich person; quick-edit fields in the sidebar map to those events.
+- **Standalone people management** -- create and edit Treemich-owned people; Immich is optional.
+- **Relationship management** -- create parent/child, sibling, spouse, friend, and pet links between people.
+- **Per-person profiles** -- set gender, names, and Treemich **life events** (BIRTH/DEATH with optional places); quick-edit fields in the sidebar map to those events.
 - **3D graph visualization** -- interactive Three.js graph with multiple layout modes (generation tree, centered map, hybrid, cleaned 3D) plus layer toggles for Family/Friends/Pets.
 - **Natural-language search** -- query relationships in plain English with multi-hop graph traversal.
 - **Photo co-occurrence** -- discover which people appear together in photos.
@@ -31,7 +32,7 @@ Use the same session cookie as the rest of the API.
 
 ### GEDCOM export (Phase 5a)
 
-Interoperability export as **GEDCOM 5.5.1** UTF-8 (`LINEAGE-LINKED`), including **INDI**, **FAM** (with **CHIL** + **PEDI** when families exist), person-scoped and family-scoped life events, spouse **MARR**/**DIV** on unions, **SOUR**/**REPO**, and **OBJE** stubs for evidence media. Optional custom line **`_TREEMICH_IMMICH_PERSON_ID`** maps each `INDI` to the Immich person id (disable with `includeTreemichCustomTags=0` if your toolchain rejects unknown tags).
+Interoperability export as **GEDCOM 5.5.1** UTF-8 (`LINEAGE-LINKED`), including **INDI**, **FAM** (with **CHIL** + **PEDI** when families exist), person-scoped and family-scoped life events, spouse **MARR**/**DIV** on unions, **SOUR**/**REPO**, and **OBJE** stubs for evidence media. Optional custom line **`_TREEMICH_PERSON_ID`** maps each `INDI` back to the Treemich person id (disable with `includeTreemichCustomTags=0` if your toolchain rejects unknown tags).
 
 - **`GET /api/export/gedcom`** (default) — same as **`?format=ged`**. Response is `text/plain; charset=utf-8` with `Content-Disposition: attachment` (`.ged`).
 
@@ -43,10 +44,10 @@ Disable the route in restrictive environments with **`TREEMICH_GEDCOM_EXPORT_ENA
 
 ### GEDCOM import (Phase 5b)
 
-Imports **UTF-8 GEDCOM** into Treemich **only for people you explicitly map** to existing Immich person ids (Treemich `PersonProfile` rows). There is **no** automatic creation of Immich people in this release.
+Imports **UTF-8 GEDCOM** into Treemich, either by matching INDI records to existing Treemich people or by automatically creating new Treemich people for unmatched records.
 
-1. **`POST /api/import/gedcom/preview`** — body JSON `{ "gedcomUtf8": "..." }`. Returns parsed **INDI** / **FAM** summaries, **`unmatchedIndis`** (xref + display name + optional **`_TREEMICH_IMMICH_PERSON_ID`** hint from the file), and **`famMatchError`** if any **HUSB** / **WIFE** / **CHIL** pointer cannot be resolved from matches.
-2. **`POST /api/import/gedcom/jobs`** — body `{ "gedcomUtf8", "indiMatches": { "@I1@": "<immichPersonId>", ... }, "fileName"?, "importOptions"? }`. Creates an async job (`PENDING` → `RUNNING` → `COMPLETED` or `FAILED`) and applies **REPO**, **SOUR**, **FAM** (via `Family` + derived edges), **MARR**/**DIV** on the spouse relationship, family-scoped **RESI**/**CENS**/**EVEN**, and **INDI** names / **SEX** / person life events. **`importOptions`**: `dryRun`, `skipAlreadyImportedIndis` (skips INDI when `PersonProfile.externalIds.gedcomIndi` already equals that xref).
+1. **`POST /api/import/gedcom/preview`** — body JSON `{ "gedcomUtf8": "..." }`. Returns parsed **INDI** / **FAM** summaries, **`unmatchedIndis`** (xref + display name + optional **`_TREEMICH_PERSON_ID`** hint from the file), and **`famMatchError`** if any **HUSB** / **WIFE** / **CHIL** pointer cannot be resolved.
+2. **`POST /api/import/gedcom/jobs`** — body `{ "gedcomUtf8", "indiMatches": { "@I1@": "<treemichPersonId>", ... }, "fileName"?, "importOptions"? }`. Creates an async job (`PENDING` → `RUNNING` → `COMPLETED` or `FAILED`) and applies **REPO**, **SOUR**, **FAM** (via `Family` + derived edges), **MARR**/**DIV** on the spouse relationship, family-scoped **RESI**/**CENS**/**EVEN**, and **INDI** names / **SEX** / person life events. **`importOptions`**: `dryRun`, `skipAlreadyImportedIndis` (skips INDI when `PersonProfile.externalIds.gedcomIndi` already equals that xref), `unmatchedIndiPolicy` (`"MATCH_ONLY"` to skip unmatched INDIs, `"CREATE"` to automatically create new Treemich people for each unmatched INDI using the NAME and SEX tags).
 3. **`GET /api/import/gedcom/jobs/:jobId`** — poll status, **`summary`** counts, **`lineLog`**, **`errorMessage`**.
 
 For GEDCOM files with evidence media, upload a **ZIP bundle** instead of a bare `.ged`:
@@ -60,9 +61,9 @@ For GEDCOM files with evidence media, upload a **ZIP bundle** instead of a bare 
 
 ### Treemich user deletion (PostgreSQL cascade)
 
-Deleting a **`TreemichUser`** row (for example via Prisma or direct SQL) **cascades** to all Treemich-owned graph data linked by `userId`: linked Immich account row, sessions, person profiles, relationships, places, life events (and citations), and co-occurrence tables. **Immich itself is unchanged** — people, faces, and photos remain in your Immich instance. To remove those, use Immich’s own account or library tools.
+Deleting a **`TreemichUser`** row (for example via Prisma or direct SQL) **cascades** to all Treemich-owned graph data linked by `userId`: linked Immich account row, sessions, person profiles, relationships, places, life events (and citations), and co-occurrence tables. If you have a linked Immich account, **Immich itself is unchanged** — people, faces, and photos remain in your Immich instance.
 
-There is currently **no** dedicated “delete my Treemich account” HTTP button in the shipped UI; operators or scripts can delete the user row if you need a full Treemich purge for one Immich identity.
+There is currently **no** dedicated “delete my Treemich account” HTTP button in the shipped UI; operators or scripts can delete the user row if you need a full Treemich data purge.
 
 ### Upgrading from releases before legacy column removal
 
@@ -190,11 +191,11 @@ docker compose -f docker-compose.hub.yml up -d
 
 **3. Open the app**
 
-[http://localhost:8080](http://localhost:8080) — sign in with your Immich email and password.
+[http://localhost:8080](http://localhost:8080) — sign in with an email and password (standalone Treemich account), or use `provider: "immich"` at login if you have a linked Immich account.
 
 The API runs migrations on startup (`prisma migrate deploy`), then serves the app.
 
-**Login fails or returns HTTP 500:** The API container must reach Immich over the network. **`IMMICH_BASE_URL=http://localhost:2283/api` is wrong for Compose** when Immich runs on your machine — `localhost` inside the container is not your host. Use `http://host.docker.internal:2283/api` instead (Compose already maps `host.docker.internal`; Linux may need Docker 20.10+ with `host-gateway`). If Immich runs in another Docker network, use that service’s URL. Check `docker logs treemich-api` for connection errors.
+**Immich login fails or returns HTTP 500:** If you sign in using an Immich account (`provider: "immich"`), the API container must reach Immich over the network. **`IMMICH_BASE_URL=http://localhost:2283/api` is wrong for Compose** when Immich runs on your machine — `localhost` inside the container is not your host. Use `http://host.docker.internal:2283/api` instead (Compose already maps `host.docker.internal`; Linux may need Docker 20.10+ with `host-gateway`). If Immich runs in another Docker network, use that service’s URL. Check `docker logs treemich-api` for connection errors.
 
 ---
 
@@ -265,7 +266,7 @@ Image publishing from this repo (tags and GitHub Releases) is defined in [`.gith
 
 - Node.js **20.19+** or **22.12+** (required by Vite 8 / Rolldown; see root `package.json` `engines`)
 - PostgreSQL (or use `docker compose up -d postgres` for a containerized instance)
-- An Immich instance
+- An [Immich](https://immich.app/) instance _(optional — only needed for Immich login, thumbnail import, and photo co-occurrence)_
 
 ### 1. Configure environment
 
@@ -273,7 +274,7 @@ Image publishing from this repo (tags and GitHub Releases) is defined in [`.gith
 cp .env.example .env
 ```
 
-Set `IMMICH_BASE_URL` to your Immich API URL and `TREEMICH_ENCRYPTION_KEY` to a random 64-char hex string.
+Set `TREEMICH_ENCRYPTION_KEY` to a random 64-char hex string. Set `IMMICH_BASE_URL` only if you want to use Immich login or import thumbnails from Immich.
 
 ### 2. Start PostgreSQL
 
@@ -304,42 +305,47 @@ This starts the API on `localhost:4000` and the web app on `localhost:5173` with
 
 ## Environment Variables
 
-| Variable                       | Default                 | Description                                         |
-| ------------------------------ | ----------------------- | --------------------------------------------------- |
-| `PORT`                         | `4000`                  | API server port                                     |
-| `DATABASE_URL`                 | --                      | PostgreSQL connection string                        |
-| `IMMICH_BASE_URL`              | --                      | Immich API base URL                                 |
-| `IMMICH_PEOPLE_PAGE_SIZE`      | `1000`                  | Page size when fetching people from Immich          |
-| `TREEMICH_ENCRYPTION_KEY`      | --                      | 64-char hex key for encrypting stored Immich tokens |
-| `TREEMICH_SESSION_COOKIE_NAME` | `treemich_session`      | Browser cookie name                                 |
-| `TREEMICH_SESSION_TTL_MS`      | `2592000000` (30 days)  | Session lifetime                                    |
-| `WEB_ORIGIN`                   | `http://localhost:5173` | CORS allowed origin                                 |
-| `RATE_LIMIT_MAX`               | `300`                   | Max API requests per time window                    |
-| `RATE_LIMIT_TIME_WINDOW_MS`    | `60000`                 | Rate limit window in ms                             |
-| `VITE_TREEMICH_API_URL`        | `/api`                  | Frontend API base URL (build-time)                  |
+| Variable                       | Default                 | Description                                                              |
+| ------------------------------ | ----------------------- | ------------------------------------------------------------------------ |
+| `PORT`                         | `4000`                  | API server port                                                          |
+| `DATABASE_URL`                 | --                      | PostgreSQL connection string                                             |
+| `IMMICH_BASE_URL`              | _(optional)_            | Immich API base URL; required only when signing in via Immich or using thumbnail/co-occurrence import |
+| `IMMICH_PEOPLE_PAGE_SIZE`      | `1000`                  | Page size when fetching people from Immich                               |
+| `TREEMICH_ENCRYPTION_KEY`      | --                      | 64-char hex key for encrypting stored Immich tokens                      |
+| `TREEMICH_SESSION_COOKIE_NAME` | `treemich_session`      | Browser cookie name                                                      |
+| `TREEMICH_SESSION_TTL_MS`      | `2592000000` (30 days)  | Session lifetime                                                         |
+| `WEB_ORIGIN`                   | `http://localhost:5173` | CORS allowed origin                                                      |
+| `RATE_LIMIT_MAX`               | `300`                   | Max API requests per time window                                         |
+| `RATE_LIMIT_TIME_WINDOW_MS`    | `60000`                 | Rate limit window in ms                                                  |
+| `VITE_TREEMICH_API_URL`        | `/api`                  | Frontend API base URL (build-time)                                       |
 
 ## Auth Model
 
-- Users sign in to Treemich with their Immich local account credentials.
-- Treemich stores a session cookie for browser auth and an encrypted Immich access token for server-to-server requests.
+- Sign in with a Treemich email and password (standalone; no Immich required).
+- Optionally sign in via Immich credentials (`provider: "immich"` in the login body) to link an Immich account for thumbnail and co-occurrence import.
+- Treemich stores a session cookie for browser auth. Immich tokens are encrypted at rest and used only for optional provider calls.
 - All relationship and profile data is private per Treemich user.
 
 ## API Endpoints
 
-| Method   | Path                        | Description                                |
-| -------- | --------------------------- | ------------------------------------------ |
-| `POST`   | `/auth/login`               | Sign in with Immich credentials            |
-| `POST`   | `/auth/logout`              | End session                                |
-| `GET`    | `/auth/me`                  | Current session state                      |
-| `GET`    | `/auth/link-status`         | Immich link status                         |
-| `GET`    | `/people`                   | List Immich people with Treemich profiles  |
-| `PATCH`  | `/people/:id`               | Update person profile (gender, birth date) |
-| `GET`    | `/people/:id/thumbnail`     | Person thumbnail image                     |
-| `POST`   | `/people/:id/relationships` | Create a relationship                      |
-| `DELETE` | `/people/:id/relationships` | Delete a relationship                      |
-| `GET`    | `/relationships`            | List all relationships (paginated)         |
-| `GET`    | `/people/cooccurrence`      | Photo co-occurrence data                   |
-| `GET`    | `/search?q=...`             | Natural-language relationship search       |
+| Method   | Path                              | Description                                            |
+| -------- | --------------------------------- | ------------------------------------------------------ |
+| `POST`   | `/auth/login`                     | Sign in (email+password standalone, or Immich provider)|
+| `POST`   | `/auth/logout`                    | End session                                            |
+| `GET`    | `/auth/me`                        | Current session state                                  |
+| `GET`    | `/auth/link-status`               | Immich link status (optional provider)                 |
+| `GET`    | `/people`                         | List Treemich-owned people                             |
+| `POST`   | `/people`                         | Create a new person (no Immich required)               |
+| `PATCH`  | `/people/:id`                     | Update person profile (gender, birth date, names)      |
+| `GET`    | `/people/:id`                     | Get a single person                                    |
+| `GET`    | `/people/:id/thumbnail`           | Person thumbnail (Immich or SVG initials fallback)     |
+| `GET`    | `/people/:id/external-identities` | List external identities (e.g. Immich)                 |
+| `POST`   | `/people/:id/external-identities` | Add an external identity link                          |
+| `POST`   | `/people/:id/relationships`       | Create a relationship                                  |
+| `DELETE` | `/people/:id/relationships`       | Delete a relationship                                  |
+| `GET`    | `/relationships`                  | List all relationships (paginated)                     |
+| `GET`    | `/people/cooccurrence`            | Photo co-occurrence data (requires Immich link)        |
+| `GET`    | `/search?q=...`                   | Natural-language relationship search                   |
 
 ### Example requests
 

@@ -497,7 +497,11 @@ export async function processGedcomImportJob(jobId: string, services: AppService
     dryRun?: boolean;
     skipAlreadyImportedIndis?: boolean;
     allowPartialMatches?: boolean;
-    unmatchedIndiPolicy?: "MATCH_ONLY";
+    /**
+     * "MATCH_ONLY": unmatched INDI records are skipped (legacy default).
+     * "CREATE": unmatched INDI records are created as new Treemich persons before family/life-event processing.
+     */
+    unmatchedIndiPolicy?: "MATCH_ONLY" | "CREATE";
     mediaArchive?: {
       archiveDir: string;
       files: StagedGedcomArchiveMediaFile[];
@@ -531,6 +535,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
     personNamesCreated: number;
     profilesUpdated: number;
     indisSkipped: number;
+    indisCreated: number;
   };
   type DryRunDiff = {
     creates: Record<string, number>;
@@ -555,11 +560,13 @@ export async function processGedcomImportJob(jobId: string, services: AppService
     mediaObjectsSkipped: 0,
     personNamesCreated: 0,
     profilesUpdated: 0,
-    indisSkipped: 0
+    indisSkipped: 0,
+    indisCreated: 0
   };
   const buildDryRunDiff = (): DryRunDiff => ({
     creates: {
       families: summary.familiesCreated,
+      persons: summary.indisCreated,
       relationshipLifeEvents: summary.relationshipLifeEventsCreated,
       familyLifeEvents: summary.familyLifeEventsCreated,
       personLifeEvents: summary.personLifeEventsCreated,
@@ -820,6 +827,46 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       }
     }
 
+    const unmatchedIndiPolicy = options.unmatchedIndiPolicy ?? "MATCH_ONLY";
+
+    // When policy is CREATE, create new PersonProfiles for unmatched INDI records before FAM/INDI
+    // processing so that family relationships and life events reference the correct canonical IDs.
+    if (unmatchedIndiPolicy === "CREATE") {
+      for (const block of records) {
+        if (block.recordTag !== "INDI" || !block.xref) continue;
+        if (indiPersonIdMap.has(block.xref)) continue; // already matched
+
+        const chunks = chunkByLevel1(block.lines);
+        let sex: string | null = null;
+        let primaryName: { given: string | null; surname: string | null } | null = null;
+        for (const ch of chunks) {
+          if (ch[0]!.tag === "SEX" && !sex) sex = ch[0]!.value;
+          if (ch[0]!.tag === "NAME" && !primaryName) primaryName = parseNameSlash(ch[0]!.value);
+        }
+
+        if (dryRun) {
+          const dryRunId = `dry-run-new-person-${block.xref.replace(/[^a-zA-Z0-9-]/g, "")}`;
+          indiPersonIdMap.set(block.xref, dryRunId);
+          indiMap.set(block.xref, dryRunId);
+          summary.indisCreated += 1;
+        } else {
+          const newPerson = await services.personService.create(job.userId, {
+            givenName: primaryName?.given ?? null,
+            surname: primaryName?.surname ?? null,
+            gender: sexToGender(sex) as "MALE" | "FEMALE" | "UNKNOWN"
+          });
+          indiPersonIdMap.set(block.xref, newPerson.id);
+          indiMap.set(block.xref, newPerson.id);
+          summary.indisCreated += 1;
+          pushLog(lineLog, {
+            severity: "warn",
+            lineNo: block.startLineNo,
+            message: `Created new person ${newPerson.id} for unmatched INDI ${block.xref}`
+          });
+        }
+      }
+    }
+
     for (const block of records) {
       if (block.recordTag !== "FAM" || !block.xref) {
         continue;
@@ -1077,9 +1124,12 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       if (!rawId) {
         summary.indisSkipped += 1;
         pushLog(lineLog, {
-          severity: "warn",
+          severity: unmatchedIndiPolicy === "CREATE" ? "error" : "warn",
           lineNo: block.startLineNo,
-          message: `Unmatched INDI ${block.xref} skipped; import is match-only and does not create people for unmatched entries`
+          message:
+            unmatchedIndiPolicy === "CREATE"
+              ? `Unmatched INDI ${block.xref} was not created in the preliminary pass (unexpected)`
+              : `Unmatched INDI ${block.xref} skipped; import is match-only and does not create people for unmatched entries`
         });
         continue;
       }

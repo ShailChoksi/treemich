@@ -44,6 +44,7 @@ import {
 } from "./personDetail/personDetailHelpers";
 import { RelativesSection } from "./personDetail/RelativesSection";
 import type { RelativeItem } from "./personDetail/types";
+import { DestructiveConfirmDialog } from "./DestructiveConfirmDialog";
 
 export {
   getRelativeRelationshipLabel,
@@ -90,6 +91,7 @@ type Props = {
     }
   ) => Promise<void>;
   onDeleteRelationship: (relationship: RelationshipRecord, relatedPersonId: string) => Promise<void>;
+  onDeletePerson?: () => Promise<void>;
   onDismissSuggestion: (suggestionKey: string) => void;
   isSavingRelationship: boolean;
   immichBaseUrl?: string | null;
@@ -124,7 +126,7 @@ type Props = {
   onResearchTaskCreate?: (body: CreateResearchTaskBody) => Promise<void>;
   onResearchTaskUpdate?: (
     taskId: string,
-    patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "immichPersonId">>
+    patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "personId">>
   ) => Promise<void>;
   onResearchTaskDelete?: (taskId: string) => Promise<void>;
 };
@@ -181,6 +183,7 @@ const PersonDetailPanelComponent = ({
   onCreateRelationship,
   onUpdateRelationship,
   onDeleteRelationship,
+  onDeletePerson,
   onDismissSuggestion,
   isSavingRelationship,
   immichBaseUrl,
@@ -216,6 +219,8 @@ const PersonDetailPanelComponent = ({
   const [editingMarriageAnniversaryDate, setEditingMarriageAnniversaryDate] = useState("");
   const [editingDivorceDate, setEditingDivorceDate] = useState("");
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
+  const [showDeletePersonConfirm, setShowDeletePersonConfirm] = useState(false);
+  const [isDeletingPerson, setIsDeletingPerson] = useState(false);
   const [visibleSuggestionCount, setVisibleSuggestionCount] = useState(maxVisibleSuggestions);
   const [collapsedSections, setCollapsedSections] =
     useState<SectionCollapsedState>(DEFAULT_COLLAPSED_SECTIONS);
@@ -356,6 +361,7 @@ const PersonDetailPanelComponent = ({
   useEffect(() => {
     setEditingRelationshipKey(null);
     setPendingDeleteKey(null);
+    setShowDeletePersonConfirm(false);
     setVisibleSuggestionCount(maxVisibleSuggestions);
     setCollapsedSections(DEFAULT_COLLAPSED_SECTIONS);
   }, [person?.id]);
@@ -458,6 +464,19 @@ const PersonDetailPanelComponent = ({
     onDismissSuggestion(suggestionKey);
   };
 
+  const handleDeletePerson = async () => {
+    if (!onDeletePerson) {
+      return;
+    }
+    setIsDeletingPerson(true);
+    try {
+      await onDeletePerson();
+      setShowDeletePersonConfirm(false);
+    } finally {
+      setIsDeletingPerson(false);
+    }
+  };
+
   return (
     <section className="card person-detail-panel">
       {person ? (
@@ -501,7 +520,28 @@ const PersonDetailPanelComponent = ({
                 </span>
               </div>
             </div>
+            {onDeletePerson ? (
+              <button
+                type="button"
+                className="secondary-button danger-button"
+                onClick={() => setShowDeletePersonConfirm(true)}
+                disabled={isSavingProfile || isSavingRelationship || isDeletingPerson}
+              >
+                Delete person
+              </button>
+            ) : null}
           </div>
+          <DestructiveConfirmDialog
+            open={showDeletePersonConfirm}
+            title={`Delete ${getPersonDisplayLabel(person)}?`}
+            description={`This will permanently delete ${getPersonDisplayLabel(
+              person
+            )} and all their life events, relationships, and research notes. Family units they belonged to will lose them as a member but the family itself will not be deleted.`}
+            confirmLabel="Delete person"
+            busy={isDeletingPerson}
+            onConfirm={handleDeletePerson}
+            onCancel={() => setShowDeletePersonConfirm(false)}
+          />
           <CollapsibleSection
             sectionKey="profile"
             title="Profile"

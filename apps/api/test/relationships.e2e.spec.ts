@@ -52,6 +52,17 @@ const countForExportMock = vi.fn();
 const findAdoptedChildImmichPersonIdsMock = vi.fn();
 const listPersonServiceMock = vi.fn().mockResolvedValue([]);
 const updatePersonServiceMock = vi.fn().mockResolvedValue({ id: "pp1" });
+const createPersonServiceMock = vi.fn();
+const getPersonServiceMock = vi.fn();
+const resolvePersonIdMock = vi.fn().mockImplementation((_userId: string, id: string) => Promise.resolve(id));
+const listExternalIdentitiesMock = vi.fn().mockResolvedValue([]);
+const addExternalIdentityMock = vi.fn();
+const deleteExternalIdentityMock = vi.fn();
+const deletePersonServiceMock = vi.fn();
+const loginWithPasswordMock = vi.fn().mockResolvedValue({
+  sessionToken: "session-token",
+  state: { authenticated: false, linkStatus: { linked: false } }
+});
 const lifeEventServiceMock = {
   getSpouseMarriageDivorceIsoForPairs: vi.fn().mockResolvedValue(new Map()),
   getBirthDeathByPersonProfileIds: vi.fn().mockResolvedValue(new Map()),
@@ -243,17 +254,20 @@ describe("Treemich API routes", () => {
         linked: false
       }
     });
+    listPersonServiceMock.mockResolvedValue([]);
+    resolvePersonIdMock.mockImplementation((_userId: string, id: string) => Promise.resolve(id));
+    listExternalIdentitiesMock.mockResolvedValue([]);
+    deletePersonServiceMock.mockResolvedValue(undefined);
+    loginWithPasswordMock.mockResolvedValue({
+      sessionToken: "session-token",
+      state: { authenticated: false, linkStatus: { linked: false } }
+    });
   });
 
   beforeEach(async () => {
     const services: AppServices = {
       authService: {
-        loginWithPassword: vi
-          .fn()
-          .mockResolvedValue({
-            sessionToken: "session-token",
-            state: { authenticated: false, linkStatus: { linked: false } }
-          }),
+        loginWithPassword: loginWithPasswordMock,
         loginWithImmich: loginWithImmichMock,
         getAuthState: getAuthStateMock,
         requireSession: requireSessionMock,
@@ -284,13 +298,14 @@ describe("Treemich API routes", () => {
       } as unknown as AppServices["relationshipService"],
       personService: {
         list: listPersonServiceMock,
-        create: vi.fn(),
-        get: vi.fn(),
+        create: createPersonServiceMock,
+        get: getPersonServiceMock,
         update: updatePersonServiceMock,
-        resolvePersonId: vi.fn().mockImplementation((_userId: string, id: string) => Promise.resolve(id)),
-        listExternalIdentities: vi.fn().mockResolvedValue([]),
-        addExternalIdentity: vi.fn(),
-        deleteExternalIdentity: vi.fn()
+        resolvePersonId: resolvePersonIdMock,
+        listExternalIdentities: listExternalIdentitiesMock,
+        addExternalIdentity: addExternalIdentityMock,
+        deleteExternalIdentity: deleteExternalIdentityMock,
+        delete: deletePersonServiceMock
       } as unknown as AppServices["personService"],
       lifeEventService: lifeEventServiceMock as unknown as AppServices["lifeEventService"],
       personNameService: personNameServiceMock as unknown as AppServices["personNameService"],
@@ -1040,6 +1055,228 @@ describe("Treemich API routes", () => {
     });
 
     expect(rateLimitedResponse.statusCode).toBe(429);
+  });
+
+  it("logs in with standalone Treemich credentials (provider: treemich) without Immich", async () => {
+    loginWithPasswordMock.mockResolvedValueOnce({
+      sessionToken: "standalone-token",
+      state: {
+        authenticated: true,
+        user: { id: "user-standalone", email: "bob@example.com", name: "Bob" },
+        linkStatus: { linked: false }
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "bob@example.com", password: "mypassword" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(loginWithPasswordMock).toHaveBeenCalledWith("bob@example.com", "mypassword");
+    expect(loginWithImmichMock).not.toHaveBeenCalled();
+    expect(response.headers["set-cookie"]).toContain("treemich_session=standalone-token");
+  });
+
+  it("defaults POST /auth/login to provider=treemich when provider is omitted", async () => {
+    loginWithPasswordMock.mockResolvedValueOnce({
+      sessionToken: "tok",
+      state: { authenticated: true, user: { id: "u1", email: "a@b.com", name: "A" }, linkStatus: { linked: false } }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "a@b.com", password: "pw" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(loginWithPasswordMock).toHaveBeenCalledTimes(1);
+    expect(loginWithImmichMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a new person via POST /people and syncs birthDate as a life event", async () => {
+    createPersonServiceMock.mockResolvedValueOnce({
+      id: "pp-new",
+      name: "Carol Jones",
+      profile: { id: "pp-new", gender: "FEMALE", givenName: "Carol", surname: "Jones" },
+      externalIdentities: [],
+      thumbnail: null,
+      hasRelationship: false
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people",
+      payload: { givenName: "Carol", surname: "Jones", gender: "FEMALE", birthDate: "1990-05-15" }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(createPersonServiceMock).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ givenName: "Carol", surname: "Jones", gender: "FEMALE" })
+    );
+    expect(lifeEventServiceMock.syncPersonProfileFieldsToLifeEvents).toHaveBeenCalledWith(
+      "user-1",
+      "pp-new",
+      expect.objectContaining({ birthDate: "1990-05-15" })
+    );
+    expect(response.json().id).toBe("pp-new");
+  });
+
+  it("creates a person via POST /people without a birthDate and skips life-event sync", async () => {
+    createPersonServiceMock.mockResolvedValueOnce({
+      id: "pp-no-birth",
+      name: "Dave",
+      profile: { id: "pp-no-birth", gender: "UNKNOWN" },
+      externalIdentities: [],
+      thumbnail: null,
+      hasRelationship: false
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people",
+      payload: { givenName: "Dave" }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(lifeEventServiceMock.syncPersonProfileFieldsToLifeEvents).not.toHaveBeenCalled();
+  });
+
+  it("returns a single person via GET /people/:id", async () => {
+    getPersonServiceMock.mockResolvedValueOnce({
+      id: "pp-1",
+      userId: "user-1",
+      gender: "MALE",
+      givenName: "Alice",
+      surname: "Smith",
+      displayNameOverride: null,
+      nicknames: null,
+      immichPersonId: null,
+      externalIds: {},
+      externalIdentities: [],
+      thumbnails: [],
+      createdAt: new Date("2025-01-01"),
+      updatedAt: new Date("2025-01-01")
+    });
+
+    const response = await app.inject({ method: "GET", url: "/people/pp-1" });
+
+    expect(response.statusCode).toBe(200);
+    expect(getPersonServiceMock).toHaveBeenCalledWith("user-1", "pp-1");
+    expect(response.json().person.id).toBe("pp-1");
+  });
+
+  it("returns 404 when GET /people/:id cannot find the person", async () => {
+    const { HttpNotFoundError } = await import("../src/lifeEvents/errors.js");
+    getPersonServiceMock.mockRejectedValueOnce(new HttpNotFoundError("Person not found"));
+
+    const response = await app.inject({ method: "GET", url: "/people/ghost" });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("adds an external identity via POST /people/:id/external-identities", async () => {
+    addExternalIdentityMock.mockResolvedValueOnce({
+      id: "ident-new",
+      personId: "pp-1",
+      provider: "IMMICH",
+      providerPersonId: "immich-xyz",
+      providerBaseUrl: null,
+      displayName: null,
+      thumbnailImportedAt: null,
+      lastSeenAt: null,
+      metadata: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people/pp-1/external-identities",
+      payload: { provider: "IMMICH", providerPersonId: "immich-xyz" }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(addExternalIdentityMock).toHaveBeenCalledWith(
+      "user-1",
+      "pp-1",
+      expect.objectContaining({ provider: "IMMICH", providerPersonId: "immich-xyz" })
+    );
+    expect(response.json().id).toBe("ident-new");
+  });
+
+  it("returns 409 when POST /people/:id/external-identities conflicts", async () => {
+    const { HttpConflictError } = await import("../src/lifeEvents/errors.js");
+    addExternalIdentityMock.mockRejectedValueOnce(new HttpConflictError("External identity already exists"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people/pp-1/external-identities",
+      payload: { provider: "IMMICH", providerPersonId: "immich-dupe" }
+    });
+
+    expect(response.statusCode).toBe(409);
+  });
+
+  it("lists external identities via GET /people/:id/external-identities", async () => {
+    listExternalIdentitiesMock.mockResolvedValueOnce([
+      { id: "ident-1", personId: "pp-1", provider: "IMMICH", providerPersonId: "immich-abc" }
+    ]);
+
+    const response = await app.inject({ method: "GET", url: "/people/pp-1/external-identities" });
+
+    expect(response.statusCode).toBe(200);
+    expect(listExternalIdentitiesMock).toHaveBeenCalledWith("user-1", "pp-1");
+    expect(response.json().externalIdentities).toHaveLength(1);
+  });
+
+  it("deletes an external identity via DELETE /people/:id/external-identities/:identityId", async () => {
+    deleteExternalIdentityMock.mockResolvedValueOnce(undefined);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/people/pp-1/external-identities/ident-1"
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(deleteExternalIdentityMock).toHaveBeenCalledWith("user-1", "pp-1", "ident-1");
+  });
+
+  it("returns 404 when DELETE /people/:id/external-identities/:identityId does not exist", async () => {
+    const { HttpNotFoundError } = await import("../src/lifeEvents/errors.js");
+    deleteExternalIdentityMock.mockRejectedValueOnce(new HttpNotFoundError("External identity not found"));
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/people/pp-1/external-identities/ghost-ident"
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("deletes a person via DELETE /people/:id", async () => {
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/people/pp-1"
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(deletePersonServiceMock).toHaveBeenCalledWith("user-1", "pp-1");
+  });
+
+  it("returns 404 when DELETE /people/:id cannot find the person for this user", async () => {
+    const { HttpNotFoundError } = await import("../src/lifeEvents/errors.js");
+    deletePersonServiceMock.mockRejectedValueOnce(new HttpNotFoundError("Person not found"));
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/people/other-user-person"
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 
   it("requires auth for protected routes with a consistent error shape but still bypasses /health", async () => {

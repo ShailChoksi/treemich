@@ -6,6 +6,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
+  createPerson,
   searchRelationships,
   type ImmichPerson,
   type RelationshipRecord,
@@ -13,6 +14,7 @@ import {
   type UserPreferences
 } from "../lib/api";
 import { AddRelativePopup } from "./graph/AddRelativePopup";
+import type { AddRelativeSubmitPayload } from "./graph/AddRelativePopup";
 import { findPersonBySearchTerm, useGraphSearch } from "./graph/useGraphSearch";
 import { useGraphCamera } from "./graph/useGraphCamera";
 import { useGraphSelection } from "./graph/useGraphSelection";
@@ -62,6 +64,7 @@ type Props = {
     targetPersonId: string,
     relationshipType: RelationshipType
   ) => Promise<void>;
+  onNewPerson?: () => void;
   onPreferencesChange: (prefs: Partial<UserPreferences>) => void;
   onRetryGraphLoad?: () => void;
   onRetryLayout?: () => void;
@@ -129,6 +132,7 @@ const PeopleGraph3DComponent = ({
   onCameraFocusPersonConsumed,
   onSelectedPersonChange,
   onCreateRelationship,
+  onNewPerson,
   onPreferencesChange,
   onRetryGraphLoad,
   onRetryLayout,
@@ -435,20 +439,34 @@ const PeopleGraph3DComponent = ({
     [selectedPersonId]
   );
 
-  const handleAddRelative = async (personName: string, relationshipType?: RelationshipType) => {
+  const handleAddRelative = async (payload: AddRelativeSubmitPayload) => {
     if (!addRelativeIntent) {
       throw new Error("Select a person first.");
     }
 
-    const match = findPersonBySearchTerm(people, personName);
-    if (!personName.trim()) {
-      throw new Error("Type a person name.");
-    }
-    if (!match) {
-      throw new Error(`No person found for "${personName}"`);
-    }
-    if (match.id === addRelativeIntent.selectedPersonId) {
-      throw new Error("Choose a different person.");
+    let targetId: string;
+    let targetName: string;
+    if (payload.type === "new") {
+      const newPerson = await createPerson({
+        givenName: payload.givenName,
+        surname: payload.surname,
+        gender: payload.gender
+      });
+      targetId = newPerson.id;
+      targetName = getPersonDisplayLabel(newPerson);
+    } else {
+      const match = findPersonBySearchTerm(people, payload.personName);
+      if (!payload.personName.trim()) {
+        throw new Error("Type a person name.");
+      }
+      if (!match) {
+        throw new Error(`No person found for "${payload.personName}"`);
+      }
+      if (match.id === addRelativeIntent.selectedPersonId) {
+        throw new Error("Choose a different person.");
+      }
+      targetId = match.id;
+      targetName = match.name;
     }
 
     let nextRelationshipType: RelationshipType;
@@ -457,12 +475,12 @@ const PeopleGraph3DComponent = ({
     } else if (addRelativeIntent.slot === "child") {
       nextRelationshipType = RELATIONSHIP_TYPES.parentOf;
     } else {
-      nextRelationshipType = relationshipType ?? RELATIONSHIP_TYPES.siblingOf;
+      nextRelationshipType = payload.relationshipType ?? RELATIONSHIP_TYPES.siblingOf;
     }
 
-    await onCreateRelationship(addRelativeIntent.selectedPersonId, match.id, nextRelationshipType);
+    await onCreateRelationship(addRelativeIntent.selectedPersonId, targetId, nextRelationshipType);
     setAddRelativeIntent(null);
-    setSearchFeedback(`Added ${match.name}`);
+    setSearchFeedback(payload.type === "new" ? `Created and added ${targetName}` : `Added ${targetName}`);
   };
 
   const handleClearSearch = () => {
@@ -533,6 +551,7 @@ const PeopleGraph3DComponent = ({
           onSearchIncludeAlternateNamesChange={(next) =>
             onPreferencesChange({ searchIncludeAlternateNames: next })
           }
+          onNewPerson={onNewPerson}
         />
         <GraphLayerControls
           filterVisibility={filterVisibility}

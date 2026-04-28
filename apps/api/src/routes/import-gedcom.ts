@@ -32,7 +32,7 @@ const previewBodySchema = z.object({
 const createJobBodySchema = z.object({
   gedcomUtf8: gedcomUtf8Field,
   fileName: z.string().max(255).optional(),
-  /** Map GEDCOM INDI xref (`@I1@` or `I1`) → Immich person id (must exist as a Treemich profile for this user). */
+  /** Map GEDCOM INDI xref (`@I1@` or `I1`) → Treemich PersonProfile id for this user. */
   indiMatches: z.record(z.string().min(1), z.string().min(1)),
   importOptions: z
     .object({
@@ -41,10 +41,11 @@ const createJobBodySchema = z.object({
       /** When true, allows importing only a matched INDI subset; FAM rows with missing matches are skipped. */
       allowPartialMatches: z.boolean().optional(),
       /**
-       * Phase 5 intentionally remains match-only: unmatched INDI rows are skipped unless the operator later adds
-       * a shadow-person or Immich-create policy.
+       * Controls what happens to INDI records that have no existing Treemich person match:
+       * - "MATCH_ONLY" (default): unmatched INDI rows are skipped with a warning.
+       * - "CREATE": unmatched INDI rows are created as new Treemich persons before family/life-event processing.
        */
-      unmatchedIndiPolicy: z.literal("MATCH_ONLY").optional()
+      unmatchedIndiPolicy: z.enum(["MATCH_ONLY", "CREATE"]).optional()
     })
     .optional()
 });
@@ -178,11 +179,12 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
       const merged = mergeIndiMatches(body.indiMatches, preview.records);
       const famErr = validateFamMatches(preview, merged);
       const allowPartialMatches = body.importOptions?.allowPartialMatches === true;
-      if (famErr && !allowPartialMatches) {
+      const createPolicy = body.importOptions?.unmatchedIndiPolicy === "CREATE";
+      if (famErr && !allowPartialMatches && !createPolicy) {
         return reply.code(422).send({
           statusCode: 422,
           error: "Incomplete INDI matches for family records",
-          message: `${famErr}. To import only matched people, set importOptions.allowPartialMatches=true.`
+          message: `${famErr}. Set importOptions.unmatchedIndiPolicy="CREATE" to create new people automatically, or set importOptions.allowPartialMatches=true to skip unmatched families.`
         });
       }
       const job = await prisma.gedcomImportJob.create({
@@ -225,11 +227,12 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
       const merged = mergeIndiMatches(indiMatches, preview.records);
       const famErr = validateFamMatches(preview, merged);
       const allowPartialMatches = importOptions.allowPartialMatches === true;
-      if (famErr && !allowPartialMatches) {
+      const createPolicy = importOptions.unmatchedIndiPolicy === "CREATE";
+      if (famErr && !allowPartialMatches && !createPolicy) {
         return reply.code(422).send({
           statusCode: 422,
           error: "Incomplete INDI matches for family records",
-          message: `${famErr}. To import only matched people, set importOptions.allowPartialMatches=true.`
+          message: `${famErr}. Set importOptions.unmatchedIndiPolicy="CREATE" to create new people automatically, or set importOptions.allowPartialMatches=true to skip unmatched families.`
         });
       }
       const job = await prisma.gedcomImportJob.create({

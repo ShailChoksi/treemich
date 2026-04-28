@@ -12,6 +12,7 @@ import type {
   CreateLifeEventBody,
   CreateMediaObjectBody,
   CreatePersonNameBody,
+  CreatePersonBody,
   CreateRepositoryBody,
   CreateResearchTaskBody,
   CreateSourceBody,
@@ -19,7 +20,6 @@ import type {
   GraphLayoutRequest,
   GraphLayoutResponse,
   GenderValue as Gender,
-  ImmichPerson as SharedImmichPerson,
   LifeEventListResponse,
   LifeEventRecord,
   LinkStatus,
@@ -30,6 +30,7 @@ import type {
   PatchPersonNameBody,
   PatchResearchTaskBody,
   PersonNameTypeValue,
+  PersonRecord,
   PhotoCluster,
   PhotoCooccurrenceEdge,
   RelationshipRecord,
@@ -50,6 +51,7 @@ export type {
   CreateFamilyLifeEventBody,
   CreateLifeEventBody,
   CreateMediaObjectBody,
+  CreatePersonBody,
   CreatePersonNameBody,
   CreateRepositoryBody,
   CreateResearchTaskBody,
@@ -67,6 +69,7 @@ export type {
   PatchPersonNameBody,
   PatchResearchTaskBody,
   PersonNameTypeValue,
+  PersonRecord,
   PhotoCluster,
   PhotoCooccurrenceEdge,
   RelationshipRecord,
@@ -98,13 +101,14 @@ export class ApiHttpError extends Error {
   }
 }
 
-/** Immich person plus Treemich profile overlay and UI flags from `/people`. */
-export type ImmichPerson = SharedImmichPerson & {
-  id: string;
-  name: string;
-  profile?: TreemichPersonProfile | null;
-  hasRelationship?: boolean;
-};
+/**
+ * Canonical Treemich person enriched with the `hasRelationship` UI flag from `GET /people`.
+ * This is the same shape as `PersonRecord` from `@treemich/shared`.
+ */
+export type Person = PersonRecord;
+
+/** @deprecated Use {@link Person} or {@link PersonRecord} from `@treemich/shared`. */
+export type ImmichPerson = Person;
 
 /** Optional spouse timeline fields when creating/updating `SPOUSE_OF` edges. */
 export type SpouseRelationshipDates = {
@@ -249,14 +253,42 @@ export const getLinkStatus = async (): Promise<LinkStatus> => {
   return (await response.json()) as LinkStatus;
 };
 
-/** `GET /people` — Immich people visible to the linked account. */
-export const getImmichPeople = async (): Promise<ImmichPerson[]> => {
-  const response = await fetchWithRetry(`${treemichApi}/people`, {
-    cache: "no-store"
-  });
+/** `GET /people` — returns all Treemich-owned people for the authenticated user, with optional search. */
+export const getPeople = async (query?: string): Promise<Person[]> => {
+  const url = new URL(`${treemichApi}/people`, window.location.href);
+  if (query) url.searchParams.set("q", query);
+  const response = await fetchWithRetry(url.toString(), { cache: "no-store" });
   await ensureOk(response, `Failed to load people (${response.status})`);
-  const json = (await response.json()) as { people?: ImmichPerson[] };
+  const json = (await response.json()) as { people?: Person[] };
   return json.people ?? [];
+};
+
+/** @deprecated Use {@link getPeople}. */
+export const getImmichPeople = getPeople;
+
+/** `POST /people` — creates a new Treemich person without requiring an Immich account. */
+export const createPerson = async (body: CreatePersonBody): Promise<Person> => {
+  const response = await fetch(
+    `${treemichApi}/people`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create person");
+  return (await response.json()) as Person;
+};
+
+/** `DELETE /people/:id` — deletes a Treemich person and cascaded profile data. */
+export const deletePerson = async (personId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/people/${personId}`,
+    withSession({
+      method: "DELETE"
+    })
+  );
+  await ensureOk(response, "Failed to delete person");
 };
 
 /** `PATCH /people/:id` — Treemich profile fields (gender, names, etc.). */

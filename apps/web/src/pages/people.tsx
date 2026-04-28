@@ -13,11 +13,12 @@ import {
   type MutableRefObject
 } from "react";
 import type {
+  CreatePersonBody,
   CreateResearchTaskBody,
   FamilyRecord,
   Gender,
   GraphLayoutResponse,
-  ImmichPerson,
+  PersonRecord,
   LifeEventRecord,
   PatchFamilyBody,
   PlacesMapPoint,
@@ -28,6 +29,7 @@ import type {
   UserPreferences
 } from "../lib/api";
 import {
+  createPerson,
   createResearchTask,
   createPersonLifeEvent,
   createRelationshipLifeEvent,
@@ -40,9 +42,10 @@ import {
   getFamiliesForPerson,
   getFamilyLifeEvents,
   deletePersonLifeEvent,
+  deletePerson,
   deleteRelationship,
   deleteRelationshipLifeEvent,
-  getImmichPeople,
+  getPeople,
   getPlacesMap,
   getPersonLifeEvents,
   getPersonTimeline,
@@ -77,6 +80,7 @@ import { EvidenceLibrariesSection } from "../components/EvidenceLibrariesSection
 import { EvidenceMediaSection } from "../components/EvidenceMediaSection";
 import { GedcomInterchangeSection } from "../components/GedcomInterchangeSection";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
+import { CreatePersonDialog } from "../components/CreatePersonDialog";
 import { MapPlacesPanel } from "../components/MapPlacesPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
 
@@ -101,7 +105,7 @@ const WORKSPACE_ITEMS: { id: WorkspaceId; label: string; iconLabel: string }[] =
   { id: "settings", label: "Settings", iconLabel: "ST" }
 ];
 
-const sortPeopleStable = (people: ImmichPerson[]) =>
+const sortPeopleStable = (people: PersonRecord[]) =>
   [...people].sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
 
 const sortRelationshipsStable = (relationships: RelationshipRecord[]) =>
@@ -115,7 +119,7 @@ const sortRelationshipsStable = (relationships: RelationshipRecord[]) =>
 const normalizeName = (value: string | null | undefined) => value?.trim().toLocaleLowerCase() ?? "";
 const isAbortError = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
 
-const samePeopleList = (left: ImmichPerson[], right: ImmichPerson[]) =>
+const samePeopleList = (left: PersonRecord[], right: PersonRecord[]) =>
   left.length === right.length &&
   left.every((person, index) => {
     const other = right[index];
@@ -164,7 +168,7 @@ const noRelationshipsGraphFilterVisibility: NonNullable<UserPreferences["graphFi
 };
 
 export const findBestPersonMatchByName = (
-  people: ImmichPerson[],
+  people: PersonRecord[],
   currentUserName: string | null | undefined
 ) => {
   const normalizedName = normalizeName(currentUserName);
@@ -190,7 +194,7 @@ export const findBestPersonMatchByName = (
 };
 
 type ResolvePeopleSelectionOptions = {
-  people: ImmichPerson[];
+  people: PersonRecord[];
   relationships: RelationshipRecord[];
   currentSelectedPersonId: string | null;
   lastSelectedPersonId: string | null | undefined;
@@ -372,7 +376,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   });
   const [layoutResizeSignal, setLayoutResizeSignal] = useState(0);
   const workspaceMainViewsRef = useRef<HTMLDivElement | null>(null);
-  const [people, setPeople] = useState<ImmichPerson[]>([]);
+  const [people, setPeople] = useState<PersonRecord[]>([]);
   const [relationships, setRelationships] = useState<RelationshipRecord[]>([]);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [graphFocusPersonId, setGraphFocusPersonId] = useState<string | null>(null);
@@ -394,6 +398,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingRelationship, setIsSavingRelationship] = useState(false);
+  const [showCreatePersonDialog, setShowCreatePersonDialog] = useState(false);
+  const [isCreatingPerson, setIsCreatingPerson] = useState(false);
   const [savedPreferences, setSavedPreferences] = useState<UserPreferences | null>(null);
   const [serverLayout, setServerLayout] = useState<GraphLayoutResponse | null>(null);
   const [graphLayoutError, setGraphLayoutError] = useState<string | null>(null);
@@ -424,7 +430,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastIdRef = useRef(0);
   const selectedPersonIdRef = useRef<string | null>(null);
-  const selectedPersonRef = useRef<ImmichPerson | null>(null);
+  const selectedPersonRef = useRef<PersonRecord | null>(null);
   const lastPersistedSelectionRef = useRef<string | null>(null);
   const layoutRequestIdRef = useRef(0);
   const workspaceButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -447,7 +453,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const lastPersistedMapUiSnapshotRef = useRef<string | null>(null);
 
   const refreshPeopleOnly = useCallback(async () => {
-    const peopleResponse = await getImmichPeople();
+    const peopleResponse = await getPeople();
     const sortedPeople = sortPeopleStable(peopleResponse);
     setPeople((current) => (samePeopleList(current, sortedPeople) ? current : sortedPeople));
   }, []);
@@ -539,7 +545,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     setIsLoading(true);
     try {
       const [peopleResponse, relationshipsResponse, preferencesResponse] = await Promise.all([
-        getImmichPeople(),
+        getPeople(),
         getRelationships(),
         getUserPreferences().catch(() => ({}) as UserPreferences)
       ]);
@@ -638,8 +644,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         await patchFamily(familyId, body);
         const structureChanged =
           body.children !== undefined ||
-          body.parent1ImmichPersonId !== undefined ||
-          body.parent2ImmichPersonId !== undefined;
+          body.parent1PersonId !== undefined ||
+          body.parent2PersonId !== undefined;
         if (structureChanged) {
           await refreshGraphData();
         } else {
@@ -1248,6 +1254,49 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     },
     [refreshGraphData]
   );
+
+  const handleCreatePerson = useCallback(
+    async (body: CreatePersonBody) => {
+      if (profileDraftDirtyRef.current) {
+        setStatus("Save your profile changes before creating a new person.");
+        return;
+      }
+      setIsCreatingPerson(true);
+      try {
+        const newPerson = await createPerson(body);
+        setShowCreatePersonDialog(false);
+        selectedPersonIdRef.current = newPerson.id;
+        setSelectedPersonId(newPerson.id);
+        setGraphCameraFocusPersonId(newPerson.id);
+        await refreshGraphData();
+        setStatus("Person created");
+      } catch (error: unknown) {
+        setStatus(getErrorMessage(error));
+        throw error;
+      } finally {
+        setIsCreatingPerson(false);
+      }
+    },
+    [refreshGraphData]
+  );
+
+  const handleDeletePerson = useCallback(async () => {
+    const person = selectedPersonRef.current;
+    if (!person) {
+      return;
+    }
+    try {
+      await deletePerson(person.id);
+      profileDraftDirtyRef.current = false;
+      selectedPersonIdRef.current = null;
+      setSelectedPersonId(null);
+      await refreshGraphData();
+      setStatus("Person deleted");
+    } catch (error: unknown) {
+      setStatus(getErrorMessage(error));
+      throw error;
+    }
+  }, [refreshGraphData]);
 
   const onDeleteExistingRelationship = useCallback(
     async (relationship: RelationshipRecord) => {
@@ -1946,6 +1995,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
             onCameraFocusPersonConsumed={clearGraphCameraFocus}
             onSelectedPersonChange={setSelectedPersonId}
             onCreateRelationship={onCreateRelationship}
+            onNewPerson={() => setShowCreatePersonDialog(true)}
             onPreferencesChange={onPreferencesChange}
             onRetryGraphLoad={() => void refreshGraphData()}
             onRetryLayout={() => void refreshGraphData()}
@@ -2033,6 +2083,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onCreateRelationship,
           onUpdateRelationship: onUpdateExistingRelationship,
           onDeleteRelationship: onDeleteExistingRelationship,
+          onDeletePerson: handleDeletePerson,
           onDismissSuggestion,
           isSavingRelationship,
           immichBaseUrl,
@@ -2061,6 +2112,12 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onResearchTaskUpdate: handleResearchTaskUpdate,
           onResearchTaskDelete: handleResearchTaskDelete
         }}
+      />
+      <CreatePersonDialog
+        open={showCreatePersonDialog}
+        busy={isCreatingPerson}
+        onConfirm={handleCreatePerson}
+        onCancel={() => setShowCreatePersonDialog(false)}
       />
     </section>
   );

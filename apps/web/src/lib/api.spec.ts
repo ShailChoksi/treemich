@@ -6,6 +6,7 @@ import {
   createFamilyLifeEvent,
   createResearchTask,
   createPersonLifeEvent,
+  deletePerson,
   deleteFamily,
   deleteFamilyLifeEvent,
   getFamiliesForPerson,
@@ -768,5 +769,123 @@ describe("family API helpers", () => {
       "/api/families/fam-1/life-events/ev-9",
       expect.objectContaining({ method: "DELETE", credentials: "include" })
     );
+  });
+});
+
+describe("people API helpers", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("getPeople fetches from GET /people and returns the people array", async () => {
+    const { getPeople } = await import("./api");
+    const people = [{ id: "p1", name: "Alice" }];
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ people }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const result = await getPeople();
+
+    expect(result).toEqual(people);
+    const [[url]] = vi.mocked(globalThis.fetch).mock.calls;
+    expect(String(url)).toContain("/api/people");
+  });
+
+  it("getPeople passes search query as ?q= parameter", async () => {
+    const { getPeople } = await import("./api");
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ people: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    await getPeople("alice");
+
+    const [[url]] = vi.mocked(globalThis.fetch).mock.calls;
+    expect(String(url)).toContain("q=alice");
+  });
+
+  it("getPeople returns an empty array when the response omits the people key", async () => {
+    const { getPeople } = await import("./api");
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } })
+    );
+
+    const result = await getPeople();
+    expect(result).toEqual([]);
+  });
+
+  it("getImmichPeople is a deprecated alias for getPeople and returns the same data", async () => {
+    const { getPeople, getImmichPeople } = await import("./api");
+    expect(getImmichPeople).toBe(getPeople);
+  });
+
+  it("createPerson POSTs to /people and returns the created person", async () => {
+    const { createPerson } = await import("./api");
+    const created = { id: "p-new", name: "Bob Jones" };
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(created), {
+        status: 201,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const result = await createPerson({ givenName: "Bob", surname: "Jones" });
+
+    expect(result).toEqual(created);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/people"),
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: expect.stringContaining("Bob")
+      })
+    );
+  });
+
+  it("createPerson throws ApiHttpError on non-OK response", async () => {
+    const { createPerson, ApiHttpError } = await import("./api");
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: "Validation failed" }), {
+        status: 422,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    await expect(createPerson({ givenName: "X" })).rejects.toBeInstanceOf(ApiHttpError);
+  });
+
+  it("deletePerson sends DELETE /people/:id", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await deletePerson("pp-1");
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/people/pp-1"),
+      expect.objectContaining({ method: "DELETE", credentials: "include" })
+    );
+  });
+
+  it("deletePerson throws ApiHttpError on non-OK response", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: "Person not found" }), {
+        status: 404,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    await expect(deletePerson("missing")).rejects.toBeInstanceOf(ApiHttpError);
   });
 });

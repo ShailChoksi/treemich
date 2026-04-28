@@ -120,6 +120,63 @@ describe("import GEDCOM subset matching", () => {
     await app.close();
   });
 
+  it("bypasses FAM validation and creates a job when unmatchedIndiPolicy is CREATE", async () => {
+    gedcomImportJobCreateMock.mockResolvedValue({
+      id: "job-create",
+      status: "PENDING",
+      createdAt: new Date("2026-01-01T00:00:00.000Z")
+    });
+    // validateFamMatchesMock returns an error by default (from hoisted mock above);
+    // the CREATE policy should prevent the 422 response.
+    const { registerImportGedcomRoutes } = await import("./import-gedcom.js");
+    const app = Fastify();
+    (app as unknown as { services: unknown }).services = {};
+    await app.register(registerImportGedcomRoutes);
+    await app.ready();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/import/gedcom/jobs",
+      payload: {
+        gedcomUtf8: "0 HEAD\n0 TRLR\n",
+        indiMatches: {},
+        importOptions: { unmatchedIndiPolicy: "CREATE" }
+      }
+    });
+    expect(res.statusCode).toBe(200);
+    expect(gedcomImportJobCreateMock).toHaveBeenCalledTimes(1);
+    // importOptions must be persisted so the runner picks up the CREATE policy
+    expect(gedcomImportJobCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          importOptions: expect.objectContaining({ unmatchedIndiPolicy: "CREATE" })
+        })
+      })
+    );
+    await app.close();
+  });
+
+  it("still returns 422 for FAM mismatch when policy is MATCH_ONLY", async () => {
+    const { registerImportGedcomRoutes } = await import("./import-gedcom.js");
+    const app = Fastify();
+    (app as unknown as { services: unknown }).services = {};
+    await app.register(registerImportGedcomRoutes);
+    await app.ready();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/import/gedcom/jobs",
+      payload: {
+        gedcomUtf8: "0 HEAD\n0 TRLR\n",
+        indiMatches: {},
+        importOptions: { unmatchedIndiPolicy: "MATCH_ONLY" }
+      }
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().message).toMatch(/CREATE.*automatically|allowPartialMatches/i);
+    await app.close();
+  });
+
   it("creates archive import jobs from multipart ZIP uploads", async () => {
     gedcomImportJobCreateMock.mockResolvedValue({
       id: "job-archive",

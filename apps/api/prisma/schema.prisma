@@ -561,7 +561,7 @@ model GedcomImportJob {
   byteSize     Int
   /// Raw UTF-8 payload (bounded by `TREEMICH_GEDCOM_IMPORT_MAX_BYTES` at upload).
   gedcomUtf8   String                @db.Text
-  /// Client-supplied xref → Immich person id (keys may be `@I1@` or `I1`).
+  /// Client-supplied map of GEDCOM INDI xref (e.g. `@I1@` or `I1`) → Treemich PersonProfile id for this user.
   indiMatches  Json                  @default("{}")
   /// Options: dryRun, skipAlreadyImportedIndis, etc.
   importOptions Json                 @default("{}")

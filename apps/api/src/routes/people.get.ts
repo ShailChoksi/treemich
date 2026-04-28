@@ -70,6 +70,13 @@ export const registerPeopleGetRoute = (app: FastifyInstance) => {
     return person;
   });
 
+  app.delete("/people/:id", async (request, reply) => {
+    const auth = getRequiredAuth(request);
+    const { id } = paramsSchema.parse(request.params);
+    await app.services.personService.delete(auth.user.id, id);
+    return reply.code(204).send();
+  });
+
   app.get("/people/:id/external-identities", async (request) => {
     const auth = getRequiredAuth(request);
     const { id } = paramsSchema.parse(request.params);

@@ -16,6 +16,7 @@ type Props = {
   treeValidationEngineDisabled: boolean;
   searchIncludeAlternateNames: boolean;
   onSearchIncludeAlternateNamesChange: (next: boolean) => void;
+  onNewPerson?: () => void;
 };
 
 const SEARCH_TERM_DEBOUNCE_MS = 120;
@@ -32,7 +33,8 @@ const GraphSearchOverlayComponent = ({
   treeValidationIssueCount,
   treeValidationEngineDisabled,
   searchIncludeAlternateNames,
-  onSearchIncludeAlternateNamesChange
+  onSearchIncludeAlternateNamesChange,
+  onNewPerson
 }: Props) => {
   const [draftSearchTerm, setDraftSearchTerm] = useState(searchTerm);
   const listId = useId();
@@ -144,6 +146,11 @@ const GraphSearchOverlayComponent = ({
       >
         Center view (F)
       </button>
+      {onNewPerson ? (
+        <button type="button" className="secondary-button graph-new-person-button" onClick={onNewPerson}>
+          + New person
+        </button>
+      ) : null}
       {searchFeedback ? (
         <p className="graph-search-feedback" aria-live="polite">
           {searchFeedback}

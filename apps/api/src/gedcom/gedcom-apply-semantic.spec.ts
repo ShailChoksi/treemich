@@ -256,4 +256,65 @@ describe("GEDCOM export/import semantic apply coverage", () => {
     );
     expect(services.relationshipService.upsertProfile).not.toHaveBeenCalled();
   });
+
+  it("creates new people for unmatched INDI rows when unmatchedIndiPolicy is CREATE", async () => {
+    const gedcomUtf8 = `0 HEAD
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Alice /Smith/
+1 SEX F
+0 @I2@ INDI
+1 NAME Bob /Jones/
+1 SEX M
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I1@
+0 TRLR
+`;
+    mocks.gedcomImportJobUpdateMany.mockResolvedValueOnce({ count: 1 });
+    mocks.gedcomImportJobFindUnique.mockResolvedValueOnce({
+      id: "job-create",
+      userId: "user-1",
+      status: "PENDING",
+      gedcomUtf8,
+      indiMatches: {},
+      importOptions: { dryRun: true, unmatchedIndiPolicy: "CREATE" },
+      lineLog: []
+    });
+
+    const createPerson = vi.fn().mockImplementation(async (_userId: string, body: { givenName?: string | null }) => ({
+      id: `new-person-${body.givenName ?? "unknown"}`,
+      name: body.givenName ?? "Unknown",
+      profile: null
+    }));
+
+    const services = {
+      evidenceService: {
+        createRepository: vi.fn(),
+        createSource: vi.fn(),
+        createMediaObject: vi.fn(),
+        createMediaLink: vi.fn()
+      },
+      personService: { update: vi.fn(), create: createPerson },
+      lifeEventService: {
+        createPersonLifeEvent: vi.fn(),
+        createRelationshipLifeEvent: vi.fn(),
+        createFamilyLifeEvent: vi.fn()
+      },
+      personNameService: { create: vi.fn() },
+      familyService: { createFamily: vi.fn() }
+    } as unknown as AppServices;
+
+    const { processGedcomImportJob } = await import("./importRunner.js");
+    await processGedcomImportJob("job-create", services);
+
+    const completed = mocks.gedcomImportJobUpdate.mock.calls.at(-1)?.[0]?.data;
+    expect(completed).toMatchObject({ status: "COMPLETED" });
+    // Both unmatched INDIs were created in the preliminary pass (dry-run increments count)
+    expect(completed.summary).toMatchObject({ indisCreated: 2, indisSkipped: 0 });
+    // Family referencing both people should be created
+    expect(completed.summary).toMatchObject({ familiesCreated: 1 });
+    // Dry-run: personService.create is NOT called (uses placeholder ids)
+    expect(createPerson).not.toHaveBeenCalled();
+  });
 });
