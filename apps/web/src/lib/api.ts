@@ -218,10 +218,32 @@ const ensureOk = async (response: Response, fallbackMessage: string) => {
   throw new ApiHttpError(statusCode, message);
 };
 
+export type LoginProvider = "treemich" | "immich";
+
 /** `POST /auth/login` — establishes session cookie. */
-export const login = async (email: string, password: string): Promise<AuthState> => {
+export const login = async (
+  email: string,
+  password: string,
+  provider: LoginProvider = "treemich"
+): Promise<AuthState> => {
   const response = await fetch(
     `${treemichApi}/auth/login`,
+    withSession({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, password, provider })
+    })
+  );
+  await ensureOk(response, "Login failed");
+  return (await response.json()) as AuthState;
+};
+
+/** `POST /auth/immich/link` — validate and store optional Immich provider credentials. */
+export const linkImmichAccount = async (email: string, password: string): Promise<LinkStatus> => {
+  const response = await fetch(
+    `${treemichApi}/auth/immich/link`,
     withSession({
       method: "POST",
       headers: {
@@ -230,8 +252,20 @@ export const login = async (email: string, password: string): Promise<AuthState>
       body: JSON.stringify({ email, password })
     })
   );
-  await ensureOk(response, "Login failed");
-  return (await response.json()) as AuthState;
+  await ensureOk(response, "Failed to link Immich account");
+  return (await response.json()) as LinkStatus;
+};
+
+/** `DELETE /auth/immich/link` — remove stored Immich provider credentials. */
+export const unlinkImmichAccount = async (): Promise<LinkStatus> => {
+  const response = await fetch(
+    `${treemichApi}/auth/immich/link`,
+    withSession({
+      method: "DELETE"
+    })
+  );
+  await ensureOk(response, "Failed to unlink Immich account");
+  return (await response.json()) as LinkStatus;
 };
 
 /** `POST /auth/logout` — clears session cookie. */
@@ -682,8 +716,6 @@ export type PersonLifeEventValidationFinding = {
   severity: "error" | "warning";
   message: string;
   personId?: string;
-  /** @deprecated Use personId. */
-  immichPersonId?: string;
   relationshipId?: string;
   relatedPersonId?: string;
 };

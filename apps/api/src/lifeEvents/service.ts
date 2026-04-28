@@ -52,8 +52,7 @@ export class LifeEventService {
           where: { userId, providerPersonId: personId },
           include: { person: true }
         })
-      )?.person ??
-      (await prisma.personProfile.findFirst({ where: { userId, immichPersonId: personId } }))
+      )?.person
     );
   }
 

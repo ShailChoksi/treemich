@@ -5,11 +5,12 @@ const mocks = vi.hoisted(() => ({
   treemichUserCount: vi.fn(),
   treemichUserCreate: vi.fn(),
   treemichUserUpdate: vi.fn(),
-  treemichUserUpsert: vi.fn(),
   treemichSessionCreate: vi.fn(),
-  treemichSessionFindFirst: vi.fn(),
+  treemichSessionFindUnique: vi.fn(),
   treemichSessionDelete: vi.fn(),
+  linkedImmichAccountFindUnique: vi.fn(),
   linkedImmichAccountUpsert: vi.fn(),
+  linkedImmichAccountDeleteMany: vi.fn(),
   personProfileCount: vi.fn(),
   relationshipCount: vi.fn(),
   transaction: vi.fn()
@@ -21,16 +22,17 @@ vi.mock("../db/client.js", () => ({
       findFirst: mocks.treemichUserFindFirst,
       count: mocks.treemichUserCount,
       create: mocks.treemichUserCreate,
-      update: mocks.treemichUserUpdate,
-      upsert: mocks.treemichUserUpsert
+      update: mocks.treemichUserUpdate
     },
     treemichSession: {
       create: mocks.treemichSessionCreate,
-      findFirst: mocks.treemichSessionFindFirst,
+      findUnique: mocks.treemichSessionFindUnique,
       delete: mocks.treemichSessionDelete
     },
     linkedImmichAccount: {
-      upsert: mocks.linkedImmichAccountUpsert
+      findUnique: mocks.linkedImmichAccountFindUnique,
+      upsert: mocks.linkedImmichAccountUpsert,
+      deleteMany: mocks.linkedImmichAccountDeleteMany
     },
     personProfile: {
       count: mocks.personProfileCount
@@ -55,6 +57,9 @@ vi.mock("../config/env.js", () => ({
 }));
 
 vi.mock("../integrations/immich/client.js", () => ({
+  ImmichAuthenticationError: class ImmichAuthenticationError extends Error {
+    readonly statusCode = 401;
+  },
   ImmichClient: vi.fn(),
   loginToImmich: vi.fn()
 }));
@@ -64,10 +69,6 @@ const makeUser = (overrides: Record<string, unknown> = {}) => ({
   email: "alice@example.com",
   name: "alice@example.com",
   passwordHash: null,
-  immichUserId: null,
-  immichBaseUrl: null,
-  immichEmail: null,
-  immichName: null,
   createdAt: new Date("2025-01-01"),
   updatedAt: new Date("2025-01-01"),
   ...overrides
@@ -169,16 +170,16 @@ describe("AuthService.loginWithPassword", () => {
     expect(result.state.linkStatus).toEqual({ linked: false });
   });
 
-  it("returns a standalone auth state without immichUserId when user has none", async () => {
+  it("returns a standalone auth state with only Treemich-owned user identity", async () => {
     const { hashPassword } = await import("./crypto.js");
-    const user = makeUser({ passwordHash: hashPassword("pw"), immichUserId: null });
+    const user = makeUser({ passwordHash: hashPassword("pw") });
     mocks.treemichUserFindFirst.mockResolvedValue(user);
     mocks.treemichUserCount.mockResolvedValue(1);
 
     const { AuthService } = await import("./service.js");
     const { state } = await new AuthService().loginWithPassword("alice@example.com", "pw");
 
-    expect(state.user?.immichUserId).toBeUndefined();
+    expect(state.user).toEqual({ id: "user-1", email: "alice@example.com", name: "alice@example.com" });
   });
 });
 
@@ -186,14 +187,9 @@ describe("AuthService.loginWithImmich", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.treemichSessionCreate.mockResolvedValue({ id: "session-1" });
-    mocks.treemichUserUpsert.mockResolvedValue(
-      makeUser({
-        id: "user-1",
-        immichBaseUrl: "https://immich.example",
-        immichUserId: "immich-user-1",
-        immichEmail: "alice@example.com",
-        immichName: "Alice"
-      })
+    mocks.linkedImmichAccountFindUnique.mockResolvedValue(null);
+    mocks.treemichUserCreate.mockResolvedValue(
+      makeUser({ id: "user-1", email: "alice@example.com", name: "Alice" })
     );
     mocks.linkedImmichAccountUpsert.mockResolvedValue({ id: "linked-1" });
     mocks.personProfileCount.mockResolvedValue(1);
@@ -261,5 +257,85 @@ describe("AuthService.loginWithImmich", () => {
     expect(syncImmichExternalIdentityNames).not.toHaveBeenCalled();
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(mocks.treemichSessionCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AuthService.linkImmichAccount", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.linkedImmichAccountFindUnique.mockResolvedValue(null);
+    mocks.linkedImmichAccountUpsert.mockResolvedValue({ id: "linked-1" });
+  });
+
+  it("links Immich credentials to the current Treemich user and syncs names", async () => {
+    const { loginToImmich } = await import("../integrations/immich/client.js");
+    vi.mocked(loginToImmich).mockResolvedValue({
+      accessToken: "fresh-token",
+      userId: "immich-user-1",
+      userEmail: "alice@example.com",
+      name: "Alice",
+      isAdmin: false,
+      shouldChangePassword: false,
+      isOnboarded: true
+    });
+    const listPeople = vi.fn().mockResolvedValue([{ id: "immich-person-1", name: "Alice Smith" }]);
+    const dispose = vi.fn();
+    const syncImmichExternalIdentityNames = vi.fn().mockResolvedValue({
+      matched: 1,
+      updated: 1,
+      skippedUnnamed: 0
+    });
+
+    const { AuthService } = await import("./service.js");
+    const result = await new AuthService({
+      personService: { syncImmichExternalIdentityNames },
+      createImmichClientFromToken: () => ({ listPeople, dispose })
+    }).linkImmichAccount("user-1", "alice@example.com", "password");
+
+    expect(result).toEqual({
+      linked: true,
+      immichBaseUrl: "https://immich.example",
+      immichEmail: "alice@example.com",
+      immichName: "Alice"
+    });
+    expect(mocks.linkedImmichAccountUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "user-1" },
+        update: expect.objectContaining({ immichUserId: "immich-user-1" })
+      })
+    );
+    expect(syncImmichExternalIdentityNames).toHaveBeenCalledWith("user-1", [
+      { id: "immich-person-1", name: "Alice Smith" }
+    ]);
+  });
+
+  it("rejects an Immich account that is already linked to another Treemich user", async () => {
+    const { loginToImmich } = await import("../integrations/immich/client.js");
+    vi.mocked(loginToImmich).mockResolvedValue({
+      accessToken: "fresh-token",
+      userId: "immich-user-1",
+      userEmail: "alice@example.com",
+      name: "Alice",
+      isAdmin: false,
+      shouldChangePassword: false,
+      isOnboarded: true
+    });
+    mocks.linkedImmichAccountFindUnique.mockResolvedValue({ id: "linked-1", userId: "other-user" });
+
+    const { AuthService, TreemichConflictError } = await import("./service.js");
+    await expect(
+      new AuthService().linkImmichAccount("user-1", "alice@example.com", "password")
+    ).rejects.toBeInstanceOf(TreemichConflictError);
+    expect(mocks.linkedImmichAccountUpsert).not.toHaveBeenCalled();
+  });
+
+  it("unlinks Immich credentials without touching imported provider data", async () => {
+    mocks.linkedImmichAccountDeleteMany.mockResolvedValue({ count: 1 });
+
+    const { AuthService } = await import("./service.js");
+    const result = await new AuthService().unlinkImmichAccount("user-1");
+
+    expect(result).toEqual({ linked: false });
+    expect(mocks.linkedImmichAccountDeleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
   });
 });

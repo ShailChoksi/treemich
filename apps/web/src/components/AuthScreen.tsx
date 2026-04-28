@@ -3,20 +3,22 @@
  */
 
 import { useState } from "react";
+import type { LoginProvider } from "../lib/api";
 
 type Props = {
   busy: boolean;
   error: string | null;
-  onSubmit: (email: string, password: string) => Promise<void>;
+  onSubmit: (email: string, password: string, provider: LoginProvider) => Promise<void>;
 };
 
 export const AuthScreen = ({ busy, error, onSubmit }: Props) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [provider, setProvider] = useState<LoginProvider>("treemich");
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await onSubmit(email, password);
+    await onSubmit(email, password, provider);
   };
   const errorId = error ? "auth-screen-error" : undefined;
 
@@ -26,10 +28,22 @@ export const AuthScreen = ({ busy, error, onSubmit }: Props) => {
         <div className="stack">
           <h1>Sign in to Treemich</h1>
           <p className="hint">
-            Use the same Immich email and password for the server configured in Treemich.
+            Use your Treemich email and password. On a fresh install, the first sign-in creates the first
+            standalone Treemich account.
+          </p>
+          <p className="hint">
+            Existing Immich-first users can choose the legacy Immich migration login below, then manage Immich
+            linking from inside Treemich.
           </p>
         </div>
         <form className="stack" onSubmit={(event) => void handleSubmit(event)} aria-describedby={errorId}>
+          <label className="field-group">
+            <span className="field-label">Sign-in method</span>
+            <select value={provider} onChange={(event) => setProvider(event.target.value as LoginProvider)}>
+              <option value="treemich">Treemich account</option>
+              <option value="immich">Legacy Immich migration login</option>
+            </select>
+          </label>
           <label className="field-group">
             <span className="field-label">Email</span>
             <input

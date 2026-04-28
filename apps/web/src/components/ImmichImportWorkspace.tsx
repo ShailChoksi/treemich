@@ -54,8 +54,12 @@ export const ImmichImportWorkspace = ({ people, onImported }: Props) => {
       const nextActions: Record<string, RowAction> = {};
       const nextSelected: Record<string, string> = {};
       for (const row of next.people) {
-        nextActions[row.immichPersonId] = row.linkedPersonId ? "skip" : row.candidates[0] ? "link" : "create";
-        nextSelected[row.immichPersonId] = row.linkedPersonId ?? row.candidates[0]?.personId ?? "";
+        nextActions[row.providerPersonId] = row.linkedPersonId
+          ? "skip"
+          : row.candidates[0]
+            ? "link"
+            : "create";
+        nextSelected[row.providerPersonId] = row.linkedPersonId ?? row.candidates[0]?.personId ?? "";
       }
       setPreview(next);
       setActions(nextActions);
@@ -92,22 +96,22 @@ export const ImmichImportWorkspace = ({ people, onImported }: Props) => {
       return;
     }
     const decisions: ImmichImportDecision[] = visibleRows.map((row) => {
-      const action = actions[row.immichPersonId] ?? "skip";
+      const action = actions[row.providerPersonId] ?? "skip";
       if (action === "link") {
         return {
           action,
-          immichPersonId: row.immichPersonId,
-          personId: selectedPersonIds[row.immichPersonId] || row.candidates[0]?.personId || ""
+          providerPersonId: row.providerPersonId,
+          personId: selectedPersonIds[row.providerPersonId] || row.candidates[0]?.personId || ""
         };
       }
       if (action === "create") {
         return {
           action,
-          immichPersonId: row.immichPersonId,
+          providerPersonId: row.providerPersonId,
           ...splitName(row.name)
         };
       }
-      return { action: "skip", immichPersonId: row.immichPersonId };
+      return { action: "skip", providerPersonId: row.providerPersonId };
     });
     if (decisions.some((decision) => decision.action === "link" && !decision.personId)) {
       setError("Choose a Treemich person for every Link decision.");
@@ -203,7 +207,7 @@ export const ImmichImportWorkspace = ({ people, onImported }: Props) => {
 
           <div className="import-table">
             {visibleRows.map((row) => (
-              <div className="import-row" key={row.immichPersonId}>
+              <div className="import-row" key={row.providerPersonId}>
                 <img
                   alt=""
                   className="import-row__thumbnail"
@@ -223,11 +227,11 @@ export const ImmichImportWorkspace = ({ people, onImported }: Props) => {
                   </span>
                 </div>
                 <select
-                  value={actions[row.immichPersonId] ?? "skip"}
+                  value={actions[row.providerPersonId] ?? "skip"}
                   onChange={(e) =>
                     setActions((current) => ({
                       ...current,
-                      [row.immichPersonId]: e.target.value as RowAction
+                      [row.providerPersonId]: e.target.value as RowAction
                     }))
                   }
                 >
@@ -235,13 +239,13 @@ export const ImmichImportWorkspace = ({ people, onImported }: Props) => {
                   <option value="link">Link Existing</option>
                   <option value="create">Create New</option>
                 </select>
-                {(actions[row.immichPersonId] ?? "skip") === "link" ? (
+                {(actions[row.providerPersonId] ?? "skip") === "link" ? (
                   <select
-                    value={selectedPersonIds[row.immichPersonId] ?? ""}
+                    value={selectedPersonIds[row.providerPersonId] ?? ""}
                     onChange={(e) =>
                       setSelectedPersonIds((current) => ({
                         ...current,
-                        [row.immichPersonId]: e.target.value
+                        [row.providerPersonId]: e.target.value
                       }))
                     }
                   >

@@ -232,32 +232,18 @@ export class CooccurrenceService {
       };
     }
 
-    const [identities, legacyProfiles] = await Promise.all([
-      this.prismaClient.personExternalIdentity.findMany({
-        where: {
-          userId,
-          provider: "IMMICH",
-          providerPersonId: { in: providerPersonIds }
-        },
-        select: { providerPersonId: true, personId: true }
-      }),
-      this.prismaClient.personProfile.findMany({
-        where: {
-          userId,
-          immichPersonId: { in: providerPersonIds }
-        },
-        select: { id: true, immichPersonId: true }
-      })
-    ]);
+    const identities = await this.prismaClient.personExternalIdentity.findMany({
+      where: {
+        userId,
+        provider: "IMMICH",
+        providerPersonId: { in: providerPersonIds }
+      },
+      select: { providerPersonId: true, personId: true }
+    });
 
     const personIdByImmichId = new Map<string, string>();
     for (const identity of identities) {
       personIdByImmichId.set(identity.providerPersonId, identity.personId);
-    }
-    for (const profile of legacyProfiles) {
-      if (profile.immichPersonId && !personIdByImmichId.has(profile.immichPersonId)) {
-        personIdByImmichId.set(profile.immichPersonId, profile.id);
-      }
     }
 
     const mappedAssets = assets

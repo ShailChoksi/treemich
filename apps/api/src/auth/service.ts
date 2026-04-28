@@ -3,7 +3,7 @@ import type { AuthState } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import { env } from "../config/env.js";
 import { createOpaqueToken, encryptSecret, hashPassword, hashToken, verifyPassword } from "./crypto.js";
-import { ImmichClient, loginToImmich } from "../integrations/immich/client.js";
+import { ImmichAuthenticationError, ImmichClient, loginToImmich } from "../integrations/immich/client.js";
 import { PersonService } from "../people/service.js";
 
 const authSessionIncludeLight = {
@@ -37,6 +37,15 @@ export class TreemichAuthError extends Error {
   }
 }
 
+export class TreemichConflictError extends Error {
+  readonly statusCode = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "TreemichConflictError";
+  }
+}
+
 export type AuthenticatedRequestContext = {
   user: SessionWithUserLight["user"];
   session: SessionWithUserLight;
@@ -59,6 +68,8 @@ type ResolvedSessionContext<TOptions extends SessionResolutionOptions | undefine
 type CachedContext = AuthenticatedRequestContext | LinkedAuthenticatedRequestContext | null;
 
 type ImmichPeopleClient = Pick<ImmichClient, "listPeople" | "dispose">;
+
+type ImmichLoginResult = Awaited<ReturnType<typeof loginToImmich>>;
 
 type AuthServiceOptions = {
   personService?: Pick<PersonService, "syncImmichExternalIdentityNames">;
@@ -126,6 +137,21 @@ export class AuthService {
     this.personService = options.personService ?? new PersonService();
   }
 
+  private userState(
+    user: Pick<SessionWithUserLight["user"], "id" | "email" | "name">,
+    linkStatus?: AuthState["linkStatus"]
+  ): AuthState {
+    return {
+      authenticated: true,
+      user: {
+        id: user.id,
+        email: user.email ?? user.id,
+        name: user.name ?? user.email ?? user.id
+      },
+      linkStatus: linkStatus ?? { linked: false }
+    };
+  }
+
   async loginWithPassword(
     email: string,
     password: string
@@ -161,7 +187,7 @@ export class AuthService {
         data: {
           passwordHash: hashPassword(password),
           email: normalizedEmail,
-          name: user.name ?? user.immichName ?? normalizedEmail
+          name: user.name ?? normalizedEmail
         }
       });
     } else if (!verifyPassword(password, user.passwordHash)) {
@@ -179,18 +205,7 @@ export class AuthService {
 
     return {
       sessionToken,
-      state: {
-        authenticated: true,
-        user: {
-          id: user.id,
-          immichUserId: user.immichUserId ?? undefined,
-          email: user.email ?? user.immichEmail ?? normalizedEmail,
-          name: user.name ?? user.immichName ?? normalizedEmail
-        },
-        linkStatus: {
-          linked: false
-        }
-      }
+      state: this.userState(user)
     };
   }
 
@@ -201,63 +216,31 @@ export class AuthService {
     sessionToken: string;
     state: AuthState;
   }> {
-    const login = await loginToImmich({
-      baseUrl: env.IMMICH_BASE_URL,
-      email,
-      password,
-      timeoutMs: env.IMMICH_HTTP_TIMEOUT_MS
-    });
+    const login = await this.loginToImmichWithGenericAuthError(email, password);
 
-    const encryptedToken = encryptSecret(login.accessToken);
-    const user = await prisma.treemichUser.upsert({
+    const existingLink = await prisma.linkedImmichAccount.findUnique({
       where: {
         immichBaseUrl_immichUserId: {
           immichBaseUrl: env.IMMICH_BASE_URL,
           immichUserId: login.userId
         }
       },
-      update: {
-        immichEmail: login.userEmail,
-        immichName: login.name
-      },
-      create: {
-        immichBaseUrl: env.IMMICH_BASE_URL,
-        immichUserId: login.userId,
-        immichEmail: login.userEmail,
-        immichName: login.name
-      }
+      include: { user: true }
     });
+    const user =
+      existingLink?.user ??
+      (await prisma.treemichUser.create({
+        data: {
+          email: login.userEmail.trim().toLowerCase(),
+          name: login.name || login.userEmail
+        }
+      }));
 
     await this.claimLegacyData(user.id);
 
-    await prisma.linkedImmichAccount.upsert({
-      where: {
-        userId: user.id
-      },
-      update: {
-        immichBaseUrl: env.IMMICH_BASE_URL,
-        immichUserId: login.userId,
-        immichEmail: login.userEmail,
-        immichName: login.name,
-        encryptedAccessToken: encryptedToken.encryptedValue,
-        accessTokenIv: encryptedToken.iv,
-        accessTokenTag: encryptedToken.authTag,
-        lastValidatedAt: new Date()
-      },
-      create: {
-        userId: user.id,
-        immichBaseUrl: env.IMMICH_BASE_URL,
-        immichUserId: login.userId,
-        immichEmail: login.userEmail,
-        immichName: login.name,
-        encryptedAccessToken: encryptedToken.encryptedValue,
-        accessTokenIv: encryptedToken.iv,
-        accessTokenTag: encryptedToken.authTag,
-        lastValidatedAt: new Date()
-      }
-    });
+    await this.storeLinkedImmichAccount(user.id, login);
 
-    await this.syncImmichPersonNamesAfterLogin(user.id, login.accessToken);
+    await this.syncImmichPersonNames(user.id, login.accessToken);
 
     const sessionToken = createOpaqueToken();
     await prisma.treemichSession.create({
@@ -270,21 +253,12 @@ export class AuthService {
 
     return {
       sessionToken,
-      state: {
-        authenticated: true,
-        user: {
-          id: user.id,
-          immichUserId: user.immichUserId ?? undefined,
-          email: user.email ?? user.immichEmail ?? login.userEmail,
-          name: user.name ?? user.immichName ?? login.name
-        },
-        linkStatus: {
-          linked: true,
-          immichBaseUrl: user.immichBaseUrl ?? undefined,
-          immichEmail: user.immichEmail ?? undefined,
-          immichName: user.immichName ?? undefined
-        }
-      }
+      state: this.userState(user, {
+        linked: true,
+        immichBaseUrl: env.IMMICH_BASE_URL,
+        immichEmail: login.userEmail,
+        immichName: login.name
+      })
     };
   }
 
@@ -303,15 +277,9 @@ export class AuthService {
       where: { userId: context.user.id }
     });
 
-    return {
-      authenticated: true,
-      user: {
-        id: context.user.id,
-        immichUserId: context.user.immichUserId ?? undefined,
-        email: context.user.email ?? context.user.immichEmail ?? context.user.id,
-        name: context.user.name ?? context.user.immichName ?? context.user.id
-      },
-      linkStatus: linkedAccount
+    return this.userState(
+      context.user,
+      linkedAccount
         ? {
             linked: true,
             immichBaseUrl: linkedAccount.immichBaseUrl,
@@ -319,7 +287,45 @@ export class AuthService {
             immichName: linkedAccount.immichName
           }
         : { linked: false }
-    };
+    );
+  }
+
+  async linkImmichAccount(userId: string, email: string, password: string) {
+    const login = await this.loginToImmichWithGenericAuthError(email, password);
+    const existingLink = await prisma.linkedImmichAccount.findUnique({
+      where: {
+        immichBaseUrl_immichUserId: {
+          immichBaseUrl: env.IMMICH_BASE_URL,
+          immichUserId: login.userId
+        }
+      }
+    });
+    if (existingLink && existingLink.userId !== userId) {
+      throw new TreemichConflictError("Immich account is already linked to another Treemich user");
+    }
+
+    await this.storeLinkedImmichAccount(userId, login);
+    await this.syncImmichPersonNames(userId, login.accessToken);
+    return {
+      linked: true,
+      immichBaseUrl: env.IMMICH_BASE_URL,
+      immichEmail: login.userEmail,
+      immichName: login.name
+    } satisfies NonNullable<AuthState["linkStatus"]>;
+  }
+
+  async unlinkImmichAccount(userId: string) {
+    await prisma.linkedImmichAccount.deleteMany({
+      where: { userId }
+    });
+    return { linked: false } satisfies NonNullable<AuthState["linkStatus"]>;
+  }
+
+  clearSessionCacheForToken(sessionToken?: string | null) {
+    if (!sessionToken) {
+      return;
+    }
+    this.sessionCache.clearByTokenHash(hashToken(sessionToken));
   }
 
   async requireSession<TOptions extends SessionResolutionOptions | undefined = undefined>(
@@ -377,13 +383,59 @@ export class AuthService {
     );
   }
 
-  private async syncImmichPersonNamesAfterLogin(userId: string, accessToken: string) {
+  private async loginToImmichWithGenericAuthError(email: string, password: string) {
+    try {
+      return await loginToImmich({
+        baseUrl: env.IMMICH_BASE_URL,
+        email,
+        password,
+        timeoutMs: env.IMMICH_HTTP_TIMEOUT_MS
+      });
+    } catch (error) {
+      if (error instanceof ImmichAuthenticationError) {
+        throw new TreemichAuthError("Invalid Immich email or password");
+      }
+      throw error;
+    }
+  }
+
+  private async storeLinkedImmichAccount(userId: string, login: ImmichLoginResult) {
+    const encryptedToken = encryptSecret(login.accessToken);
+    return prisma.linkedImmichAccount.upsert({
+      where: {
+        userId
+      },
+      update: {
+        immichBaseUrl: env.IMMICH_BASE_URL,
+        immichUserId: login.userId,
+        immichEmail: login.userEmail,
+        immichName: login.name,
+        encryptedAccessToken: encryptedToken.encryptedValue,
+        accessTokenIv: encryptedToken.iv,
+        accessTokenTag: encryptedToken.authTag,
+        lastValidatedAt: new Date()
+      },
+      create: {
+        userId,
+        immichBaseUrl: env.IMMICH_BASE_URL,
+        immichUserId: login.userId,
+        immichEmail: login.userEmail,
+        immichName: login.name,
+        encryptedAccessToken: encryptedToken.encryptedValue,
+        accessTokenIv: encryptedToken.iv,
+        accessTokenTag: encryptedToken.authTag,
+        lastValidatedAt: new Date()
+      }
+    });
+  }
+
+  private async syncImmichPersonNames(userId: string, accessToken: string) {
     const client = this.createImmichClientFromToken(accessToken);
     try {
       const people = await client.listPeople();
       await this.personService.syncImmichExternalIdentityNames(userId, people);
     } catch {
-      // Name recovery should not prevent a successful Immich login.
+      // Name recovery should not prevent a successful Immich login or link.
     } finally {
       client.dispose();
     }
@@ -428,7 +480,7 @@ export class AuthService {
 
     const linkedAccount = "linkedAccount" in session.user ? session.user.linkedAccount : undefined;
     if (includeLinkedAccount && !linkedAccount) {
-      throw new TreemichAuthError("Immich account is not linked");
+      throw new TreemichConflictError("Immich account is not linked");
     }
 
     const baseContext: AuthenticatedRequestContext = {

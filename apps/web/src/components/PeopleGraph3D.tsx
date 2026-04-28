@@ -98,7 +98,6 @@ export const canLoadPersonThumbnail = (person: Person) =>
   Boolean(
     person.thumbnailPath?.trim() ||
     person.thumbnail?.storageUrl?.trim() ||
-    person.profile?.immichPersonId?.trim() ||
     person.externalIdentities?.some((identity) => identity.provider === "IMMICH")
   );
 
@@ -216,9 +215,7 @@ const PeopleGraph3DComponent = ({
       return people;
     }
     return people.filter((person) => {
-      const linkedToImmich =
-        Boolean(person.profile?.immichPersonId?.trim()) ||
-        person.externalIdentities?.some((identity) => identity.provider === "IMMICH");
+      const linkedToImmich = person.externalIdentities?.some((identity) => identity.provider === "IMMICH");
       return providerFilter === "linked" ? linkedToImmich : !linkedToImmich;
     });
   }, [people, providerFilter]);

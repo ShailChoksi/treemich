@@ -68,7 +68,6 @@ export class RelationshipService {
   ): Promise<PersonProfile> {
     const existing =
       (await db.personProfile.findFirst({ where: { id: personId, userId } })) ??
-      (await db.personProfile.findFirst({ where: { userId, immichPersonId: personId } })) ??
       (
         await db.personExternalIdentity.findFirst({
           where: { userId, providerPersonId: personId },

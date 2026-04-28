@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   gedcomImportJobUpdate: vi.fn(),
   personProfileFindFirst: vi.fn(),
   personProfileFindUnique: vi.fn(),
+  personExternalIdentityFindFirst: vi.fn(),
+  personExternalIdentityCreate: vi.fn(),
   familyFindFirst: vi.fn(),
   familyUpdate: vi.fn(),
   relationshipFindFirst: vi.fn()
@@ -35,6 +37,10 @@ vi.mock("../db/client.js", () => ({
       findUnique: mocks.personProfileFindUnique,
       update: vi.fn()
     },
+    personExternalIdentity: {
+      findFirst: mocks.personExternalIdentityFindFirst,
+      create: mocks.personExternalIdentityCreate
+    },
     family: {
       findFirst: mocks.familyFindFirst,
       update: mocks.familyUpdate
@@ -48,6 +54,8 @@ vi.mock("../db/client.js", () => ({
 describe("GEDCOM export/import semantic apply coverage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.personExternalIdentityFindFirst.mockResolvedValue(null);
+    mocks.personExternalIdentityCreate.mockResolvedValue({});
   });
 
   it("dry-runs a Gramps-style fixture through the apply pipeline and reports semantic entity counts", async () => {
@@ -64,20 +72,26 @@ describe("GEDCOM export/import semantic apply coverage", () => {
     });
     mocks.familyFindFirst.mockResolvedValue(null);
     mocks.relationshipFindFirst.mockResolvedValue(null);
-    const profileByImmichId = (immichId: string) => ({
-      id: immichId === "immich-jose" ? "profile-jose" : "profile-ana",
+    const profileByProviderId = (providerId: string) => ({
+      id: providerId === "immich-jose" ? "profile-jose" : "profile-ana",
       userId: "user-1",
-      immichPersonId: immichId,
       externalIds: {}
     });
     mocks.personProfileFindFirst.mockImplementation(
-      async ({ where }: { where: { OR?: Array<{ immichPersonId?: string }>; id?: string } }) => {
-        // First call pattern: buildIndiPersonIdMap uses OR: [{id}, {immichPersonId}]
-        const immichId = where.OR?.find((c) => c.immichPersonId != null)?.immichPersonId;
-        if (immichId) return profileByImmichId(immichId);
+      async ({
+        where
+      }: {
+        where: {
+          OR?: Array<{ externalIdentities?: { some?: { providerPersonId?: string } } }>;
+          id?: string;
+        };
+      }) => {
+        const providerId = where.OR?.find((c) => c.externalIdentities?.some?.providerPersonId != null)
+          ?.externalIdentities?.some?.providerPersonId;
+        if (providerId) return profileByProviderId(providerId);
         // Second call pattern: INDI loop resolves by canonical id
-        if (where.id === "profile-jose") return profileByImmichId("immich-jose");
-        if (where.id === "profile-ana") return profileByImmichId("immich-ana");
+        if (where.id === "profile-jose") return profileByProviderId("immich-jose");
+        if (where.id === "profile-ana") return profileByProviderId("immich-ana");
         return null;
       }
     );
@@ -165,13 +179,17 @@ describe("GEDCOM export/import semantic apply coverage", () => {
     mocks.familyUpdate.mockResolvedValueOnce({});
     mocks.relationshipFindFirst.mockResolvedValue(null);
     mocks.personProfileFindFirst.mockImplementation(
-      async ({ where }: { where: { OR?: Array<{ immichPersonId?: string }>; id?: string } }) => {
-        const immichId = where.OR?.find((c) => c.immichPersonId != null)?.immichPersonId;
-        if (!immichId) return null;
+      async ({
+        where
+      }: {
+        where: { OR?: Array<{ externalIdentities?: { some?: { providerPersonId?: string } } }>; id?: string };
+      }) => {
+        const providerId = where.OR?.find((c) => c.externalIdentities?.some?.providerPersonId != null)
+          ?.externalIdentities?.some?.providerPersonId;
+        if (!providerId) return null;
         return {
-          id: `profile-${immichId}`,
+          id: `profile-${providerId}`,
           userId: "user-1",
-          immichPersonId: immichId,
           externalIds: {}
         };
       }

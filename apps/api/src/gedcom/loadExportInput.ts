@@ -73,7 +73,16 @@ export const loadGedcomExportInput = async (userId: string): Promise<GedcomExpor
     mediaObjects,
     mediaLinks
   ] = await Promise.all([
-    prisma.personProfile.findMany({ where: { userId } }),
+    prisma.personProfile.findMany({
+      where: { userId },
+      include: {
+        externalIdentities: {
+          where: { provider: "IMMICH" },
+          orderBy: { updatedAt: "desc" },
+          take: 1
+        }
+      }
+    }),
     prisma.relationship.findMany({ where: { userId } }),
     prisma.family.findMany({
       where: { userId },
@@ -100,7 +109,8 @@ export const loadGedcomExportInput = async (userId: string): Promise<GedcomExpor
     externalIds:
       p.externalIds != null && typeof p.externalIds === "object" && !Array.isArray(p.externalIds)
         ? (p.externalIds as Record<string, unknown>)
-        : {}
+        : {},
+    immichProviderPersonId: p.externalIdentities[0]?.providerPersonId ?? null
   }));
 
   return {
@@ -137,7 +147,7 @@ export const loadGedcomExportInput = async (userId: string): Promise<GedcomExpor
       endYear: e.endYear,
       endMonth: e.endMonth,
       endDay: e.endDay,
-      personProfileId: e.personProfileId,
+      personId: e.personProfileId,
       relationshipId: e.relationshipId,
       familyId: e.familyId,
       notes: e.notes,
@@ -149,7 +159,16 @@ export const loadGedcomExportInput = async (userId: string): Promise<GedcomExpor
         notes: c.notes
       }))
     })),
-    personNames,
+    personNames: personNames.map((n) => ({
+      personId: n.personProfileId,
+      type: n.type,
+      givenName: n.givenName,
+      surname: n.surname,
+      prefix: n.prefix,
+      suffix: n.suffix,
+      isPrimary: n.isPrimary,
+      notes: n.notes
+    })),
     repositories,
     sources: sources.map((s) => ({
       id: s.id,

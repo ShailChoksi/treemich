@@ -44,7 +44,7 @@ describe("ImmichImportWorkspace", () => {
       linked: true,
       people: [
         {
-          immichPersonId: "immich-1",
+          providerPersonId: "immich-1",
           name: "New Person",
           birthDate: null,
           thumbnailPath: null,
@@ -56,7 +56,7 @@ describe("ImmichImportWorkspace", () => {
       totals: { immichPeople: 1, linkedPeople: 0, unlinkedPeople: 1 }
     });
     apiMocks.importImmichPeople.mockResolvedValue({
-      results: [{ immichPersonId: "immich-1", action: "create", personId: "p2", status: "created" }],
+      results: [{ providerPersonId: "immich-1", action: "create", personId: "p2", status: "created" }],
       summary: { created: 1, linked: 0, skipped: 0, alreadyLinked: 0, errors: 0, thumbnailsImported: 1 }
     });
 
@@ -76,7 +76,7 @@ describe("ImmichImportWorkspace", () => {
     });
 
     expect(apiMocks.importImmichPeople).toHaveBeenCalledWith(
-      [{ action: "create", immichPersonId: "immich-1", givenName: "New", surname: "Person" }],
+      [{ action: "create", providerPersonId: "immich-1", givenName: "New", surname: "Person" }],
       { importThumbnails: true }
     );
 

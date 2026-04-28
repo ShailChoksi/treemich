@@ -103,7 +103,7 @@ export const registerImmichProviderRoutes = (app: FastifyInstance) => {
 
       candidates.sort((left, right) => right.score - left.score || left.name.localeCompare(right.name));
       return {
-        immichPersonId: immichPerson.id,
+        providerPersonId: immichPerson.id,
         name: immichPerson.name,
         birthDate: immichPerson.birthDate ?? null,
         thumbnailPath: immichPerson.thumbnailPath ?? null,
@@ -134,14 +134,18 @@ export const registerImmichProviderRoutes = (app: FastifyInstance) => {
     let thumbnailsImported = 0;
 
     for (const decision of body.decisions) {
-      const immichPerson = immichPeople.get(decision.immichPersonId);
+      const immichPerson = immichPeople.get(decision.providerPersonId);
       if (decision.action === "skip") {
-        results.push({ immichPersonId: decision.immichPersonId, action: decision.action, status: "skipped" });
+        results.push({
+          providerPersonId: decision.providerPersonId,
+          action: decision.action,
+          status: "skipped"
+        });
         continue;
       }
       if (!immichPerson) {
         results.push({
-          immichPersonId: decision.immichPersonId,
+          providerPersonId: decision.providerPersonId,
           action: decision.action,
           status: "error",
           message: "Immich person not found"
@@ -163,12 +167,12 @@ export const registerImmichProviderRoutes = (app: FastifyInstance) => {
           where: {
             userId: auth.user.id,
             provider: "IMMICH",
-            providerPersonId: decision.immichPersonId
+            providerPersonId: decision.providerPersonId
           }
         });
         if (existingIdentity && existingIdentity.personId !== person.id) {
           results.push({
-            immichPersonId: decision.immichPersonId,
+            providerPersonId: decision.providerPersonId,
             action: decision.action,
             personId: existingIdentity.personId,
             status: "error",
@@ -188,7 +192,7 @@ export const registerImmichProviderRoutes = (app: FastifyInstance) => {
               userId: auth.user.id,
               personId: person.id,
               provider: "IMMICH",
-              providerPersonId: decision.immichPersonId,
+              providerPersonId: decision.providerPersonId,
               providerBaseUrl: linkedAccount?.immichBaseUrl ?? null,
               displayName: immichPerson.name,
               lastSeenAt: new Date(),
@@ -211,14 +215,14 @@ export const registerImmichProviderRoutes = (app: FastifyInstance) => {
           thumbnailsImported += 1;
         }
         results.push({
-          immichPersonId: decision.immichPersonId,
+          providerPersonId: decision.providerPersonId,
           action: decision.action,
           personId: person.id,
           status: existingIdentity ? "alreadyLinked" : decision.action === "create" ? "created" : "linked"
         });
       } catch (error) {
         results.push({
-          immichPersonId: decision.immichPersonId,
+          providerPersonId: decision.providerPersonId,
           action: decision.action,
           status: "error",
           message: error instanceof Error ? error.message : "Import failed"
@@ -261,14 +265,14 @@ export const registerImmichProviderRoutes = (app: FastifyInstance) => {
         });
         results.push({
           personId: identity.personId,
-          immichPersonId: identity.providerPersonId,
+          providerPersonId: identity.providerPersonId,
           status: "imported",
           thumbnail
         });
       } catch (error) {
         results.push({
           personId: identity.personId,
-          immichPersonId: identity.providerPersonId,
+          providerPersonId: identity.providerPersonId,
           status: "error",
           message: error instanceof Error ? error.message : "Thumbnail import failed"
         });

@@ -151,7 +151,7 @@ describe("evidence routes", () => {
         deleteFamilyLifeEvent: vi.fn()
       } as unknown as AppServices["lifeEventService"],
       personNameService: {
-        listByImmichPersonId: vi.fn().mockResolvedValue([]),
+        listByPersonId: vi.fn().mockResolvedValue([]),
         getPrimaryMapForProfileIds: vi.fn().mockResolvedValue(new Map()),
         getAllFormattedForUser: vi.fn().mockResolvedValue(new Map()),
         create: vi.fn(),

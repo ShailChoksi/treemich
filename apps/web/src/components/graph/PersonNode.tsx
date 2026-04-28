@@ -38,6 +38,17 @@ const truncateName = (name: string, maxLength = 22) => {
   return `${name.slice(0, maxLength - 1)}...`;
 };
 
+export const resolvePersonInitials = (name: string) => {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  return initials || "?";
+};
+
 const nodeScale = (isSelected: boolean, isHovered: boolean, isHighlighted: boolean) => {
   if (isSelected) return 1.08;
   if (isHighlighted) return 0.9;
@@ -244,6 +255,19 @@ const PersonNodeComponent = ({
         <primitive object={avatarGeometry20} attach="geometry" />
         <FadeInTextureMaterial texture={texture} />
       </mesh>
+      {!texture ? (
+        <Text
+          position={[0, 0, 0.03]}
+          fontSize={0.48}
+          color="#e2e8f0"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.01}
+          outlineColor="#0f172a"
+        >
+          {resolvePersonInitials(person.name)}
+        </Text>
+      ) : null}
       {showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.02]}>
           <primitive object={ringGeometry} attach="geometry" />
@@ -304,6 +328,17 @@ const PersonNodeFallbackComponent = ({
         <primitive object={avatarGeometry16} attach="geometry" />
         <primitive object={ringMaterial} attach="material" />
       </mesh>
+      <Text
+        position={[0, 0, 0.03]}
+        fontSize={0.42}
+        color="#e2e8f0"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.01}
+        outlineColor="#0f172a"
+      >
+        {resolvePersonInitials(person.name)}
+      </Text>
       {showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.02]}>
           <primitive object={ringGeometry} attach="geometry" />
@@ -353,6 +388,17 @@ const PersonNodeMinimalComponent = ({
         <primitive object={avatarGeometryLite} attach="geometry" />
         <primitive object={ringMaterial} attach="material" />
       </mesh>
+      <Text
+        position={[0, 0, 0.02]}
+        fontSize={0.32}
+        color="#e2e8f0"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.008}
+        outlineColor="#0f172a"
+      >
+        {resolvePersonInitials(person.name)}
+      </Text>
       {showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.01]}>
           <primitive object={ringGeometryLite} attach="geometry" />

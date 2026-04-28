@@ -51,7 +51,6 @@ const makeProfile = (overrides: Record<string, unknown> = {}) => ({
   surname: "Smith",
   displayNameOverride: null,
   nicknames: null,
-  immichPersonId: null,
   externalIds: {},
   createdAt: new Date("2025-01-01T00:00:00Z"),
   updatedAt: new Date("2025-01-01T00:00:00Z"),
@@ -163,18 +162,6 @@ describe("PersonService", () => {
       expect(id).toBe("pp-2");
     });
 
-    it("falls back to legacy immichPersonId lookup", async () => {
-      mocks.personProfileFindFirst
-        .mockResolvedValueOnce(null) // canonical id miss
-        .mockResolvedValueOnce({ id: "pp-3" }); // immichPersonId hit
-      mocks.personExternalIdentityFindFirst.mockResolvedValueOnce(null);
-
-      const { PersonService } = await import("./service.js");
-      const id = await new PersonService().resolvePersonId("user-1", "old-immich-id");
-
-      expect(id).toBe("pp-3");
-    });
-
     it("throws HttpNotFoundError when person is not found via any path", async () => {
       mocks.personProfileFindFirst.mockResolvedValue(null);
       mocks.personExternalIdentityFindFirst.mockResolvedValue(null);
@@ -199,10 +186,7 @@ describe("PersonService", () => {
     });
 
     it("throws HttpNotFoundError for unknown person", async () => {
-      mocks.personProfileFindFirst
-        .mockResolvedValueOnce(null) // canonical id miss
-        .mockResolvedValueOnce(null) // external identity miss
-        .mockResolvedValueOnce(null); // legacy immichPersonId miss
+      mocks.personProfileFindFirst.mockResolvedValueOnce(null); // canonical id miss
 
       const { PersonService } = await import("./service.js");
       await expect(new PersonService().get("user-1", "unknown")).rejects.toThrow("Person not found");
@@ -356,7 +340,6 @@ describe("PersonService", () => {
     it("deletes a person and lets native co-occurrence edge foreign keys cascade", async () => {
       mocks.personProfileFindFirst.mockResolvedValueOnce({
         id: "pp-1",
-        immichPersonId: "legacy-immich-1",
         externalIdentities: [{ providerPersonId: "immich-abc" }]
       });
       mocks.personProfileDeleteMany.mockResolvedValueOnce({ count: 1 });
@@ -382,7 +365,6 @@ describe("PersonService", () => {
     it("throws HttpNotFoundError if the profile disappears before deleteMany", async () => {
       mocks.personProfileFindFirst.mockResolvedValueOnce({
         id: "pp-1",
-        immichPersonId: null,
         externalIdentities: []
       });
       mocks.cooccurrenceEdgeDeleteMany.mockResolvedValueOnce({ count: 0 });

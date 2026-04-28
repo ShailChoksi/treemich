@@ -84,7 +84,7 @@ const lifeEventServiceMock = {
 };
 
 const personNameServiceMock = {
-  listByImmichPersonId: vi.fn().mockResolvedValue([]),
+  listByPersonId: vi.fn().mockResolvedValue([]),
   getPrimaryMapForProfileIds: vi.fn().mockResolvedValue(new Map()),
   getAllFormattedForUser: vi.fn().mockResolvedValue(new Map()),
   create: vi.fn(),
@@ -258,7 +258,7 @@ describe("Treemich API routes", () => {
     lifeEventServiceMock.validatePersonLifeEvents.mockResolvedValue({ findings: [] });
     lifeEventServiceMock.listRelationshipLifeEvents.mockResolvedValue([]);
     lifeEventServiceMock.listFamilyLifeEvents.mockResolvedValue([]);
-    personNameServiceMock.listByImmichPersonId.mockResolvedValue([]);
+    personNameServiceMock.listByPersonId.mockResolvedValue([]);
     personNameServiceMock.getPrimaryMapForProfileIds.mockResolvedValue(new Map());
     personNameServiceMock.getAllFormattedForUser.mockResolvedValue(new Map());
     researchTaskServiceMock.list.mockResolvedValue([]);
@@ -1825,7 +1825,7 @@ describe("Treemich API routes", () => {
   });
 
   it("lists person names", async () => {
-    personNameServiceMock.listByImmichPersonId.mockResolvedValueOnce([
+    personNameServiceMock.listByPersonId.mockResolvedValueOnce([
       {
         id: "n1",
         type: "BIRTH",

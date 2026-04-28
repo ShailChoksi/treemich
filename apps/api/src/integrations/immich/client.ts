@@ -1,12 +1,12 @@
-import type { ImmichPerson } from "@treemich/shared";
+import type { ImmichProviderPerson } from "@treemich/shared";
 
 type ImmichPeopleResponse = {
-  people: ImmichPerson[];
+  people: ImmichProviderPerson[];
   total: number;
 };
 
 type ImmichPeoplePage = {
-  people: ImmichPerson[];
+  people: ImmichProviderPerson[];
   hasMore: boolean;
   total: number | null;
 };
@@ -121,7 +121,7 @@ export class ImmichClient {
   private peopleCache:
     | {
         expiresAt: number;
-        people: ImmichPerson[];
+        people: ImmichProviderPerson[];
       }
     | undefined;
 
@@ -229,14 +229,14 @@ export class ImmichClient {
     throw new Error(`Immich ${action} failed after retries`);
   }
 
-  async listPeople(): Promise<ImmichPerson[]> {
+  async listPeople(): Promise<ImmichProviderPerson[]> {
     this.clearExpiredCacheEntries();
 
     if (this.peopleCache && this.peopleCache.expiresAt > Date.now()) {
       return this.peopleCache.people;
     }
 
-    const people: ImmichPerson[] = [];
+    const people: ImmichProviderPerson[] = [];
     let page = 1;
     let expectedTotal: number | null = null;
 
@@ -257,13 +257,13 @@ export class ImmichClient {
     return people;
   }
 
-  async findPeopleByName(queryName: string): Promise<ImmichPerson[]> {
+  async findPeopleByName(queryName: string): Promise<ImmichProviderPerson[]> {
     const normalized = queryName.trim().toLowerCase();
     if (!normalized) {
       return [];
     }
 
-    const matches: ImmichPerson[] = [];
+    const matches: ImmichProviderPerson[] = [];
     let page = 1;
     while (true) {
       const pageResult = await this.listPeoplePage(page);
@@ -276,7 +276,7 @@ export class ImmichClient {
     return matches;
   }
 
-  async getPeopleByIds(personIds: Iterable<string>): Promise<ImmichPerson[]> {
+  async getPeopleByIds(personIds: Iterable<string>): Promise<ImmichProviderPerson[]> {
     const missingIds = new Set([...personIds].filter((id) => id.length > 0));
     if (missingIds.size === 0) {
       return [];
@@ -287,7 +287,7 @@ export class ImmichClient {
       return this.peopleCache.people.filter((person) => missingIds.has(person.id));
     }
 
-    const found: ImmichPerson[] = [];
+    const found: ImmichProviderPerson[] = [];
     let page = 1;
     while (missingIds.size > 0) {
       const pageResult = await this.listPeoplePage(page);
@@ -523,7 +523,7 @@ export class ImmichClient {
     });
     await this.ensureOk(response, "listPeople");
 
-    const json = (await response.json()) as ImmichPeopleResponse | ImmichPerson[];
+    const json = (await response.json()) as ImmichPeopleResponse | ImmichProviderPerson[];
     if (Array.isArray(json)) {
       return {
         people: json,

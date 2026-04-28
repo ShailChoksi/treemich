@@ -13,10 +13,7 @@ const includeProfile = async (userId: string, personId: string) =>
       where: { userId, providerPersonId: personId },
       include: { person: true }
     })
-  )?.person ??
-  (await prisma.personProfile.findFirst({
-    where: { userId, immichPersonId: personId }
-  }));
+  )?.person;
 
 export const personNameToJson = (row: PersonName) => ({
   id: row.id,
@@ -69,8 +66,8 @@ export const resolveDisplayNameForPerson = (opts: {
 };
 
 export class PersonNameService {
-  async listByImmichPersonId(userId: string, immichPersonId: string) {
-    const profile = await includeProfile(userId, immichPersonId);
+  async listByPersonId(userId: string, personId: string) {
+    const profile = await includeProfile(userId, personId);
     if (!profile) {
       return [] as ReturnType<typeof personNameToJson>[];
     }
@@ -124,8 +121,8 @@ export class PersonNameService {
     return byPerson;
   }
 
-  async create(userId: string, immichPersonId: string, body: CreatePersonNameBody) {
-    const profile = await includeProfile(userId, immichPersonId);
+  async create(userId: string, personId: string, body: CreatePersonNameBody) {
+    const profile = await includeProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -151,8 +148,8 @@ export class PersonNameService {
     return personNameToJson(created);
   }
 
-  async update(userId: string, immichPersonId: string, nameId: string, body: PatchPersonNameBody) {
-    const profile = await includeProfile(userId, immichPersonId);
+  async update(userId: string, personId: string, nameId: string, body: PatchPersonNameBody) {
+    const profile = await includeProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -216,8 +213,8 @@ export class PersonNameService {
     return data;
   }
 
-  async delete(userId: string, immichPersonId: string, nameId: string) {
-    const profile = await includeProfile(userId, immichPersonId);
+  async delete(userId: string, personId: string, nameId: string) {
+    const profile = await includeProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -237,8 +234,8 @@ export class PersonNameService {
     await prisma.personName.delete({ where: { id: nameId } });
   }
 
-  async setPrimary(userId: string, immichPersonId: string, nameId: string) {
-    const profile = await includeProfile(userId, immichPersonId);
+  async setPrimary(userId: string, personId: string, nameId: string) {
+    const profile = await includeProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }

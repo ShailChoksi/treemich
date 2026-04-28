@@ -130,20 +130,23 @@ export type PersonRecord = {
   hasRelationship?: boolean;
 };
 
-/** @deprecated Use PersonRecord. */
-export type ImmichPerson = PersonRecord;
-
 /** Treemich-owned person profile fields. */
 export type TreemichPersonProfile = {
   id: string;
-  /** @deprecated Immich ids now live in PersonExternalIdentity. */
-  immichPersonId?: string | null;
   gender: GenderValue;
   givenName?: string | null;
   surname?: string | null;
   nicknames?: string | null;
   /** Optional interchange keys (e.g. GEDCOM xref). */
   externalIds?: Record<string, string> | null;
+};
+
+/** Raw person row as returned by the optional Immich provider API. */
+export type ImmichProviderPerson = {
+  id: string;
+  name: string;
+  birthDate?: string | null;
+  thumbnailPath?: string | null;
 };
 
 /** Directed relationship edge between two Treemich person ids. */
@@ -224,7 +227,7 @@ export type ImmichImportCandidate = {
 };
 
 export type ImmichImportPreviewRow = {
-  immichPersonId: string;
+  providerPersonId: string;
   name: string;
   birthDate?: string | null;
   thumbnailPath?: string | null;
@@ -246,16 +249,16 @@ export type ImmichImportPreviewResponse = {
 export const immichImportDecisionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("skip"),
-    immichPersonId: z.string().trim().min(1)
+    providerPersonId: z.string().trim().min(1)
   }),
   z.object({
     action: z.literal("link"),
-    immichPersonId: z.string().trim().min(1),
+    providerPersonId: z.string().trim().min(1),
     personId: z.string().trim().min(1)
   }),
   z.object({
     action: z.literal("create"),
-    immichPersonId: z.string().trim().min(1),
+    providerPersonId: z.string().trim().min(1),
     givenName: z.string().trim().min(1).nullable().optional(),
     surname: z.string().trim().min(1).nullable().optional(),
     gender: genderSchema.optional()
@@ -276,7 +279,7 @@ export type ImmichPeopleImportBody = z.infer<typeof immichPeopleImportBodySchema
 export type ImmichThumbnailImportBody = z.infer<typeof immichThumbnailImportBodySchema>;
 
 export type ImmichImportApplyResult = {
-  immichPersonId: string;
+  providerPersonId: string;
   action: ImmichImportDecision["action"];
   personId?: string;
   status: "created" | "linked" | "skipped" | "alreadyLinked" | "error";
@@ -298,7 +301,7 @@ export type ImmichPeopleImportResponse = {
 export type ImmichThumbnailImportResponse = {
   results: Array<{
     personId: string;
-    immichPersonId: string;
+    providerPersonId: string;
     status: "imported" | "skipped" | "error";
     thumbnail?: PersonThumbnailRecord;
     message?: string;
@@ -335,10 +338,9 @@ export type CooccurrenceJobResponse = {
   schedule: CooccurrenceScheduleInfo;
 };
 
-/** Logged-in Treemich user. `immichUserId` is only present for Immich-linked accounts. */
+/** Logged-in Treemich user. Provider account details live in `AuthState.linkStatus`. */
 export type AuthUser = {
   id: string;
-  immichUserId?: string;
   email: string;
   name: string;
 };

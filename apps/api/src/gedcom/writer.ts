@@ -27,10 +27,11 @@ export type GedcomExportPersonProfile = {
   surname: string | null;
   displayNameOverride: string | null;
   externalIds: Record<string, unknown>;
+  immichProviderPersonId?: string | null;
 };
 
 export type GedcomExportPersonName = {
-  personProfileId: string;
+  personId: string;
   type: string;
   givenName: string | null;
   surname: string | null;
@@ -71,7 +72,7 @@ export type GedcomExportLifeEvent = {
   endYear: number | null;
   endMonth: number | null;
   endDay: number | null;
-  personProfileId: string | null;
+  personId: string | null;
   relationshipId: string | null;
   familyId: string | null;
   notes: string | null;
@@ -153,7 +154,7 @@ export type GedcomExportOptions = {
 
 export type GedcomXrefSidecarV1 = {
   treemichGedcomXrefMapVersion: 1;
-  indi: Record<string, { personProfileId: string }>;
+  indi: Record<string, { personId: string }>;
   fam: Record<
     string,
     { familyId: string | null; syntheticSpouseOnly: boolean; spousePair: [string, string] | null }
@@ -191,8 +192,8 @@ const padXref = (prefix: string, n: number, width = 4) => `${prefix}${String(n).
 /** GEDCOM xref payload (without @); used when re-emitting a FAM xref from import (`externalIds.gedcomFam`). */
 const isStableFamXrefPayload = (s: string): boolean => /^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(s);
 
-const profileIdHasDeath = (lifeEvents: GedcomExportLifeEvent[], personProfileId: string): boolean =>
-  lifeEvents.some((e) => e.personProfileId === personProfileId && e.eventType === "DEATH");
+const profileIdHasDeath = (lifeEvents: GedcomExportLifeEvent[], personId: string): boolean =>
+  lifeEvents.some((e) => e.personId === personId && e.eventType === "DEATH");
 
 const formatPartialDateToken = (
   year: number | null,
@@ -380,7 +381,7 @@ export function buildGedcomDocument(
   profilesSorted.forEach((p, i) => {
     const xref = padXref("I", i + 1);
     profileIdToIndi.set(p.id, xref);
-    xrefs.indi[xref] = { personProfileId: p.id };
+    xrefs.indi[xref] = { personId: p.id };
   });
 
   const genderById = new Map(input.personProfiles.map((p) => [p.id, p.gender]));
@@ -755,10 +756,13 @@ export function buildGedcomDocument(
     const block: string[] = [line(0, indiX, "INDI")];
     if (includeTreemichCustomTags) {
       block.push(line(1, "_TREEMICH_PERSON_ID", p.id));
+      if (p.immichProviderPersonId) {
+        block.push(line(1, "_TREEMICH_IMMICH_PERSON_ID", p.immichProviderPersonId));
+      }
     }
     const primaryName =
-      input.personNames.find((n) => n.personProfileId === p.id && n.isPrimary) ??
-      input.personNames.find((n) => n.personProfileId === p.id);
+      input.personNames.find((n) => n.personId === p.id && n.isPrimary) ??
+      input.personNames.find((n) => n.personId === p.id);
     const displayGiven = primaryName?.givenName ?? p.givenName;
     const displaySurname = primaryName?.surname ?? p.surname;
     block.push(line(1, "NAME", gedcomNameLine(displayGiven, displaySurname)));
@@ -775,7 +779,7 @@ export function buildGedcomDocument(
       block.push(line(2, "NSFX", primaryName.suffix.trim()));
     }
     for (const n of input.personNames
-      .filter((x) => x.personProfileId === p.id && x !== primaryName)
+      .filter((x) => x.personId === p.id && x !== primaryName)
       .sort((a, b) => a.type.localeCompare(b.type))) {
       block.push(line(1, "NAME", gedcomNameLine(n.givenName, n.surname)));
       const gt = personNameTypeToGedcom(n.type);
@@ -788,7 +792,7 @@ export function buildGedcomDocument(
     const redactPerson = redactLiving && livingByProfileId.get(p.id) === true;
 
     const personEvents = input.lifeEvents
-      .filter((e) => e.personProfileId === p.id && !e.relationshipId && !e.familyId)
+      .filter((e) => e.personId === p.id && !e.relationshipId && !e.familyId)
       .sort((a, b) => {
         const ak = `${a.eventType}:${a.year ?? 0}`;
         const bk = `${b.eventType}:${b.year ?? 0}`;

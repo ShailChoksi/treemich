@@ -116,10 +116,8 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
         where: { id: userId },
         select: {
           id: true,
-          immichBaseUrl: true,
-          immichUserId: true,
-          immichEmail: true,
-          immichName: true,
+          email: true,
+          name: true,
           preferences: true,
           createdAt: true,
           updatedAt: true

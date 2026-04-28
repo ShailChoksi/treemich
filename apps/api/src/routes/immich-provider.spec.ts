@@ -129,7 +129,7 @@ describe("Immich provider routes", () => {
       method: "POST",
       url: "/providers/immich/people/import",
       payload: {
-        decisions: [{ action: "create", immichPersonId: "immich-1" }],
+        decisions: [{ action: "create", providerPersonId: "immich-1" }],
         importThumbnails: true
       }
     });

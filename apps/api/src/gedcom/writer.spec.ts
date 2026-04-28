@@ -28,7 +28,8 @@ describe("buildGedcomDocument", () => {
             givenName: "Kid",
             surname: "Other",
             displayNameOverride: null,
-            externalIds: {}
+            externalIds: {},
+            immichProviderPersonId: "immich-child"
           }
         ],
         relationships: [
@@ -55,7 +56,7 @@ describe("buildGedcomDocument", () => {
             endYear: null,
             endMonth: null,
             endDay: null,
-            personProfileId: "pp-child",
+            personId: "pp-child",
             relationshipId: null,
             familyId: null,
             notes: "hello",
@@ -84,7 +85,7 @@ describe("buildGedcomDocument", () => {
             endYear: null,
             endMonth: null,
             endDay: null,
-            personProfileId: "pp-child",
+            personId: "pp-child",
             relationshipId: null,
             familyId: null,
             notes: null,
@@ -121,12 +122,13 @@ describe("buildGedcomDocument", () => {
 
     expect(xrefs.treemichGedcomXrefMapVersion).toBe(1);
     // Profiles are sorted by id: pp-child < pp-dad < pp-mom
-    expect(xrefs.indi["I0001"]).toEqual({ personProfileId: "pp-child" });
-    expect(xrefs.indi["I0002"]).toEqual({ personProfileId: "pp-dad" });
+    expect(xrefs.indi["I0001"]).toEqual({ personId: "pp-child" });
+    expect(xrefs.indi["I0002"]).toEqual({ personId: "pp-dad" });
     expect(xrefs.fam["F0001"]?.familyId).toBe("fam-1");
 
     const norm = normalizeGedcomForTest(gedcomUtf8);
     expect(norm).toContain("0 @I0001@ INDI");
+    expect(norm).toContain("1 _TREEMICH_IMMICH_PERSON_ID immich-child");
     expect(norm).toContain("1 _TREEMICH_PERSON_ID pp-dad");
     expect(norm).toContain("0 @F0001@ FAM");
     expect(norm).toContain("1 CHIL @I0001@");
@@ -171,7 +173,7 @@ describe("buildGedcomDocument", () => {
             endYear: null,
             endMonth: null,
             endDay: null,
-            personProfileId: "pp-live",
+            personId: "pp-live",
             relationshipId: null,
             familyId: null,
             notes: "secret",
@@ -219,7 +221,7 @@ describe("buildGedcomDocument", () => {
           endYear: null,
           endMonth: null,
           endDay: null,
-          personProfileId: "pp-1",
+          personId: "pp-1",
           relationshipId: null,
           familyId: null,
           notes: null,

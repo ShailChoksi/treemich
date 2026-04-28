@@ -267,6 +267,8 @@ describe("useThumbnailLoader hook", () => {
   });
 
   it("applies exponential backoff when the worker reports failures", async () => {
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(loadThumbnailBatch).mockResolvedValueOnce([
       { personId: "a", status: "rejected", error: "HTTP 429" }
     ]);
@@ -312,7 +314,11 @@ describe("useThumbnailLoader hook", () => {
         await Promise.resolve();
       });
       expect(vi.mocked(loadThumbnailBatch)).toHaveBeenCalledTimes(1);
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
     } finally {
+      consoleWarnSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
       act(() => {
         root.unmount();
       });

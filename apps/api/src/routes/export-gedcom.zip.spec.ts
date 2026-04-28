@@ -12,7 +12,7 @@ describe("zipGedcomExport", () => {
   it("includes .ged, xref JSON, and manifest", () => {
     const xrefs = {
       treemichGedcomXrefMapVersion: 1 as const,
-      indi: { I0001: { immichPersonId: "p1", personProfileId: "pp1" } },
+      indi: { I0001: { personId: "pp1" } },
       fam: {},
       sour: {},
       repo: {},
@@ -29,7 +29,7 @@ describe("zipGedcomExport", () => {
     ).toEqual([GEDCOM_EXPORT_GED_PATH, GEDCOM_EXPORT_MANIFEST_PATH, GEDCOM_EXPORT_XREF_PATH].sort());
     expect(zip.readAsText(GEDCOM_EXPORT_GED_PATH)).toContain("HEAD");
     const parsed = JSON.parse(zip.readAsText(GEDCOM_EXPORT_XREF_PATH)) as typeof xrefs;
-    expect(parsed.indi["I0001"]?.immichPersonId).toBe("p1");
+    expect(parsed.indi["I0001"]?.personId).toBe("pp1");
     const man = JSON.parse(zip.readAsText(GEDCOM_EXPORT_MANIFEST_PATH)) as {
       treemichGedcomZipManifestVersion: number;
     };

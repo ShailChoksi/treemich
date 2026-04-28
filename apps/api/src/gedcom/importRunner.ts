@@ -102,6 +102,16 @@ const extractPersonHint = (lines: GedcomPlainLine[]): string | null => {
   return null;
 };
 
+const extractImmichProviderPersonId = (lines: GedcomPlainLine[]): string | null => {
+  for (const ln of lines) {
+    if (ln.level === 1 && (ln.tag === "_TREEMICH_IMMICH_PERSON_ID" || ln.tag === "_IMMICH")) {
+      const v = ln.value.trim();
+      return v || null;
+    }
+  }
+  return null;
+};
+
 export type GedcomImportPreviewIndi = {
   xref: string;
   displayName: string | null;
@@ -818,7 +828,10 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       const profile = await prisma.personProfile.findFirst({
         where: {
           userId: job.userId,
-          OR: [{ id: rawId }, { immichPersonId: rawId }]
+          OR: [
+            { id: rawId },
+            { externalIdentities: { some: { provider: "IMMICH", providerPersonId: rawId } } }
+          ]
         },
         select: { id: true }
       });
@@ -1144,6 +1157,39 @@ export async function processGedcomImportJob(jobId: string, services: AppService
           message: `No PersonProfile found for matched id ${rawId} (${block.xref}); skipping INDI`
         });
         continue;
+      }
+      const immichProviderPersonId = extractImmichProviderPersonId(block.lines);
+      if (immichProviderPersonId && !dryRun) {
+        const existingImmichIdentity = await prisma.personExternalIdentity.findFirst({
+          where: {
+            userId: job.userId,
+            provider: "IMMICH",
+            providerPersonId: immichProviderPersonId
+          },
+          select: { id: true, personId: true }
+        });
+        if (!existingImmichIdentity) {
+          await prisma.personExternalIdentity.create({
+            data: {
+              userId: job.userId,
+              personId: profile.id,
+              provider: "IMMICH",
+              providerPersonId: immichProviderPersonId,
+              metadata: { importedFromGedcomProviderTag: true }
+            }
+          });
+          pushLog(lineLog, {
+            severity: "warn",
+            lineNo: block.startLineNo,
+            message: `Linked GEDCOM Immich provider id ${immichProviderPersonId} to person ${profile.id}`
+          });
+        } else if (existingImmichIdentity.personId !== profile.id) {
+          pushLog(lineLog, {
+            severity: "warn",
+            lineNo: block.startLineNo,
+            message: `Skipped GEDCOM Immich provider id ${immichProviderPersonId}; already linked to person ${existingImmichIdentity.personId}`
+          });
+        }
       }
       const ext = profile.externalIds;
       const gedKey = block.xref.replace(/^@|@$/g, "");

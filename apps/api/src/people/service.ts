@@ -9,7 +9,7 @@ import type {
 import type {
   CreatePersonBody,
   CreatePersonExternalIdentityBody,
-  ImmichPerson,
+  ImmichProviderPerson,
   PatchPersonBody,
   PersonExternalIdentityRecord,
   PersonRecord,
@@ -95,7 +95,6 @@ export const personToJson = (
     thumbnailPath: thumbnail?.storageUrl ?? null,
     profile: {
       id: person.id,
-      immichPersonId: legacyImmich?.providerPersonId ?? person.immichPersonId ?? null,
       gender: person.gender,
       givenName: person.givenName,
       surname: person.surname,
@@ -129,14 +128,6 @@ export class PersonService {
     });
     if (external) {
       return external.personId;
-    }
-
-    const legacy = await db.personProfile.findFirst({
-      where: { userId, immichPersonId: personOrExternalId },
-      select: { id: true }
-    });
-    if (legacy) {
-      return legacy.id;
     }
 
     throw new HttpNotFoundError("Person not found");
@@ -249,7 +240,7 @@ export class PersonService {
 
   async syncImmichExternalIdentityNames(
     userId: string,
-    people: Pick<ImmichPerson, "id" | "name">[],
+    people: Pick<ImmichProviderPerson, "id" | "name">[],
     db: DbClient = prisma
   ): Promise<ImmichExternalIdentityNameSyncResult> {
     const namesByImmichId = new Map(

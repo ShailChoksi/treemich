@@ -114,10 +114,6 @@ enum PersonThumbnailSource {
 
 model TreemichUser {
   id                  String                @id @default(cuid())
-  immichBaseUrl       String?
-  immichUserId        String?
-  immichEmail         String?
-  immichName          String?
   email               String?
   name                String?
   passwordHash        String?
@@ -145,9 +141,6 @@ model TreemichUser {
   families            Family[]
   gedcomImportJobs    GedcomImportJob[]
   gedcomExportJobs    GedcomExportJob[]
-
-  @@unique([immichBaseUrl, immichUserId])
-  @@unique([immichBaseUrl, immichEmail])
 }
 
 model LinkedImmichAccount {
@@ -185,8 +178,6 @@ model TreemichSession {
 model PersonProfile {
   id                  String         @id @default(cuid())
   userId              String
-  /// Deprecated compatibility field. New code uses `id`; Immich ids live in PersonExternalIdentity.
-  immichPersonId      String?
   gender              Gender         @default(UNKNOWN)
   displayNameOverride String?
   givenName           String?
@@ -210,7 +201,6 @@ model PersonProfile {
   cooccurrenceAsA     CooccurrenceEdge[] @relation("CooccurrencePersonA")
   cooccurrenceAsB     CooccurrenceEdge[] @relation("CooccurrencePersonB")
 
-  @@unique([userId, immichPersonId])
   @@index([userId])
   @@index([userId, givenName])
   @@index([userId, surname])
