@@ -654,7 +654,7 @@ describe("PeoplePage + life events (integration)", () => {
     container.remove();
   });
 
-  it("renders Settings search preferences and keeps only Reports disabled as planned work", async () => {
+  it("renders Settings search preferences and keeps Reports enabled", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -669,8 +669,8 @@ describe("PeoplePage + life events (integration)", () => {
 
     expect(researchNav?.disabled).toBe(false);
     expect(researchNav?.title).toBe("");
-    expect(reportsNav?.disabled).toBe(true);
-    expect(reportsNav?.title).toBe("Planned for Phase E");
+    expect(reportsNav?.disabled).toBe(false);
+    expect(reportsNav?.title).toBe("");
     expect(settingsNav?.disabled).toBe(false);
 
     await act(async () => {

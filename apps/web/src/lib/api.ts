@@ -48,6 +48,10 @@ import type {
   PersonRecord,
   PhotoCluster,
   PhotoCooccurrenceEdge,
+  PedigreeReportResponse,
+  DescendantReportResponse,
+  FamilyGroupSheetResponse,
+  RegisterReportResponse,
   RelationshipRecord,
   RelationshipType,
   RepositoryRecord,
@@ -106,6 +110,10 @@ export type {
   PersonRecord,
   PhotoCluster,
   PhotoCooccurrenceEdge,
+  PedigreeReportResponse,
+  DescendantReportResponse,
+  FamilyGroupSheetResponse,
+  RegisterReportResponse,
   RelationshipRecord,
   RelationshipType,
   RepositoryRecord,
@@ -1068,6 +1076,91 @@ export const getFamiliesForPerson = async (
   await ensureOk(response, "Failed to load families");
   const body = (await response.json()) as { families: FamilyRecord[] };
   return body.families ?? [];
+};
+
+/** `GET /families` — all family units for picker fallback. */
+export const getFamilies = async (options?: RequestOptions): Promise<FamilyRecord[]> => {
+  const response = await fetchWithRetry(`${treemichApi}/families`, {
+    cache: "no-store",
+    signal: options?.signal
+  });
+  await ensureOk(response, "Failed to load families");
+  const body = (await response.json()) as { families: FamilyRecord[] };
+  return body.families ?? [];
+};
+
+type ReportQueryOptions = {
+  redactLiving?: boolean;
+  depth?: number;
+} & RequestOptions;
+
+const reportDepthQuery = (rootPersonId: string, options?: ReportQueryOptions) => {
+  const params = new URLSearchParams({ rootPersonId });
+  if (options?.depth != null) {
+    params.set("depth", String(options.depth));
+  }
+  if (options?.redactLiving === true) {
+    params.set("redactLiving", "true");
+  }
+  return params.toString();
+};
+
+export const fetchPedigreeReport = async (
+  rootPersonId: string,
+  options?: ReportQueryOptions
+): Promise<PedigreeReportResponse> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/reports/pedigree?${reportDepthQuery(rootPersonId, options)}`,
+    {
+      cache: "no-store",
+      signal: options?.signal
+    }
+  );
+  await ensureOk(response, "Failed to load pedigree report");
+  return (await response.json()) as PedigreeReportResponse;
+};
+
+export const fetchDescendantReport = async (
+  rootPersonId: string,
+  options?: ReportQueryOptions
+): Promise<DescendantReportResponse> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/reports/descendants?${reportDepthQuery(rootPersonId, options)}`,
+    { cache: "no-store", signal: options?.signal }
+  );
+  await ensureOk(response, "Failed to load descendant report");
+  return (await response.json()) as DescendantReportResponse;
+};
+
+export const fetchRegisterReport = async (
+  rootPersonId: string,
+  options?: ReportQueryOptions
+): Promise<RegisterReportResponse> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/reports/register?${reportDepthQuery(rootPersonId, options)}`,
+    {
+      cache: "no-store",
+      signal: options?.signal
+    }
+  );
+  await ensureOk(response, "Failed to load register report");
+  return (await response.json()) as RegisterReportResponse;
+};
+
+export const fetchFamilyGroupSheetReport = async (
+  familyId: string,
+  options?: { redactLiving?: boolean } & RequestOptions
+): Promise<FamilyGroupSheetResponse> => {
+  const params = new URLSearchParams({ familyId });
+  if (options?.redactLiving === true) {
+    params.set("redactLiving", "true");
+  }
+  const response = await fetchWithRetry(`${treemichApi}/reports/family-group?${params.toString()}`, {
+    cache: "no-store",
+    signal: options?.signal
+  });
+  await ensureOk(response, "Failed to load family group sheet report");
+  return (await response.json()) as FamilyGroupSheetResponse;
 };
 
 /** `POST /families` — create a family union; server derives parent/child graph edges. */

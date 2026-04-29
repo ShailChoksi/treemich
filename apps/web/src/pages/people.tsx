@@ -102,6 +102,7 @@ import { ImmichImportWorkspace } from "../components/ImmichImportWorkspace";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
 import { ResearchWorkspace } from "../components/ResearchWorkspace";
 import { DuplicateReviewWorkspace } from "../components/DuplicateReviewWorkspace";
+import { ReportsWorkspace } from "../components/reports/ReportsWorkspace";
 import { CreatePersonDialog } from "../components/CreatePersonDialog";
 import { MapPlacesPanel } from "../components/MapPlacesPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
@@ -139,7 +140,7 @@ const WORKSPACE_ITEMS: WorkspaceItem[] = [
   { id: "evidence", label: "Evidence", iconLabel: "EV" },
   { id: "interchange", label: "Interchange", iconLabel: "GX" },
   { id: "places", label: "Places", iconLabel: "MP" },
-  { id: "reports", label: "Reports", iconLabel: "RP", disabledReason: "Planned for Phase E" },
+  { id: "reports", label: "Reports", iconLabel: "RP" },
   { id: "settings", label: "Settings", iconLabel: "ST" }
 ];
 
@@ -2324,16 +2325,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     }
 
     if (activeWorkspace === "reports") {
-      return (
-        <section className="workspace-main-stack workspace-main-stack--secondary">
-          <section className="card stack workspace-intro-card">
-            <h2>Reports workspace</h2>
-            <p className="hint">
-              Planned for Phase E. Printable charts, PDFs, and family sheets are not active yet.
-            </p>
-          </section>
-        </section>
-      );
+      return <ReportsWorkspace people={people} selectedPersonId={selectedPerson?.id ?? null} />;
     }
 
     if (activeWorkspace === "settings") {

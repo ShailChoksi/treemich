@@ -127,7 +127,18 @@ const envSchema = z
     /** Max ZIP upload size for GEDCOM + media archive imports (default 100 MB). */
     TREEMICH_GEDCOM_MEDIA_MAX_BYTES: z.coerce.number().int().positive().optional(),
     /** Max individual media file size accepted from GEDCOM archive imports (default 50 MB). */
-    TREEMICH_GEDCOM_MEDIA_MAX_FILE_BYTES: z.coerce.number().int().positive().optional()
+    TREEMICH_GEDCOM_MEDIA_MAX_FILE_BYTES: z.coerce.number().int().positive().optional(),
+    /**
+     * When "false" / "0" / "no" / "off", disables synchronous structured report routes.
+     * Default when unset: enabled.
+     */
+    TREEMICH_REPORTS_ENABLED: z.string().optional(),
+    /** Operator report traversal depth cap. Effective cap is bounded by hard safety max. */
+    TREEMICH_REPORT_MAX_DEPTH: z.coerce.number().int().positive().optional(),
+    /** Max people a single report traversal may include before rejecting. */
+    TREEMICH_REPORT_MAX_PEOPLE: z.coerce.number().int().positive().optional(),
+    /** Reserved for future server-rendered PDF/export jobs. Default disabled. */
+    TREEMICH_REPORT_PDF_ENABLED: z.string().optional()
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.WEB_ORIGIN) {
@@ -216,3 +227,23 @@ export const maxGedcomImportLines = (): number => env.TREEMICH_GEDCOM_IMPORT_MAX
 export const maxGedcomMediaArchiveBytes = (): number => env.TREEMICH_GEDCOM_MEDIA_MAX_BYTES ?? 100_000_000;
 
 export const maxGedcomMediaFileBytes = (): number => env.TREEMICH_GEDCOM_MEDIA_MAX_FILE_BYTES ?? 50_000_000;
+
+export const isReportsEnabled = (): boolean => {
+  const v = env.TREEMICH_REPORTS_ENABLED;
+  if (v == null || v === "") {
+    return true;
+  }
+  return !["0", "false", "no", "off"].includes(v.toLowerCase());
+};
+
+export const reportMaxDepth = (): number => Math.min(env.TREEMICH_REPORT_MAX_DEPTH ?? 6, 10);
+
+export const reportMaxPeople = (): number => env.TREEMICH_REPORT_MAX_PEOPLE ?? 1000;
+
+export const isReportPdfEnabled = (): boolean => {
+  const v = env.TREEMICH_REPORT_PDF_ENABLED;
+  if (v == null || v === "") {
+    return false;
+  }
+  return ["1", "true", "yes", "on"].includes(v.toLowerCase());
+};

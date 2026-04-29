@@ -12,6 +12,7 @@ Optionally link an [Immich](https://immich.app/) account to import face thumbnai
 - **3D graph visualization** -- interactive Three.js graph with multiple layout modes (generation tree, centered map, hybrid, cleaned 3D) plus layer toggles for Family/Friends/Pets.
 - **Natural-language search** -- query relationships in plain English with multi-hop graph traversal.
 - **Duplicate review and merge** -- recompute possible duplicate Treemich people, review scored reasons, dismiss candidates, and merge with explicit canonical-person confirmation.
+- **Printable reports** -- generate pedigree, descendant, family group sheet, and register/narrative reports, then print or save to PDF from the browser.
 - **Photo co-occurrence** -- discover which people appear together in photos.
 - **Per-user privacy** -- all relationship data is scoped to the authenticated Treemich user.
 
@@ -47,6 +48,19 @@ Interoperability export as **GEDCOM 5.5.1** UTF-8 (`LINEAGE-LINKED`), including 
 - **`POST /api/export/gedcom/jobs`** — queues an async GEDCOM export. Poll **`GET /api/export/gedcom/jobs/:jobId`** for status; completed jobs include a session-authenticated result path and an expiring signed `downloadUrl` token. The signed token currently expires after 15 minutes.
 
 Disable the route in restrictive environments with **`TREEMICH_GEDCOM_EXPORT_ENABLED=false`** (default when unset: enabled).
+
+### Reports (Phase 6 / Phase E)
+
+The **Reports** workspace generates browser-printable genealogy reports from structured API data:
+
+- **`GET /api/reports/pedigree?rootPersonId=&depth=&redactLiving=`**
+- **`GET /api/reports/descendants?rootPersonId=&depth=&redactLiving=`**
+- **`GET /api/reports/family-group?familyId=&redactLiving=`**
+- **`GET /api/reports/register?rootPersonId=&depth=&redactLiving=`**
+
+Reports are session-authenticated and scoped to the current Treemich user. `redactLiving=true` keeps family structure but replaces people without a `DEATH` life event with `Living person` and suppresses dates, places, notes, alternate names, citations, and media details for those people.
+
+Depth defaults are pedigree `4`, descendants `3`, and register `3`. Operators can set **`TREEMICH_REPORT_MAX_DEPTH`** (default `6`, hard-capped at `10`) and **`TREEMICH_REPORT_MAX_PEOPLE`** (default `1000`). Requests above caps return validation errors instead of truncated reports. Server-side PDF jobs are intentionally not part of v1; use **Print / Save PDF** in the browser.
 
 ### GEDCOM import (Phase 5b)
 

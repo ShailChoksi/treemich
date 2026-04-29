@@ -43,6 +43,7 @@ import { registerPlacesMapGetRoute } from "./routes/places-map.get.js";
 import { registerPeopleRelationshipsPostRoute } from "./routes/people-relationships.post.js";
 import { registerPeopleThumbnailGetRoute } from "./routes/people-thumbnail.get.js";
 import { registerEvidenceRoutes } from "./routes/evidence.js";
+import { registerReportRoutes } from "./routes/reports.js";
 import { registerResearchTaskRoutes } from "./routes/research-tasks.js";
 import { registerRelationshipsGetRoute } from "./routes/relationships.get.js";
 import { registerRelationshipsLifeEventsRoutes } from "./routes/relationships-life-events.js";
@@ -241,6 +242,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerPlacesMapGetRoute);
   app.register(registerResearchTaskRoutes);
   app.register(registerEvidenceRoutes);
+  app.register(registerReportRoutes);
   app.register(registerSearchGetRoute);
   app.register(registerTreeValidationGetRoute);
   app.register(registerValidationFindingRoutes);

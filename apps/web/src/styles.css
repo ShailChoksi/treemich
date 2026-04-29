@@ -5,6 +5,132 @@ body {
   color: #f8fafc;
 }
 
+.report-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.report-control-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.inline-checkbox {
+  display: flex !important;
+  flex-direction: row;
+  gap: 8px !important;
+  align-items: center;
+}
+
+.report-print-frame {
+  color: #0f172a;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.22);
+}
+
+.report-print-frame .hint {
+  color: #475569;
+}
+
+.report-title-page,
+.report-section,
+.report-generation,
+.report-family-block,
+.report-person-card {
+  break-inside: avoid;
+}
+
+.pedigree-report-grid,
+.report-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.report-generation,
+.report-section,
+.report-person-card,
+.report-family-block {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 12px;
+  margin-block: 12px;
+}
+
+.report-person-card h4,
+.report-section h3,
+.report-generation h3 {
+  margin-top: 0;
+}
+
+.report-event-list,
+.report-warning-list {
+  padding-left: 1.25rem;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.report-table th,
+.report-table td {
+  border: 1px solid #cbd5e1;
+  padding: 8px;
+  text-align: left;
+}
+
+@media print {
+  body {
+    background: #ffffff;
+    color: #0f172a;
+  }
+
+  .workspace-nav,
+  .workspace-resizer,
+  .workspace-context-pane,
+  .print-hidden,
+  .toast-viewport,
+  .skip-link {
+    display: none !important;
+  }
+
+  .app-shell,
+  .people-layout,
+  .workspace-main,
+  .workspace-main-views,
+  .workspace-main-stack {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .workspace-view-hidden {
+    display: none !important;
+  }
+
+  .report-print-frame {
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+    width: 100%;
+  }
+
+  .report-title-page {
+    break-after: page;
+  }
+
+  .report-section,
+  .report-generation {
+    break-before: auto;
+  }
+}
+
 #root {
   min-height: 100vh;
   height: 100dvh;

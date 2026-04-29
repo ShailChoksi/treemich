@@ -34,10 +34,12 @@
 - Graph layout requests are rejected above the server-side person/relationship caps.
 - Co-occurrence legacy graph responses are capped; clients should use cursor-based edge APIs for large datasets.
 - Full-tree validation scans are capped by `TREEMICH_TREE_VALIDATION_MAX_ROWS` before findings are returned or persisted.
+- Report routes use the expensive-route rate limit plus `TREEMICH_REPORT_MAX_DEPTH` and `TREEMICH_REPORT_MAX_PEOPLE`. They reject over-cap reports instead of silently truncating.
 
 ## Manual Smoke
 
 - After Phase 5 D releases, create two likely duplicate people, run duplicate recompute, dismiss/reopen one candidate, merge into the chosen canonical person, then confirm graph refresh, person detail, family units, research tasks, and duplicate audit behavior still work.
+- For Phase 6 / Phase E reports, create a small tree with grandparents, parents, an adopted child, family event, birth/death events, and a citation. Generate all four reports, toggle living redaction, and use browser print/save-PDF for pedigree and family group sheet.
 - For high-risk merge changes, run or add a live database regression covering relationship, family parent/child, life event, research task, person name, person thumbnail, external identity, validation finding, person media link, and co-occurrence references.
 
 ## Rollback

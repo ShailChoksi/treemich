@@ -10,6 +10,9 @@ import {
   deleteFamily,
   deleteFamilyLifeEvent,
   getFamiliesForPerson,
+  getFamilies,
+  fetchPedigreeReport,
+  fetchFamilyGroupSheetReport,
   getFamilyLifeEvents,
   getDuplicateCandidates,
   getPlacesMap,
@@ -769,6 +772,75 @@ describe("family API helpers", () => {
     expect(rows).toHaveLength(1);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "/api/people/person%252F1/families",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+
+  it("loads all families for report picker fallback", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ families: [{ id: "f1", children: [] }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const rows = await getFamilies();
+    expect(rows).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/families",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+
+  it("loads report JSON helpers with query parameters", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            type: "pedigree",
+            generatedAt: "2026-04-29T00:00:00.000Z",
+            parameters: { rootPersonId: "p1", depth: 5, redactLiving: true },
+            warnings: [],
+            root: {
+              id: "p1",
+              displayName: "Living person",
+              gender: "UNKNOWN",
+              primaryName: null,
+              alternateNames: [],
+              isLiving: true,
+              isRedacted: true,
+              events: []
+            },
+            generations: [],
+            edges: []
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            type: "family-group",
+            generatedAt: "2026-04-29T00:00:00.000Z",
+            parameters: { familyId: "fam1", redactLiving: true },
+            warnings: [],
+            family: { id: "fam1", notes: null, parents: [], children: [], events: [], citations: [] }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+
+    await fetchPedigreeReport("p1", { depth: 5, redactLiving: true });
+    await fetchFamilyGroupSheetReport("fam1", { redactLiving: true });
+
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/reports/pedigree?rootPersonId=p1&depth=5&redactLiving=true",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/reports/family-group?familyId=fam1&redactLiving=true",
       expect.objectContaining({ credentials: "include", cache: "no-store" })
     );
   });
