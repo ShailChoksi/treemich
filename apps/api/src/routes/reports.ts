@@ -33,7 +33,7 @@ export const registerReportRoutes = (app: FastifyInstance) => {
   }
   const reportService = app.services.reportService;
   if (!reportService) {
-    throw new Error("Report service is not registered");
+    return;
   }
 
   app.get(
