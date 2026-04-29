@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import AdmZip from "adm-zip";
 import { HttpConflictError, HttpNotFoundError, HttpValidationError } from "../src/lifeEvents/errors.js";
+import { EXPENSIVE_ROUTE_RATE_LIMIT } from "../src/routes/rate-limit.js";
 import type { AppServices } from "../src/services.js";
 
 const upsertRelationshipMock = vi.fn();
@@ -1174,7 +1175,7 @@ describe("Treemich API routes", () => {
     expect(response.headers["set-cookie"]).toContain("treemich_session=session-token");
   });
 
-  it("rate limits auth/login more strictly than the global API limit", async () => {
+  it("rate limits auth/login with the shared expensive route limit", async () => {
     loginWithImmichMock.mockResolvedValue({
       sessionToken: "session-token",
       state: {
@@ -1194,7 +1195,7 @@ describe("Treemich API routes", () => {
       }
     });
 
-    for (let attempt = 0; attempt < 5; attempt += 1) {
+    for (let attempt = 0; attempt < EXPENSIVE_ROUTE_RATE_LIMIT.max; attempt += 1) {
       const response = await app.inject({
         method: "POST",
         url: "/auth/login",
