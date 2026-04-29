@@ -32,7 +32,7 @@ export const AuthScreen = ({ busy, error, onSubmit }: Props) => {
             standalone Treemich account.
           </p>
           <p className="hint">
-            Existing Immich-first users can choose the legacy Immich migration login below, then manage Immich
+            Existing legacy Immich-login users can choose the Immich migration login below, then manage Immich
             linking from inside Treemich.
           </p>
         </div>

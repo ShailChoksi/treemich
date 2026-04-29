@@ -11,7 +11,7 @@ import { prisma } from "../db/client.js";
 import type { AppServices } from "../services.js";
 import { storeMediaFile } from "../evidence/mediaStorage.js";
 import { HttpConflictError } from "../lifeEvents/errors.js";
-import { env, maxGedcomImportLines } from "../config/env.js";
+import { env, maxGedcomImportLineLogEntries, maxGedcomImportLines } from "../config/env.js";
 import { findArchiveMediaFile, type StagedGedcomArchiveMediaFile } from "./archiveImport.js";
 import { parseGedcomDate } from "./gedcomDateParse.js";
 import {
@@ -24,11 +24,34 @@ import {
   type GedcomRecordBlock
 } from "./parser.js";
 
-const MAX_LINE_LOG = 2000;
+const lineLogTruncatedMessage = (droppedCount: number) =>
+  `GEDCOM import diagnostics truncated; ${droppedCount} additional entries were omitted.`;
+
+export const capGedcomLineLog = (
+  log: GedcomLineLogEntry[],
+  cap = maxGedcomImportLineLogEntries()
+): GedcomLineLogEntry[] => {
+  if (log.length <= cap) {
+    return log;
+  }
+  if (cap <= 1) {
+    return [{ severity: "warn", lineNo: 0, message: lineLogTruncatedMessage(log.length) }];
+  }
+  return [
+    ...log.slice(0, cap - 1),
+    { severity: "warn", lineNo: 0, message: lineLogTruncatedMessage(log.length - cap + 1) }
+  ];
+};
 
 const pushLog = (log: GedcomLineLogEntry[], entry: GedcomLineLogEntry) => {
-  if (log.length < MAX_LINE_LOG) {
-    log.push(entry);
+  const next = capGedcomLineLog([...log, entry]);
+  log.length = 0;
+  log.push(...next);
+};
+
+const pushLogs = (log: GedcomLineLogEntry[], entries: GedcomLineLogEntry[]) => {
+  for (const entry of entries) {
+    pushLog(log, entry);
   }
 };
 
@@ -525,7 +548,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
   const { records, lineLog: parseLog } = parseGedcomDocument(job.gedcomUtf8, {
     maxLines: maxGedcomImportLines()
   });
-  lineLog.push(...parseLog);
+  pushLogs(lineLog, parseLog);
 
   const indiMap = mergeIndiMatches(userMatches, records);
 
@@ -1362,7 +1385,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
       data: {
         status: "COMPLETED",
         completedAt: new Date(),
-        lineLog,
+        lineLog: capGedcomLineLog(lineLog),
         summary: persistedSummary
       }
     });
@@ -1371,13 +1394,14 @@ export async function processGedcomImportJob(jobId: string, services: AppService
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Import failed";
+    const errorMessage = `${msg}. GEDCOM import may have applied earlier records because Phase B uses resilient per-entity apply without a global transaction. Review lineLog and summary before retrying.`;
     await prisma.gedcomImportJob.updateMany({
       where: { id: jobId, status: "RUNNING" },
       data: {
         status: "FAILED",
         completedAt: new Date(),
-        errorMessage: msg,
-        lineLog: [...lineLog, { severity: "error", lineNo: 0, message: msg }]
+        errorMessage,
+        lineLog: capGedcomLineLog([...lineLog, { severity: "error", lineNo: 0, message: errorMessage }])
       }
     });
     if (options.mediaArchive?.archiveDir) {

@@ -14,8 +14,6 @@ type Props = {
   searchFeedback: string | null;
   treeValidationIssueCount: number | null;
   treeValidationEngineDisabled: boolean;
-  searchIncludeAlternateNames: boolean;
-  onSearchIncludeAlternateNamesChange: (next: boolean) => void;
   providerFilter: "all" | "linked" | "unlinked";
   onProviderFilterChange: (next: "all" | "linked" | "unlinked") => void;
   onNewPerson?: () => void;
@@ -34,8 +32,6 @@ const GraphSearchOverlayComponent = ({
   searchFeedback,
   treeValidationIssueCount,
   treeValidationEngineDisabled,
-  searchIncludeAlternateNames,
-  onSearchIncludeAlternateNamesChange,
   providerFilter,
   onProviderFilterChange,
   onNewPerson
@@ -123,14 +119,6 @@ const GraphSearchOverlayComponent = ({
       <p className="graph-search-helper">
         Search by name or try: "mother of Jessica", "sisters of Mike", "mother-in-law of Sue"
       </p>
-      <label className="graph-search-alt-names">
-        <input
-          type="checkbox"
-          checked={searchIncludeAlternateNames}
-          onChange={(e) => onSearchIncludeAlternateNamesChange(e.target.checked)}
-        />
-        Match alternate Treemich names in people search
-      </label>
       <label className="graph-search-provider-filter">
         <span>People</span>
         <select

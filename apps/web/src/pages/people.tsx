@@ -100,15 +100,28 @@ const MAP_UI_STATE_STORAGE_KEY = "treemich.map.uiState";
 
 type WorkspaceId = "tree" | "research" | "evidence" | "interchange" | "places" | "reports" | "settings";
 
-const WORKSPACE_ITEMS: { id: WorkspaceId; label: string; iconLabel: string }[] = [
+type WorkspaceItem = {
+  id: WorkspaceId;
+  label: string;
+  iconLabel: string;
+  disabledReason?: string;
+};
+
+const WORKSPACE_ITEMS: WorkspaceItem[] = [
   { id: "tree", label: "Tree", iconLabel: "TR" },
-  { id: "research", label: "Research", iconLabel: "RS" },
+  { id: "research", label: "Research", iconLabel: "RS", disabledReason: "Planned for Phase C" },
   { id: "evidence", label: "Evidence", iconLabel: "EV" },
   { id: "interchange", label: "Interchange", iconLabel: "GX" },
   { id: "places", label: "Places", iconLabel: "MP" },
-  { id: "reports", label: "Reports", iconLabel: "RP" },
+  { id: "reports", label: "Reports", iconLabel: "RP", disabledReason: "Planned for Phase E" },
   { id: "settings", label: "Settings", iconLabel: "ST" }
 ];
+
+const isWorkspaceEnabled = (workspaceId: WorkspaceId) =>
+  WORKSPACE_ITEMS.find((item) => item.id === workspaceId)?.disabledReason == null;
+
+const searchIncludeAlternateNamesEnabled = (preferences: UserPreferences | null | undefined) =>
+  preferences?.searchIncludeAlternateNames ?? true;
 
 const sortPeopleStable = (people: PersonRecord[]) =>
   [...people].sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
@@ -297,6 +310,7 @@ const WorkspaceNav = memo(
       <nav aria-label="Workspace navigation" className="workspace-nav-list">
         {WORKSPACE_ITEMS.map((workspace, index) => {
           const isActive = workspace.id === activeWorkspace;
+          const isDisabled = workspace.disabledReason != null;
           return (
             <button
               key={workspace.id}
@@ -305,8 +319,12 @@ const WorkspaceNav = memo(
                 workspaceButtonRefs.current[index] = node;
               }}
               type="button"
-              className={`workspace-nav-item ${isActive ? "workspace-nav-item--active" : ""}`}
+              className={`workspace-nav-item ${isActive ? "workspace-nav-item--active" : ""} ${
+                isDisabled ? "workspace-nav-item--disabled" : ""
+              }`}
               aria-current={isActive ? "page" : undefined}
+              disabled={isDisabled}
+              title={workspace.disabledReason}
               onKeyDown={(event) => onWorkspaceKeyDown(event, index)}
               onClick={() => onWorkspaceChange(workspace.id)}
             >
@@ -314,6 +332,9 @@ const WorkspaceNav = memo(
                 {workspace.iconLabel}
               </span>
               <span className="workspace-nav-label">{workspace.label}</span>
+              {isDisabled && leftPaneOpen ? (
+                <span className="workspace-nav-status">{workspace.disabledReason}</span>
+              ) : null}
             </button>
           );
         })}
@@ -377,7 +398,9 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       return "tree";
     }
     const stored = getLocalStorageItem(WORKSPACE_STORAGE_KEY);
-    return WORKSPACE_ITEMS.some((item) => item.id === stored) ? (stored as WorkspaceId) : "tree";
+    return WORKSPACE_ITEMS.some((item) => item.id === stored && isWorkspaceEnabled(item.id))
+      ? (stored as WorkspaceId)
+      : "tree";
   });
   const [leftPaneOpen, setLeftPaneOpen] = useState(() => {
     if (typeof window === "undefined") {
@@ -415,6 +438,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingRelationship, setIsSavingRelationship] = useState(false);
+  const [isSavingSearchPreferences, setIsSavingSearchPreferences] = useState(false);
   const [showCreatePersonDialog, setShowCreatePersonDialog] = useState(false);
   const [isCreatingPerson, setIsCreatingPerson] = useState(false);
   const [savedPreferences, setSavedPreferences] = useState<UserPreferences | null>(null);
@@ -1054,6 +1078,34 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         setStatus(`Could not save preferences: ${getErrorMessage(err)}`);
       });
   }, []);
+
+  const onSearchIncludeAlternateNamesChange = useCallback(
+    (next: boolean) => {
+      const previous = savedPreferences;
+      setIsSavingSearchPreferences(true);
+      setSavedPreferences((current) => ({
+        ...(current ?? {}),
+        searchIncludeAlternateNames: next
+      }));
+      void updateUserPreferences({ searchIncludeAlternateNames: next })
+        .then((nextPrefs) => {
+          setSavedPreferences(nextPrefs);
+          setStatus(
+            next
+              ? "Alternate-name relationship search enabled."
+              : "Alternate-name relationship search disabled."
+          );
+        })
+        .catch((err: unknown) => {
+          setSavedPreferences(previous);
+          setStatus(`Could not save search settings: ${getErrorMessage(err)}`);
+        })
+        .finally(() => {
+          setIsSavingSearchPreferences(false);
+        });
+    },
+    [savedPreferences]
+  );
 
   const onPrimaryFamilyUnitChange = useCallback(
     (personId: string, unitKey: string | null) => {
@@ -1952,10 +2004,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     }
     event.preventDefault();
     event.stopPropagation();
-    const nextIndex =
+    const enabledIndexes = WORKSPACE_ITEMS.map((item, itemIndex) =>
+      item.disabledReason == null ? itemIndex : null
+    ).filter((itemIndex): itemIndex is number => itemIndex != null);
+    const currentEnabledIndex = enabledIndexes.indexOf(index);
+    const currentIndex = currentEnabledIndex >= 0 ? currentEnabledIndex : 0;
+    const nextEnabledIndex =
       event.key === "ArrowDown"
-        ? (index + 1) % WORKSPACE_ITEMS.length
-        : (index - 1 + WORKSPACE_ITEMS.length) % WORKSPACE_ITEMS.length;
+        ? (currentIndex + 1) % enabledIndexes.length
+        : (currentIndex - 1 + enabledIndexes.length) % enabledIndexes.length;
+    const nextIndex = enabledIndexes[nextEnabledIndex] ?? 0;
     workspaceButtonRefs.current[nextIndex]?.focus();
   }, []);
 
@@ -2007,8 +2065,7 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           <section className="card stack workspace-intro-card">
             <h2>Research workspace</h2>
             <p className="hint">
-              Research tasks and validation will land here as dedicated modules while remaining available in
-              the tree inspector for now.
+              Planned for Phase C. Research tasks remain available in the tree inspector.
             </p>
           </section>
         </section>
@@ -2020,7 +2077,9 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         <section className="workspace-main-stack workspace-main-stack--secondary">
           <section className="card stack workspace-intro-card">
             <h2>Reports workspace</h2>
-            <p className="hint">Reserved for lineage, completeness, and quality reports.</p>
+            <p className="hint">
+              Planned for Phase E. Printable charts, PDFs, and family sheets are not active yet.
+            </p>
           </section>
         </section>
       );
@@ -2029,10 +2088,34 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     if (activeWorkspace === "settings") {
       return (
         <section className="workspace-main-stack workspace-main-stack--secondary">
-          <section className="card stack workspace-intro-card">
-            <h2>Settings workspace</h2>
-            <p className="hint">Reserved for global app and workspace preferences.</p>
-          </section>
+          {savedPreferences == null ? (
+            <section className="card stack workspace-intro-card" aria-label="Loading search settings">
+              <div className="skeleton-card settings-skeleton" />
+            </section>
+          ) : (
+            <section className="card stack workspace-intro-card settings-card">
+              <div className="stack">
+                <h2>Search settings</h2>
+                <p className="hint">
+                  Control how Treemich resolves people in natural-language relationship searches.
+                </p>
+              </div>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={searchIncludeAlternateNamesEnabled(savedPreferences)}
+                  disabled={isSavingSearchPreferences}
+                  onChange={(event) => onSearchIncludeAlternateNamesChange(event.target.checked)}
+                />
+                <span>
+                  <strong>Match alternate Treemich names in relationship search</strong>
+                  <span className="hint">
+                    Affects natural-language searches such as <code>mother of Beth</code>.
+                  </span>
+                </span>
+              </label>
+            </section>
+          )}
         </section>
       );
     }

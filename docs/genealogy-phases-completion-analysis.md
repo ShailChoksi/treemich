@@ -8,13 +8,13 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 ## Cross-phase summary
 
-| Phase | Substantive status (plan)      | Partial rows in completion table | Dominant reason for partials                                                               |
-| ----- | ------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------ |
-| **1** | Complete                       | 1 (NL vs alternate names)        | NL search across `PersonName` not verified; optional follow-up                             |
-| **2** | Complete                       | 1 (Geocoding)                    | Pipelines/flags exist; not “every place auto-filled” by default                            |
-| **3** | Complete                       | 0 (all Yes)                      | Extensions called out only under “Remaining (explicit)”                                    |
-| **4** | Complete                       | 1 (Graph)                        | Optional 3D **visual** styling by pedigree; model/API/UI are Yes                           |
-| **5** | Complete for match-only GEDCOM | Several                          | Bar set at Gramps-class toolchain + infra (signed URLs, workers, full CI, Immich identity) |
+| Phase | Substantive status (plan)        | Partial rows in completion table | Dominant reason for partials                                                          |
+| ----- | -------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
+| **1** | Complete                         | 0                                | NL search can include `PersonName` rows through the saved search preference           |
+| **2** | Complete                         | 1 (Geocoding)                    | Pipelines/flags exist; not “every place auto-filled” by default                       |
+| **3** | Complete                         | 0 (all Yes)                      | Extensions called out only under “Remaining (explicit)”                               |
+| **4** | Complete                         | 0                                | Pedigree-specific graph line styling is implemented                                   |
+| **5** | Complete for Treemich GEDCOM MVP | Several                          | Bar set at Gramps-class toolchain + infra (workers, full CI, storage/error artifacts) |
 
 ---
 
@@ -24,13 +24,13 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 ### Completion table: partials
 
-| Stream                              | Met?        | Why partial (if applicable)                                                                                            | Effort to close                                                             | Blockers                                  |
-| ----------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------- |
-| Event types + `CUSTOM`              | Yes         | —                                                                                                                      | —                                                                           | —                                         |
-| UI / rich life-event editor         | Yes         | —                                                                                                                      | —                                                                           | —                                         |
-| Alternate names                     | Yes         | —                                                                                                                      | —                                                                           | —                                         |
-| **Graph / NL primary vs alt names** | **Partial** | Primary display wired; **NL interpreter searching alternate `PersonName` rows** called out in plan as **not verified** | Low–medium: include alternate names in NL search or query expansion + tests | None hard; product rules for ranking/perf |
-| Validation (read-only)              | Yes         | —                                                                                                                      | —                                                                           | —                                         |
+| Stream                              | Met?    | Why partial (if applicable)                                                                                                             | Effort to close | Blockers |
+| ----------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------- |
+| Event types + `CUSTOM`              | Yes     | —                                                                                                                                       | —               | —        |
+| UI / rich life-event editor         | Yes     | —                                                                                                                                       | —               | —        |
+| Alternate names                     | Yes     | —                                                                                                                                       | —               | —        |
+| **Graph / NL primary vs alt names** | **Yes** | Primary display is wired; `/search` loads alternate `PersonName` rows when the saved relationship-search preference includes alternates | —               | —        |
+| Validation (read-only)              | Yes     | —                                                                                                                                       | —               | —        |
 
 ### Remaining (explicit) — not all in table
 
@@ -83,60 +83,60 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 ### Completion table: partials
 
-| Stream                                                                    | Met?        | Why partial (if applicable)                                                                                                                     | Effort to close                                                                 | Blockers                                                  |
-| ------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| ADR 0001, schema, migration, life events, API, UI, NL, account `families` | Yes         | —                                                                                                                                               | —                                                                               | —                                                         |
-| **Graph**                                                                 | **Partial** | **Layout** uses parent/child edges; **optional pedigree-specific 3D edge styling** (e.g. non-biological dashed) may be incomplete or unverified | Low–medium: pass `pedigree` / `familyId` into graph line style + legend + tests | UX (clutter, accessibility); 3D perf tuning, not platform |
+| Stream                                                                    | Met?    | Why partial (if applicable)                                                                                            | Effort to close | Blockers |
+| ------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------- | --------------- | -------- |
+| ADR 0001, schema, migration, life events, API, UI, NL, account `families` | Yes     | —                                                                                                                      | —               | —        |
+| **Graph**                                                                 | **Yes** | Layout uses parent/child edges and pedigree-specific parent-edge styling is implemented for non-biological child links | —               | —        |
 
 ### Remaining (explicit)
 
-- Graph polish as above; optional **dry-run / preview UI** for Phase 4 **backfill** (CLI + logs today): medium.
+- Optional **dry-run / preview UI** for Phase 4 **backfill** (CLI + logs today): medium.
 - **`Family.externalIds.gedcomFam`**: plan marks **done** (migration 0020); behavior tied to GEDCOM in Phase 5.
 
 ---
 
 ## Phase 5 — GEDCOM export (5a) and import (5b)
 
-**Plan exit:** Interoperability; export before import; match-only import into **existing** Immich-linked profiles.
+**Plan exit:** Interoperability; export before import; import into matched Treemich people, with optional Treemich person creation for unmatched INDI records.
 
-**Product constraint:** People are **Immich** identities; “create person from GEDCOM” is out of scope unless **Immich APIs** and product sign-off exist.
+**Product constraint:** People are Treemich-owned identities. GEDCOM import can create Treemich people with `unmatchedIndiPolicy: "CREATE"`; creating people inside Immich remains out of scope.
 
 ### Completion table: partials (high level)
 
-| Stream                                        | Met?                      | Why partial                                                                                                                        | Effort to close                                       | Blockers                                |
-| --------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------- |
-| 5a writer, xref sidecar, `GET /export/gedcom` | Yes / Partial where noted | Core export shipped                                                                                                                | —                                                     | —                                       |
-| **5a Async export job + “download URL”**      | **Partial**               | **Jobs + session-auth `GET …/ged`** exist; **not** presigned / anonymous one-shot URLs; result stored in DB with byte cap          | Medium–high: object storage, TTL, token routes        | Product + infra + security              |
-| **5a Golden / round-trip tests**              | **Partial**               | Writer snapshots + `gedcom-round-trip.spec` + minimal fixture; **no** Gramps corpus; **no** full **live-DB** export→import→diff CI | Medium: more fixtures; high: e2e DB harness           | CI cost, flakiness control              |
-| 5a observability                              | Yes                       | —                                                                                                                                  | —                                                     | —                                       |
-| 5b parser                                     | Yes                       | **ANSEL** rejected, not transcoded                                                                                                 | Medium: ANSEL decoder + tests                         | Library choice, edge cases              |
-| **5b Async import + polling**                 | **Partial**               | **In-process** worker vs separate queue worker in plan’s “ideal”                                                                   | Medium: Redis/BullMQ-style worker, retries, DLQ       | Deployment topology                     |
-| **5b Line / error log**                       | **Partial**               | Capped **JSON** `lineLog`, not a verbatim per-line file                                                                            | Low–medium                                            | Storage/PII if logging raw lines        |
-| 5b matching + apply (existing people)         | Yes                       | Unmatched INDI: **no** Immich create                                                                                               | High: **Immich create-person** or shadow INDI         | **Immich** API + product                |
-| **5b Transactional bulk apply**               | **Partial**               | Per-entity writes + conflict skip, **not** one global transaction for whole `.ged`                                                 | High: staging + promote, or long single tx (timeouts) | DB transaction duration, UX on rollback |
-| **5b Idempotent re-import**                   | **Partial**               | `gedcomIndi` + `gedcomFam` when present; edge cases can still duplicate                                                            | Low–medium: stricter FAM key policy                   | Data modeling judgment                  |
-| 5b Matching wizard UI                         | Yes (per updated plan)    | Web interchange for preview + match + job                                                                                          | —                                                     | —                                       |
+| Stream                                        | Met?                            | Why partial                                                                                                                                                              | Effort to close                                       | Blockers                                |
+| --------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | --------------------------------------- |
+| 5a writer, xref sidecar, `GET /export/gedcom` | Yes / Partial where noted       | Core export shipped                                                                                                                                                      | —                                                     | —                                       |
+| **5a Async export job + “download URL”**      | **Yes**                         | Jobs, session-auth `GET …/ged`, and expiring signed token download URLs exist; result is still stored in DB with byte cap                                                | Infra polish only: object storage and retention       | Product + infra + security              |
+| **5a Golden / round-trip tests**              | **Yes / Partial where noted**   | Writer snapshots, Gramps-style + Phase B fixtures, and a live-DB HTTP async export→import semantic round-trip suite now exist; broader tool corpus remains future polish | Low–medium: add vendor-scale corpus over time         | CI cost, flakiness control              |
+| 5a observability                              | Yes                             | —                                                                                                                                                                        | —                                                     | —                                       |
+| 5b parser                                     | Yes                             | Declared **ANSEL** GEDCOM files are transcoded for supported characters and normalized to UTF-8                                                                          | Broader charset fixture coverage if needed            | Edge cases                              |
+| **5b Async import + polling**                 | **Partial by deployment ideal** | Phase B explicitly keeps the **in-process** worker and tests stale `RUNNING` reclaim/fresh claim no-op; external queue is deferred                                       | Medium: Redis/BullMQ-style worker, retries, DLQ       | Deployment topology                     |
+| **5b Line / error log**                       | **Yes for MVP**                 | Capped **JSON** `lineLog` is stored/returned with an explicit truncation warning; no raw diagnostic artifact route by design                                             | Low–medium only if artifact storage is required       | Storage/PII if logging raw lines        |
+| 5b matching + apply                           | Yes                             | Match existing Treemich people or create new Treemich people with `unmatchedIndiPolicy: "CREATE"`; **no** Immich person creation                                         | High only if product wants Immich create-person       | **Immich** API + product                |
+| **5b Transactional bulk apply**               | **Partial by design**           | Phase B keeps per-entity writes + conflict skip, **not** one global transaction for whole `.ged`; failed jobs warn about possible partial writes                         | High: staging + promote, or long single tx (timeouts) | DB transaction duration, UX on rollback |
+| **5b Idempotent re-import**                   | **Partial**                     | `gedcomIndi` + `gedcomFam` when present; edge cases can still duplicate                                                                                                  | Low–medium: stricter FAM key policy                   | Data modeling judgment                  |
+| 5b Matching wizard UI                         | Yes (per updated plan)          | Web interchange for preview + match + job                                                                                                                                | —                                                     | —                                       |
 
 ### Remaining (explicit) — themes
 
-- **Immich** create-person or **shadow** profiles for unmatched INDI.
-- **Presigned / anonymous** download for async export.
-- **Gramps-scale** golden files + **live-DB** export→import→diff in CI.
-- **ANSEL** transcoding (vs reject-only).
+- **Immich** create-person remains out of scope; Treemich person creation is implemented.
+- Object-storage-backed export downloads and retention cleanup beyond current expiring signed token URLs.
+- Broader **Gramps-scale** golden files beyond the small checked-in fixture corpus.
+- Broader **ANSEL** edge-case coverage beyond supported transcoding paths and current lenient charset handling.
 - **OBJE** binary ingest beyond URL/string.
-- **Single-transaction** or structured **dry-run diff** for power users.
+- **Single-transaction** mode remains deferred; failed jobs may need review/retry because earlier records can already be written.
 
 ---
 
 ## Tracking
 
-| Follow-up                             | Suggested owner      | Suggested signal                            |
-| ------------------------------------- | -------------------- | ------------------------------------------- |
-| Verify NL + alternate names (Phase 1) | Product + backend    | E2E or unit tests on search                 |
-| Geocoding defaults & ops (Phase 2)    | Ops                  | Runbooks, metrics, rate limits              |
-| Media on `Family` (Phase 3)           | Product + full-stack | ADR + schema                                |
-| Graph pedigree styling (Phase 4)      | Frontend             | Screenshot/QA checklist                     |
-| GEDCOM partials (Phase 5)             | Platform + product   | Roadmap; Immich contact for people creation |
+| Follow-up                                | Suggested owner      | Suggested signal                            |
+| ---------------------------------------- | -------------------- | ------------------------------------------- |
+| Alternate-name search settings (Phase 1) | Product + backend    | Keep backend/UI defaults and tests aligned  |
+| Geocoding defaults & ops (Phase 2)       | Ops                  | Runbooks, metrics, rate limits              |
+| Media on `Family` (Phase 3)              | Product + full-stack | ADR + schema                                |
+| Graph pedigree styling (Phase 4)         | Frontend             | Implemented; keep regression tests          |
+| GEDCOM partials (Phase 5)                | Platform + product   | Roadmap; Immich contact for people creation |
 
 ---
 

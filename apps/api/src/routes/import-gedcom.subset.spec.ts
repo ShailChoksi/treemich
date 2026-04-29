@@ -61,6 +61,7 @@ vi.mock("../gedcom/archiveImport.js", () => ({
 
 vi.mock("../gedcom/importRunner.js", () => ({
   buildGedcomImportPreview: (gedcomUtf8: string) => buildGedcomImportPreviewMock(gedcomUtf8),
+  capGedcomLineLog: <T>(lineLog: T[]) => lineLog,
   mergeIndiMatches: (matches: Record<string, string>, records: unknown[]) =>
     mergeIndiMatchesMock(matches, records),
   validateFamMatches: (preview: unknown, merged: unknown) => validateFamMatchesMock(preview, merged),

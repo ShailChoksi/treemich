@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../config/env.js", () => ({
   env: { TREEMICH_GEDCOM_JOB_STALE_AFTER_MS: 60_000 },
   maxGedcomImportLines: () => 250_000,
+  maxGedcomImportLineLogEntries: () => 2000,
   maxGedcomMediaFileBytes: () => 50_000_000
 }));
 
@@ -56,6 +57,29 @@ describe("GEDCOM export/import semantic apply coverage", () => {
     vi.clearAllMocks();
     mocks.personExternalIdentityFindFirst.mockResolvedValue(null);
     mocks.personExternalIdentityCreate.mockResolvedValue({});
+  });
+
+  it("does not process an import job while another in-process worker owns a fresh RUNNING claim", async () => {
+    const { processGedcomImportJob } = await import("./importRunner.js");
+    mocks.gedcomImportJobUpdateMany.mockResolvedValueOnce({ count: 0 });
+
+    await processGedcomImportJob("job-active", {} as AppServices);
+
+    expect(mocks.gedcomImportJobUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            expect.objectContaining({ status: "PENDING" }),
+            expect.objectContaining({
+              status: "RUNNING",
+              startedAt: { lt: expect.any(Date) }
+            })
+          ])
+        })
+      })
+    );
+    expect(mocks.gedcomImportJobFindUnique).not.toHaveBeenCalled();
+    expect(mocks.gedcomImportJobUpdate).not.toHaveBeenCalled();
   });
 
   it("dry-runs a Gramps-style fixture through the apply pipeline and reports semantic entity counts", async () => {
@@ -336,5 +360,60 @@ describe("GEDCOM export/import semantic apply coverage", () => {
     expect(completed.summary).toMatchObject({ familiesCreated: 1 });
     // Dry-run: personService.create is NOT called (uses placeholder ids)
     expect(createPerson).not.toHaveBeenCalled();
+  });
+
+  it("marks failures as possibly partially applied because imports do not use a global transaction", async () => {
+    const gedcomUtf8 = readFileSync(join(__dirname, "fixtures", "gramps-style-phase5.ged"), "utf8");
+    mocks.gedcomImportJobUpdateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 1 });
+    mocks.gedcomImportJobFindUnique.mockResolvedValueOnce({
+      id: "job-partial",
+      userId: "user-1",
+      status: "PENDING",
+      gedcomUtf8,
+      indiMatches: {},
+      importOptions: { unmatchedIndiPolicy: "MATCH_ONLY" },
+      lineLog: []
+    });
+
+    const createRepository = vi.fn().mockResolvedValue({ id: "repo-1" });
+    const services = {
+      evidenceService: {
+        createRepository,
+        createSource: vi.fn().mockRejectedValue(new Error("source write failed")),
+        createMediaObject: vi.fn(),
+        createMediaLink: vi.fn()
+      },
+      personService: {
+        update: vi.fn()
+      },
+      lifeEventService: {
+        createPersonLifeEvent: vi.fn(),
+        createRelationshipLifeEvent: vi.fn(),
+        createFamilyLifeEvent: vi.fn()
+      },
+      personNameService: {
+        create: vi.fn()
+      },
+      familyService: {
+        createFamily: vi.fn()
+      }
+    } as unknown as AppServices;
+
+    const { processGedcomImportJob } = await import("./importRunner.js");
+    await processGedcomImportJob("job-partial", services);
+
+    expect(createRepository).toHaveBeenCalledTimes(1);
+    const failed = mocks.gedcomImportJobUpdateMany.mock.calls.at(-1)?.[0]?.data;
+    expect(failed).toMatchObject({ status: "FAILED" });
+    expect(failed.errorMessage).toContain("source write failed");
+    expect(failed.errorMessage).toContain("without a global transaction");
+    expect(failed.lineLog).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: "error",
+          message: expect.stringContaining("Review lineLog and summary before retrying")
+        })
+      ])
+    );
   });
 });

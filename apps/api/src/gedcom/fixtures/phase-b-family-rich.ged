@@ -1,0 +1,50 @@
+0 HEAD
+1 SOUR PhaseBFixture
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+0 @R1@ REPO
+1 NAME City Library
+1 WWW https://library.example.test
+0 @S1@ SOUR
+1 TITL Adoption and Reunion File
+1 REPO @R1@
+0 @O1@ OBJE
+1 FILE https://media.example.test/reunion.jpg
+1 FORM image/jpeg
+1 TITL Reunion photo
+0 @I1@ INDI
+1 NAME Robin /Carter/
+1 SEX F
+1 _TREEMICH_IMMICH_PERSON_ID immich-robin
+1 BIRT
+2 DATE BEF 1980
+2 SOUR @S1@
+0 @I2@ INDI
+1 NAME Lee /Carter/
+1 SEX M
+1 _TREEMICH_IMMICH_PERSON_ID immich-lee
+1 NAME Leon /Carter/
+2 TYPE aka
+0 @I3@ INDI
+1 NAME Jamie /Carter/
+1 SEX U
+1 _TREEMICH_IMMICH_PERSON_ID immich-jamie
+1 BIRT
+2 DATE MAR 2010
+2 OBJE @O1@
+1 EVEN
+2 TYPE DNA Match
+2 DATE BET 2020 AND 2021
+2 SOUR @S1@
+0 @F1@ FAM
+1 WIFE @I1@
+1 HUSB @I2@
+1 CHIL @I3@
+2 PEDI adopted
+1 EVEN
+2 TYPE Family Reunion
+2 DATE ABT 2022
+2 OBJE @O1@
+0 TRLR
