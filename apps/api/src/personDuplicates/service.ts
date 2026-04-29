@@ -10,8 +10,6 @@ import type {
 import { formatPersonNameDisplay } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 
-type DbClient = Prisma.TransactionClient | typeof prisma;
-
 type CandidateRow = Prisma.PersonDuplicateCandidateGetPayload<{
   include: {
     personA: {
