@@ -91,7 +91,10 @@ export class ImmichClientFactory {
     const client = new ImmichClient({
       baseUrl: account.immichBaseUrl,
       accessToken,
-      peoplePageSize: env.IMMICH_PEOPLE_PAGE_SIZE
+      peoplePageSize: env.IMMICH_PEOPLE_PAGE_SIZE,
+      timeoutMs: env.IMMICH_HTTP_TIMEOUT_MS,
+      maxRetries: env.IMMICH_HTTP_MAX_RETRIES,
+      retryBaseDelayMs: env.IMMICH_HTTP_RETRY_BASE_DELAY_MS
     });
     this.clients.set(clientKey, {
       client,

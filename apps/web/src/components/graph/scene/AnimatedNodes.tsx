@@ -4,7 +4,7 @@
 
 import { Suspense, useMemo } from "react";
 import type { Texture } from "three";
-import type { ImmichPerson } from "../../../lib/api";
+import type { Person } from "../../../lib/api";
 import { NodeActionButtons, type AddRelativeSlot } from "../NodeActionButtons";
 import type { GraphVisibilityBucket } from "../graphVisibility";
 import { PersonNode, PersonNodeFallback, PersonNodeMinimal } from "../PersonNode";
@@ -12,7 +12,7 @@ import type { NodePosition } from "../layout";
 import { useAnimatedNodeTransforms } from "./useAnimatedNodeTransforms";
 
 type DisplayPerson = {
-  person: ImmichPerson;
+  person: Person;
   displayPosition: NodePosition;
 };
 

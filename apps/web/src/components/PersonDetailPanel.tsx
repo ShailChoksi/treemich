@@ -3,11 +3,11 @@
  */
 
 import type { CreateLifeEventBody, CreateResearchTaskBody, PatchLifeEventBody } from "@treemich/shared";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type {
   FamilyRecord,
   Gender,
-  ImmichPerson,
+  Person,
   LifeEventRecord,
   PatchFamilyBody,
   RelationshipRecord,
@@ -18,6 +18,7 @@ import type {
 import { immichPersonUrl, personThumbnailUrl } from "../lib/api";
 import { deriveSpouseDatesFromRelationshipEvents } from "../lib/lifeEventUi";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
+import { FAMILY_RELATIONSHIP_TYPES, RELATIONSHIP_TYPES } from "../lib/relationshipConstants";
 import { LifeEventsSection } from "./personDetail/LifeEventsSection";
 import { PersonNamesSection } from "./personDetail/PersonNamesSection";
 import { PersonTimelineSection } from "./personDetail/PersonTimelineSection";
@@ -43,6 +44,7 @@ import {
 } from "./personDetail/personDetailHelpers";
 import { RelativesSection } from "./personDetail/RelativesSection";
 import type { RelativeItem } from "./personDetail/types";
+import { DestructiveConfirmDialog } from "./DestructiveConfirmDialog";
 
 export {
   getRelativeRelationshipLabel,
@@ -50,8 +52,8 @@ export {
 } from "./personDetail/personDetailHelpers";
 
 type Props = {
-  person: ImmichPerson | null;
-  people: ImmichPerson[];
+  person: Person | null;
+  people: Person[];
   relationships: RelationshipRecord[];
   dismissedSuggestionKeys: string[];
   genders: Gender[];
@@ -89,6 +91,11 @@ type Props = {
     }
   ) => Promise<void>;
   onDeleteRelationship: (relationship: RelationshipRecord, relatedPersonId: string) => Promise<void>;
+  onDeletePerson?: () => Promise<void>;
+  onThumbnailUpload?: (file: File) => Promise<void>;
+  onImmichThumbnailImport?: () => Promise<void>;
+  onImmichIdentityLink?: (providerPersonId: string) => Promise<void>;
+  onImmichIdentityUnlink?: (identityId: string) => Promise<void>;
   onDismissSuggestion: (suggestionKey: string) => void;
   isSavingRelationship: boolean;
   immichBaseUrl?: string | null;
@@ -123,7 +130,7 @@ type Props = {
   onResearchTaskCreate?: (body: CreateResearchTaskBody) => Promise<void>;
   onResearchTaskUpdate?: (
     taskId: string,
-    patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "immichPersonId">>
+    patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "personId">>
   ) => Promise<void>;
   onResearchTaskDelete?: (taskId: string) => Promise<void>;
 };
@@ -180,6 +187,11 @@ const PersonDetailPanelComponent = ({
   onCreateRelationship,
   onUpdateRelationship,
   onDeleteRelationship,
+  onDeletePerson,
+  onThumbnailUpload,
+  onImmichThumbnailImport,
+  onImmichIdentityLink,
+  onImmichIdentityUnlink,
   onDismissSuggestion,
   isSavingRelationship,
   immichBaseUrl,
@@ -209,13 +221,22 @@ const PersonDetailPanelComponent = ({
   onResearchTaskDelete
 }: Props) => {
   const [editingRelationshipKey, setEditingRelationshipKey] = useState<string | null>(null);
-  const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>("SIBLING_OF");
+  const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>(
+    RELATIONSHIP_TYPES.siblingOf
+  );
   const [editingMarriageAnniversaryDate, setEditingMarriageAnniversaryDate] = useState("");
   const [editingDivorceDate, setEditingDivorceDate] = useState("");
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
+  const [showDeletePersonConfirm, setShowDeletePersonConfirm] = useState(false);
+  const [isDeletingPerson, setIsDeletingPerson] = useState(false);
+  const [isSavingProviderLink, setIsSavingProviderLink] = useState(false);
+  const [immichProviderPersonId, setImmichProviderPersonId] = useState("");
   const [visibleSuggestionCount, setVisibleSuggestionCount] = useState(maxVisibleSuggestions);
   const [collapsedSections, setCollapsedSections] =
     useState<SectionCollapsedState>(DEFAULT_COLLAPSED_SECTIONS);
+  const relationshipEditorFirstFieldRef = useRef<HTMLSelectElement | null>(null);
+  const relationshipDeleteConfirmRef = useRef<HTMLButtonElement | null>(null);
+  const relationshipActionReturnFocusRef = useRef<HTMLElement | null>(null);
   const peopleById = useMemo(() => new Map(people.map((entry) => [entry.id, entry])), [people]);
   const relationshipsByPersonId = useMemo(() => indexRelationshipsByPersonId(relationships), [relationships]);
 
@@ -274,21 +295,17 @@ const PersonDetailPanelComponent = ({
   }, [peopleById, person, relationshipsByPersonId]);
 
   const familyRelatives = useMemo(
-    () =>
-      relatives.filter(
-        (r) =>
-          r.displayRelationshipType === "PARENT_OF" ||
-          r.displayRelationshipType === "CHILD_OF" ||
-          r.displayRelationshipType === "SPOUSE_OF" ||
-          r.displayRelationshipType === "SIBLING_OF"
-      ),
+    () => relatives.filter((r) => FAMILY_RELATIONSHIP_TYPES.has(r.displayRelationshipType)),
     [relatives]
   );
   const friends = useMemo(
-    () => relatives.filter((r) => r.displayRelationshipType === "FRIEND_OF"),
+    () => relatives.filter((r) => r.displayRelationshipType === RELATIONSHIP_TYPES.friendOf),
     [relatives]
   );
-  const pets = useMemo(() => relatives.filter((r) => r.displayRelationshipType === "PET_OF"), [relatives]);
+  const pets = useMemo(
+    () => relatives.filter((r) => r.displayRelationshipType === RELATIONSHIP_TYPES.petOf),
+    [relatives]
+  );
 
   const directFamilyIds = useMemo(() => new Set(familyRelatives.map((r) => r.relatedId)), [familyRelatives]);
   const extendedFamily = useMemo(
@@ -338,9 +355,13 @@ const PersonDetailPanelComponent = ({
       )
     : [];
   const sourceBirthDate = formatBirthDate(person?.birthDate);
-  const immichPersonPageUrl = person ? immichPersonUrl(person.id, immichBaseUrl) : null;
+  const immichIdentity =
+    person?.externalIdentities?.find((identity) => identity.provider === "IMMICH") ?? null;
+  const immichPersonPageUrl = immichIdentity
+    ? immichPersonUrl(immichIdentity.providerPersonId, immichBaseUrl)
+    : null;
   const spouseDisplay = useMemo(() => {
-    if (!activeRelationship || activeRelationship.record.type !== "SPOUSE_OF") {
+    if (!activeRelationship || activeRelationship.record.type !== RELATIONSHIP_TYPES.spouseOf) {
       return { marriage: "", divorce: "" };
     }
     const rid = activeRelationship.record.id;
@@ -354,6 +375,7 @@ const PersonDetailPanelComponent = ({
   useEffect(() => {
     setEditingRelationshipKey(null);
     setPendingDeleteKey(null);
+    setShowDeletePersonConfirm(false);
     setVisibleSuggestionCount(maxVisibleSuggestions);
     setCollapsedSections(DEFAULT_COLLAPSED_SECTIONS);
   }, [person?.id]);
@@ -368,7 +390,7 @@ const PersonDetailPanelComponent = ({
   }, [activeRelationship, editingRelationshipKey, pendingDeleteKey, pendingDeleteRelationship]);
 
   useEffect(() => {
-    if (!activeRelationship || activeRelationship.record.type !== "SPOUSE_OF") {
+    if (!activeRelationship || activeRelationship.record.type !== RELATIONSHIP_TYPES.spouseOf) {
       setEditingMarriageAnniversaryDate("");
       setEditingDivorceDate("");
       return;
@@ -378,13 +400,37 @@ const PersonDetailPanelComponent = ({
     setEditingDivorceDate(spouseDisplay.divorce);
   }, [activeRelationship, spouseDisplay.marriage, spouseDisplay.divorce]);
 
+  useEffect(() => {
+    if (activeRelationship) {
+      relationshipEditorFirstFieldRef.current?.focus();
+    }
+  }, [activeRelationship]);
+
+  useEffect(() => {
+    if (pendingDeleteRelationship) {
+      relationshipDeleteConfirmRef.current?.focus();
+    }
+  }, [pendingDeleteRelationship]);
+
   const startEditingRelationship = (relationship: RelativeItem) => {
+    relationshipActionReturnFocusRef.current = document.activeElement as HTMLElement | null;
     setEditingRelationshipKey(relationship.key);
     setEditingRelationshipType(relationship.editableRelationshipType);
   };
 
   const stopEditingRelationship = () => {
     setEditingRelationshipKey(null);
+    relationshipActionReturnFocusRef.current?.focus?.();
+  };
+
+  const startDeletingRelationship = (key: string) => {
+    relationshipActionReturnFocusRef.current = document.activeElement as HTMLElement | null;
+    setPendingDeleteKey(key);
+  };
+
+  const stopDeletingRelationship = () => {
+    setPendingDeleteKey(null);
+    relationshipActionReturnFocusRef.current?.focus?.();
   };
 
   const toggleSectionCollapsed = (key: SectionCollapseKey) => {
@@ -403,7 +449,7 @@ const PersonDetailPanelComponent = ({
       activeRelationship.record,
       activeRelationship.relatedId,
       editingRelationshipType,
-      editingRelationshipType === "SPOUSE_OF"
+      editingRelationshipType === RELATIONSHIP_TYPES.spouseOf
         ? {
             marriageAnniversaryDate: editingMarriageAnniversaryDate || null,
             divorceDate: editingDivorceDate || null
@@ -430,6 +476,69 @@ const PersonDetailPanelComponent = ({
 
   const handleSuggestionDismiss = (suggestionKey: string) => {
     onDismissSuggestion(suggestionKey);
+  };
+
+  const handleDeletePerson = async () => {
+    if (!onDeletePerson) {
+      return;
+    }
+    setIsDeletingPerson(true);
+    try {
+      await onDeletePerson();
+      setShowDeletePersonConfirm(false);
+    } finally {
+      setIsDeletingPerson(false);
+    }
+  };
+
+  const handleThumbnailUpload = async (file: File | null | undefined) => {
+    if (!file || !onThumbnailUpload) {
+      return;
+    }
+    setIsSavingProviderLink(true);
+    try {
+      await onThumbnailUpload(file);
+    } finally {
+      setIsSavingProviderLink(false);
+    }
+  };
+
+  const handleImportImmichThumbnail = async () => {
+    if (!onImmichThumbnailImport) {
+      return;
+    }
+    setIsSavingProviderLink(true);
+    try {
+      await onImmichThumbnailImport();
+    } finally {
+      setIsSavingProviderLink(false);
+    }
+  };
+
+  const handleLinkImmichIdentity = async () => {
+    const providerPersonId = immichProviderPersonId.trim();
+    if (!providerPersonId || !onImmichIdentityLink) {
+      return;
+    }
+    setIsSavingProviderLink(true);
+    try {
+      await onImmichIdentityLink(providerPersonId);
+      setImmichProviderPersonId("");
+    } finally {
+      setIsSavingProviderLink(false);
+    }
+  };
+
+  const handleUnlinkImmichIdentity = async () => {
+    if (!immichIdentity || !onImmichIdentityUnlink) {
+      return;
+    }
+    setIsSavingProviderLink(true);
+    try {
+      await onImmichIdentityUnlink(immichIdentity.id);
+    } finally {
+      setIsSavingProviderLink(false);
+    }
   };
 
   return (
@@ -465,7 +574,7 @@ const PersonDetailPanelComponent = ({
                 )}
               </h3>
               <div className="person-detail-meta">
-                <span className="person-detail-meta-item">Immich birth date: {sourceBirthDate}</span>
+                <span className="person-detail-meta-item">Birth date: {sourceBirthDate}</span>
                 <span className="person-detail-meta-item">
                   {familyRelatives.length + extendedFamily.length} relative
                   {familyRelatives.length + extendedFamily.length === 1 ? "" : "s"}
@@ -475,7 +584,28 @@ const PersonDetailPanelComponent = ({
                 </span>
               </div>
             </div>
+            {onDeletePerson ? (
+              <button
+                type="button"
+                className="secondary-button danger-button"
+                onClick={() => setShowDeletePersonConfirm(true)}
+                disabled={isSavingProfile || isSavingRelationship || isDeletingPerson}
+              >
+                Delete person
+              </button>
+            ) : null}
           </div>
+          <DestructiveConfirmDialog
+            open={showDeletePersonConfirm}
+            title={`Delete ${getPersonDisplayLabel(person)}?`}
+            description={`This will permanently delete ${getPersonDisplayLabel(
+              person
+            )} and all their life events, relationships, and research notes. Family units they belonged to will lose them as a member but the family itself will not be deleted.`}
+            confirmLabel="Delete person"
+            busy={isDeletingPerson}
+            onConfirm={handleDeletePerson}
+            onCancel={() => setShowDeletePersonConfirm(false)}
+          />
           <CollapsibleSection
             sectionKey="profile"
             title="Profile"
@@ -561,7 +691,100 @@ const PersonDetailPanelComponent = ({
             >
               {isSavingProfile ? "Saving..." : "Save profile"}
             </button>
+            <div className="person-provider-controls">
+              <label className="field-group">
+                <span className="field-label">Treemich thumbnail</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={!onThumbnailUpload || isSavingProviderLink}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    void handleThumbnailUpload(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              {immichIdentity ? (
+                <div className="provider-link-card">
+                  <span className="field-label">Linked Immich identity</span>
+                  <span className="hint">
+                    {immichIdentity.displayName || immichIdentity.providerPersonId}
+                  </span>
+                  <div className="toolbar-row">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={!onImmichThumbnailImport || isSavingProviderLink}
+                      onClick={() => void handleImportImmichThumbnail()}
+                    >
+                      Import Immich thumbnail
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button danger-button"
+                      disabled={!onImmichIdentityUnlink || isSavingProviderLink}
+                      onClick={() => void handleUnlinkImmichIdentity()}
+                    >
+                      Unlink Immich
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="provider-link-card">
+                  <label className="field-group">
+                    <span className="field-label">Immich person ID</span>
+                    <input
+                      value={immichProviderPersonId}
+                      onChange={(event) => setImmichProviderPersonId(event.target.value)}
+                      placeholder="Optional provider identity"
+                      disabled={!onImmichIdentityLink || isSavingProviderLink}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={!onImmichIdentityLink || !immichProviderPersonId.trim() || isSavingProviderLink}
+                    onClick={() => void handleLinkImmichIdentity()}
+                  >
+                    Link Immich identity
+                  </button>
+                </div>
+              )}
+            </div>
           </CollapsibleSection>
+          <RelativesSection
+            sectionKey="relatives"
+            title="Relatives"
+            items={familyRelatives}
+            extendedFamily={extendedFamily}
+            isCollapsed={collapsedSections.relatives}
+            onToggleCollapsed={() => toggleSectionCollapsed("relatives")}
+            onFocusPerson={onFocusPerson}
+            isSavingRelationship={isSavingRelationship}
+            onStartEditing={startEditingRelationship}
+            onStartDeleting={startDeletingRelationship}
+            emptyMessage="No relatives found yet."
+          />
+          <RelativesSection
+            sectionKey="in-laws"
+            title="In-Laws"
+            items={[]}
+            extendedFamily={inLaws}
+            isCollapsed={collapsedSections.inLaws}
+            onToggleCollapsed={() => toggleSectionCollapsed("inLaws")}
+            onFocusPerson={onFocusPerson}
+            resolveExtendedLabel={(member) =>
+              getInLawRelationshipLabel(
+                member.label,
+                peopleById.get(member.personId)?.profile?.gender ?? "UNKNOWN"
+              )
+            }
+            isSavingRelationship={isSavingRelationship}
+            onStartEditing={startEditingRelationship}
+            onStartDeleting={startDeletingRelationship}
+            emptyMessage="No in-laws found yet."
+          />
           {person ? (
             <CollapsibleSection
               sectionKey="names"
@@ -618,7 +841,6 @@ const PersonDetailPanelComponent = ({
                 person={person}
                 people={people}
                 families={families}
-                graphHasFamilyRelatives={familyRelatives.length > 0}
                 onPatchFamily={onFamilyPatch}
                 onDeleteFamily={onFamilyDelete}
                 savingFamilyId={savingFamilyId}
@@ -647,38 +869,6 @@ const PersonDetailPanelComponent = ({
               />
             </CollapsibleSection>
           ) : null}
-          <RelativesSection
-            sectionKey="relatives"
-            title="Relatives"
-            items={familyRelatives}
-            extendedFamily={extendedFamily}
-            isCollapsed={collapsedSections.relatives}
-            onToggleCollapsed={() => toggleSectionCollapsed("relatives")}
-            onFocusPerson={onFocusPerson}
-            isSavingRelationship={isSavingRelationship}
-            onStartEditing={startEditingRelationship}
-            onStartDeleting={(key) => setPendingDeleteKey(key)}
-            emptyMessage="No relatives found yet."
-          />
-          <RelativesSection
-            sectionKey="in-laws"
-            title="In-Laws"
-            items={[]}
-            extendedFamily={inLaws}
-            isCollapsed={collapsedSections.inLaws}
-            onToggleCollapsed={() => toggleSectionCollapsed("inLaws")}
-            onFocusPerson={onFocusPerson}
-            resolveExtendedLabel={(member) =>
-              getInLawRelationshipLabel(
-                member.label,
-                peopleById.get(member.personId)?.profile?.gender ?? "UNKNOWN"
-              )
-            }
-            isSavingRelationship={isSavingRelationship}
-            onStartEditing={startEditingRelationship}
-            onStartDeleting={(key) => setPendingDeleteKey(key)}
-            emptyMessage="No in-laws found yet."
-          />
           {suggestions.length > 0 ? (
             <CollapsibleSection
               sectionKey="suggestions"
@@ -768,7 +958,7 @@ const PersonDetailPanelComponent = ({
               onFocusPerson={onFocusPerson}
               isSavingRelationship={isSavingRelationship}
               onStartEditing={startEditingRelationship}
-              onStartDeleting={(key) => setPendingDeleteKey(key)}
+              onStartDeleting={startDeletingRelationship}
             />
           ) : null}
           {pets.length > 0 ? (
@@ -781,7 +971,7 @@ const PersonDetailPanelComponent = ({
               onFocusPerson={onFocusPerson}
               isSavingRelationship={isSavingRelationship}
               onStartEditing={startEditingRelationship}
-              onStartDeleting={(key) => setPendingDeleteKey(key)}
+              onStartDeleting={startDeletingRelationship}
             />
           ) : null}
           {activeRelationship ? (
@@ -801,17 +991,18 @@ const PersonDetailPanelComponent = ({
                 <span className="hint">Editing link with {activeRelationship.relatedName}</span>
               </div>
               <p className="hint">
-                {activeRelationship.editableRelationshipType === "PARENT_OF" ||
-                activeRelationship.editableRelationshipType === "CHILD_OF"
+                {activeRelationship.editableRelationshipType === RELATIONSHIP_TYPES.parentOf ||
+                activeRelationship.editableRelationshipType === RELATIONSHIP_TYPES.childOf
                   ? "Parent and child links can be swapped."
-                  : activeRelationship.editableRelationshipType === "SPOUSE_OF" ||
-                      activeRelationship.editableRelationshipType === "SIBLING_OF"
+                  : activeRelationship.editableRelationshipType === RELATIONSHIP_TYPES.spouseOf ||
+                      activeRelationship.editableRelationshipType === RELATIONSHIP_TYPES.siblingOf
                     ? "Spouse and sibling links can be swapped."
                     : "Friend and pet links can be swapped."}
               </p>
               <label className="field-group">
                 <span className="field-label">Relationship type</span>
                 <select
+                  ref={relationshipEditorFirstFieldRef}
                   value={editingRelationshipType}
                   onChange={(event) => setEditingRelationshipType(event.target.value as RelationshipType)}
                 >
@@ -822,7 +1013,7 @@ const PersonDetailPanelComponent = ({
                   ))}
                 </select>
               </label>
-              {editingRelationshipType === "SPOUSE_OF" ? (
+              {editingRelationshipType === RELATIONSHIP_TYPES.spouseOf ? (
                 <div className="person-detail-form-grid">
                   <label className="field-group">
                     <span className="field-label">Marriage anniversary</span>
@@ -842,7 +1033,7 @@ const PersonDetailPanelComponent = ({
                   </label>
                 </div>
               ) : null}
-              {editingRelationshipType === "SPOUSE_OF" &&
+              {editingRelationshipType === RELATIONSHIP_TYPES.spouseOf &&
               activeRelationship.record.id &&
               onRelationshipLifeEventCreate &&
               onRelationshipLifeEventPatch &&
@@ -865,7 +1056,7 @@ const PersonDetailPanelComponent = ({
                   disabled={
                     isSavingRelationship ||
                     (editingRelationshipType === activeRelationship.editableRelationshipType &&
-                      (editingRelationshipType !== "SPOUSE_OF" || !spouseDatesChanged))
+                      (editingRelationshipType !== RELATIONSHIP_TYPES.spouseOf || !spouseDatesChanged))
                   }
                   onClick={() => void handleRelationshipSave()}
                 >
@@ -894,7 +1085,7 @@ const PersonDetailPanelComponent = ({
               <button
                 type="button"
                 className="text-link-button"
-                onClick={() => setPendingDeleteKey(null)}
+                onClick={stopDeletingRelationship}
                 disabled={isSavingRelationship}
               >
                 Close
@@ -902,6 +1093,7 @@ const PersonDetailPanelComponent = ({
               <p className="hint">This will remove the link in both directions for this pair.</p>
               <div className="add-relative-actions">
                 <button
+                  ref={relationshipDeleteConfirmRef}
                   type="button"
                   className="secondary-button danger-button"
                   disabled={isSavingRelationship}
@@ -912,7 +1104,7 @@ const PersonDetailPanelComponent = ({
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={() => setPendingDeleteKey(null)}
+                  onClick={stopDeletingRelationship}
                   disabled={isSavingRelationship}
                 >
                   Cancel

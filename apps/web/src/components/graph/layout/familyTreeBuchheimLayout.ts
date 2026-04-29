@@ -2,7 +2,7 @@
  * @file Family-tree layout math: familyTreeBuchheimLayout.
  */
 
-import type { ImmichPerson } from "../../../lib/api";
+import type { Person } from "../../../lib/api";
 import { personNameById } from "./familyTreeNaming";
 import type { FamilyUnit } from "./familyTreeUnits";
 
@@ -26,7 +26,7 @@ export const layoutFamilyUnitTree = (
   units: FamilyUnit[],
   childrenByUnit: Map<string, Set<string>>,
   unitDepthByKey: Map<string, number>,
-  peopleById: Map<string, ImmichPerson>
+  peopleById: Map<string, Person>
 ) => {
   const personRadius = 0.72;
   const coupleGap = 1.9;

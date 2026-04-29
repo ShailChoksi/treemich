@@ -1,9 +1,12 @@
 /**
  * @file Single person sphere/mesh with selection and hover affordances.
+ *
+ * Features a smooth opacity fade-in when a thumbnail texture transitions from
+ * null/undefined to an actual value, replacing the hard snap from gray to photo.
  */
 
 import { Billboard, Text } from "@react-three/drei";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleGeometry,
   MeshBasicMaterial,
@@ -12,12 +15,13 @@ import {
   type BufferGeometry,
   type Texture
 } from "three";
-import type { ImmichPerson } from "../../lib/api";
+import type { Person } from "../../lib/api";
 import { personThumbnailUrl } from "../../lib/api";
 import { applyCoverCrop } from "./useThumbnailLoader";
+import { useFrame, useThree } from "@react-three/fiber";
 
 export type PersonNodeProps = {
-  person: ImmichPerson;
+  person: Person;
   isSelected: boolean;
   isHovered: boolean;
   isHighlighted: boolean;
@@ -32,6 +36,17 @@ const truncateName = (name: string, maxLength = 22) => {
     return name;
   }
   return `${name.slice(0, maxLength - 1)}...`;
+};
+
+export const resolvePersonInitials = (name: string) => {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  return initials || "?";
 };
 
 const nodeScale = (isSelected: boolean, isHovered: boolean, isHighlighted: boolean) => {
@@ -121,6 +136,48 @@ const ringGeometryForState = (
   return ringGeometryByState.default;
 };
 
+/**
+ * Fades the avatar mesh material opacity from 0 → 1 over ~300ms
+ * when a thumbnail texture loads (transitions from null/falsy to truthy).
+ */
+const FadeInTextureMaterial = ({ texture }: { texture: Texture | undefined | null }) => {
+  const matRef = useRef<MeshBasicMaterial>(null);
+  const hasTextureRef = useRef(Boolean(texture));
+  const invalidate = useThree(({ invalidate: inv }) => inv);
+
+  useEffect(() => {
+    if (!texture) {
+      hasTextureRef.current = false;
+      return;
+    }
+    if (hasTextureRef.current) {
+      // Already had a texture (cached switch), show immediately at full opacity.
+      if (matRef.current) {
+        matRef.current.opacity = 1;
+      }
+      return;
+    }
+    hasTextureRef.current = true;
+    // Start transparent, will fade in over frames.
+    if (matRef.current) {
+      matRef.current.opacity = 0;
+    }
+  }, [texture]);
+
+  useFrame((_state, delta) => {
+    if (!matRef.current || !texture) return;
+    if (matRef.current.opacity < 1) {
+      matRef.current.opacity = Math.min(1, matRef.current.opacity + delta / 0.25);
+      invalidate();
+    }
+  });
+
+  if (texture) {
+    return <meshBasicMaterial ref={matRef} map={texture} transparent />;
+  }
+  return <meshBasicMaterial ref={matRef} color="#64748b" opacity={1} />;
+};
+
 const PersonNodeComponent = ({
   person,
   isSelected,
@@ -145,16 +202,19 @@ const PersonNodeComponent = ({
       return;
     }
     let disposed = false;
+    let loadedTexture: Texture | null = null;
     const loader = new TextureLoader();
     loader.setCrossOrigin("use-credentials");
     loader.load(
       thumbnailUrl,
-      (loadedTexture) => {
+      (tex) => {
         if (disposed) {
+          tex.dispose();
           return;
         }
-        applyCoverCrop(loadedTexture);
-        setLocalTexture(loadedTexture);
+        applyCoverCrop(tex);
+        loadedTexture = tex;
+        setLocalTexture(tex);
       },
       undefined,
       () => {
@@ -166,6 +226,11 @@ const PersonNodeComponent = ({
     );
     return () => {
       disposed = true;
+      if (loadedTexture) {
+        loadedTexture.dispose();
+        loadedTexture = null;
+        setLocalTexture(null);
+      }
     };
   }, [thumbnailUrl, preloadedTexture]);
 
@@ -188,8 +253,21 @@ const PersonNodeComponent = ({
       </mesh>
       <mesh scale={scale}>
         <primitive object={avatarGeometry20} attach="geometry" />
-        {texture ? <meshBasicMaterial map={texture} /> : <meshBasicMaterial color="#64748b" />}
+        <FadeInTextureMaterial texture={texture} />
       </mesh>
+      {!texture ? (
+        <Text
+          position={[0, 0, 0.03]}
+          fontSize={0.48}
+          color="#e2e8f0"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.01}
+          outlineColor="#0f172a"
+        >
+          {resolvePersonInitials(person.name)}
+        </Text>
+      ) : null}
       {showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.02]}>
           <primitive object={ringGeometry} attach="geometry" />
@@ -250,6 +328,17 @@ const PersonNodeFallbackComponent = ({
         <primitive object={avatarGeometry16} attach="geometry" />
         <primitive object={ringMaterial} attach="material" />
       </mesh>
+      <Text
+        position={[0, 0, 0.03]}
+        fontSize={0.42}
+        color="#e2e8f0"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.01}
+        outlineColor="#0f172a"
+      >
+        {resolvePersonInitials(person.name)}
+      </Text>
       {showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.02]}>
           <primitive object={ringGeometry} attach="geometry" />
@@ -299,6 +388,17 @@ const PersonNodeMinimalComponent = ({
         <primitive object={avatarGeometryLite} attach="geometry" />
         <primitive object={ringMaterial} attach="material" />
       </mesh>
+      <Text
+        position={[0, 0, 0.02]}
+        fontSize={0.32}
+        color="#e2e8f0"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.008}
+        outlineColor="#0f172a"
+      >
+        {resolvePersonInitials(person.name)}
+      </Text>
       {showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.01]}>
           <primitive object={ringGeometryLite} attach="geometry" />

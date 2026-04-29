@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FamilyRecord, ImmichPerson } from "../../lib/api";
+import type { FamilyRecord, Person } from "../../lib/api";
 import { FamiliesSection } from "./FamiliesSection";
 
 vi.mock("./FamilyLifeEventsBlock", () => ({
@@ -11,21 +11,21 @@ vi.mock("./FamilyLifeEventsBlock", () => ({
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
-const person: ImmichPerson = {
+const person: Person = {
   id: "self-1",
   name: "Self Person",
   displayName: null,
   birthDate: null
 };
 
-const parent1: ImmichPerson = {
+const parent1: Person = {
   id: "p1",
   name: "Parent One",
   displayName: null,
   birthDate: null
 };
 
-const parent2: ImmichPerson = {
+const parent2: Person = {
   id: "p2",
   name: "Parent Two",
   displayName: null,
@@ -35,15 +35,16 @@ const parent2: ImmichPerson = {
 const baseFamily = (overrides: Partial<FamilyRecord> = {}): FamilyRecord => ({
   id: "fam-1",
   userId: "u1",
-  parent1ImmichPersonId: "p1",
-  parent2ImmichPersonId: "p2",
+  parent1PersonId: "p1",
+  parent2PersonId: "p2",
   notes: "Original notes",
+  externalIds: {},
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
   children: [
     {
       id: "fc-1",
-      childImmichPersonId: "self-1",
+      childPersonId: "self-1",
       pedigree: "BIOLOGICAL",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
@@ -68,15 +69,14 @@ describe("FamiliesSection", () => {
     root = createRoot(container);
   });
 
-  it("empty state mentions backfill when graph already has family relatives", () => {
+  it("empty state keeps concise guidance", () => {
     act(() => {
-      root.render(
-        <FamiliesSection person={person} people={[person, parent1]} families={[]} graphHasFamilyRelatives />
-      );
+      root.render(<FamiliesSection person={person} people={[person, parent1]} families={[]} />);
     });
 
-    expect(container.textContent).toContain("phase4:backfill-families");
     expect(container.textContent).toContain("not created automatically");
+    expect(container.textContent).toContain("POST /families");
+    expect(container.textContent).not.toContain("phase4:backfill-families");
 
     act(() => {
       root.unmount();
@@ -129,9 +129,7 @@ describe("FamiliesSection", () => {
     container.remove();
   });
 
-  it("calls onDeleteFamily when delete is confirmed", async () => {
-    const confirmMock = vi.fn(() => true);
-    vi.stubGlobal("confirm", confirmMock);
+  it("calls onDeleteFamily when delete is confirmed in the dialog", async () => {
     const onDeleteFamily = vi.fn().mockResolvedValue(undefined);
 
     act(() => {
@@ -153,7 +151,16 @@ describe("FamiliesSection", () => {
       deleteBtn!.click();
     });
 
-    expect(confirmMock).toHaveBeenCalled();
+    const dialog = container.querySelector('[role="alertdialog"]');
+    expect(dialog).toBeTruthy();
+    expect(dialog?.textContent).toContain("Delete family unit?");
+
+    const confirmBtn = dialog!.querySelector(".danger-button") as HTMLButtonElement | null;
+    expect(confirmBtn?.textContent).toContain("Delete family");
+    await act(async () => {
+      confirmBtn!.click();
+    });
+
     expect(onDeleteFamily).toHaveBeenCalledWith("fam-1");
 
     act(() => {
@@ -162,11 +169,7 @@ describe("FamiliesSection", () => {
     container.remove();
   });
 
-  it("does not delete when confirm is dismissed", async () => {
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => false)
-    );
+  it("does not delete when the confirmation dialog is dismissed", async () => {
     const onDeleteFamily = vi.fn().mockResolvedValue(undefined);
 
     act(() => {
@@ -185,6 +188,15 @@ describe("FamiliesSection", () => {
     );
     await act(async () => {
       deleteBtn!.click();
+    });
+
+    const dialog = container.querySelector('[role="alertdialog"]');
+    const keepBtn = Array.from(dialog?.querySelectorAll("button") ?? []).find((b) =>
+      b.textContent?.includes("Keep family")
+    );
+    expect(keepBtn).toBeTruthy();
+    await act(async () => {
+      keepBtn!.click();
     });
 
     expect(onDeleteFamily).toHaveBeenCalledTimes(0);

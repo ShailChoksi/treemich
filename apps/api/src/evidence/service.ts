@@ -286,6 +286,13 @@ export class EvidenceService {
     return rows.map(toMediaObjectJson);
   }
 
+  async getMediaObjectByStorageUrl(userId: string, storageUrl: string): Promise<MediaObjectRecord | null> {
+    const row = await prisma.mediaObject.findFirst({
+      where: { userId, storageUrl }
+    });
+    return row ? toMediaObjectJson(row) : null;
+  }
+
   async createMediaObject(userId: string, body: CreateMediaObjectBody): Promise<MediaObjectRecord> {
     const created = await prisma.mediaObject.create({
       data: {

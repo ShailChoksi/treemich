@@ -1,4 +1,11 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual
+} from "node:crypto";
 import { env } from "../config/env.js";
 
 const encryptionAlgorithm = "aes-256-gcm";
@@ -8,6 +15,22 @@ const getEncryptionKey = () => Buffer.from(env.TREEMICH_ENCRYPTION_KEY, "hex");
 export const hashToken = (value: string) => createHash("sha256").update(value).digest("hex");
 
 export const createOpaqueToken = () => randomBytes(32).toString("base64url");
+
+export const hashPassword = (password: string) => {
+  const salt = randomBytes(16).toString("base64url");
+  const hash = scryptSync(password, salt, 64).toString("base64url");
+  return `scrypt:${salt}:${hash}`;
+};
+
+export const verifyPassword = (password: string, storedHash: string) => {
+  const [algorithm, salt, hash] = storedHash.split(":");
+  if (algorithm !== "scrypt" || !salt || !hash) {
+    return false;
+  }
+  const expected = Buffer.from(hash, "base64url");
+  const actual = scryptSync(password, salt, expected.byteLength);
+  return expected.byteLength === actual.byteLength && timingSafeEqual(expected, actual);
+};
 
 export const encryptSecret = (value: string) => {
   const iv = randomBytes(12);

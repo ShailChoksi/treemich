@@ -112,10 +112,10 @@ export async function runPhase4FamilyBackfillForUser(
       }
       const childList = [...children];
       await familyService.createFamily(userId, {
-        parent1ImmichPersonId: lo,
-        parent2ImmichPersonId: hi,
+        parent1PersonId: lo,
+        parent2PersonId: hi,
         notes: PHASE4_FAMILY_BACKFILL_NOTES,
-        children: childList.map((childImmichPersonId) => ({ childImmichPersonId }))
+        children: childList.map((childPersonId) => ({ childPersonId }))
       });
       totalCreated += 1;
       createdThisPass = true;
@@ -135,10 +135,10 @@ export async function runPhase4FamilyBackfillForUser(
     for (const [parentId, children] of loneParentToChildren) {
       const childList = [...children];
       await familyService.createFamily(userId, {
-        parent1ImmichPersonId: parentId,
-        parent2ImmichPersonId: null,
+        parent1PersonId: parentId,
+        parent2PersonId: null,
         notes: PHASE4_FAMILY_BACKFILL_NOTES,
-        children: childList.map((childImmichPersonId) => ({ childImmichPersonId }))
+        children: childList.map((childPersonId) => ({ childPersonId }))
       });
       totalCreated += 1;
     }

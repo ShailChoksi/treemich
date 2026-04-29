@@ -60,11 +60,15 @@ export const CollapsibleSection = ({
         </button>
         {count !== undefined ? <span className="person-detail-count">{count}</span> : null}
       </div>
-      {isCollapsed ? null : (
-        <div id={contentId} className="stack">
-          {children}
-        </div>
-      )}
+      {/* Inline display when collapsed: ensures collapse if `.stack` wins over `[hidden]` in the cascade. */}
+      <div
+        id={contentId}
+        className="stack"
+        hidden={isCollapsed}
+        style={isCollapsed ? { display: "none" } : undefined}
+      >
+        {children}
+      </div>
     </div>
   );
 };

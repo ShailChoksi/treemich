@@ -4,10 +4,16 @@ import { formatPersonNameDisplay } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import { HttpNotFoundError, HttpValidationError } from "../lifeEvents/errors.js";
 
-const includeProfile = (userId: string, immichPersonId: string) =>
-  prisma.personProfile.findUnique({
-    where: { userId_immichPersonId: { userId, immichPersonId } }
-  });
+const includeProfile = async (userId: string, personId: string) =>
+  (await prisma.personProfile.findFirst({
+    where: { userId, id: personId }
+  })) ??
+  (
+    await prisma.personExternalIdentity.findFirst({
+      where: { userId, providerPersonId: personId },
+      include: { person: true }
+    })
+  )?.person;
 
 export const personNameToJson = (row: PersonName) => ({
   id: row.id,
@@ -60,8 +66,8 @@ export const resolveDisplayNameForPerson = (opts: {
 };
 
 export class PersonNameService {
-  async listByImmichPersonId(userId: string, immichPersonId: string) {
-    const profile = await includeProfile(userId, immichPersonId);
+  async listByPersonId(userId: string, personId: string) {
+    const profile = await includeProfile(userId, personId);
     if (!profile) {
       return [] as ReturnType<typeof personNameToJson>[];
     }
@@ -93,12 +99,12 @@ export class PersonNameService {
     const rows = await prisma.personName.findMany({
       where: { userId },
       include: {
-        personProfile: { select: { immichPersonId: true } }
+        personProfile: { select: { id: true } }
       }
     });
     const byPerson = new Map<string, string[]>();
     for (const r of rows) {
-      const iid = r.personProfile.immichPersonId;
+      const iid = r.personProfile.id;
       const text = formatPersonNameDisplay({
         prefix: r.prefix,
         givenName: r.givenName,
@@ -115,8 +121,8 @@ export class PersonNameService {
     return byPerson;
   }
 
-  async create(userId: string, immichPersonId: string, body: CreatePersonNameBody) {
-    const profile = await includeProfile(userId, immichPersonId);
+  async create(userId: string, personId: string, body: CreatePersonNameBody) {
+    const profile = await includeProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -142,8 +148,8 @@ export class PersonNameService {
     return personNameToJson(created);
   }
 
-  async update(userId: string, immichPersonId: string, nameId: string, body: PatchPersonNameBody) {
-    const profile = await includeProfile(userId, immichPersonId);
+  async update(userId: string, personId: string, nameId: string, body: PatchPersonNameBody) {
+    const profile = await includeProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -207,8 +213,8 @@ export class PersonNameService {
     return data;
   }
 
-  async delete(userId: string, immichPersonId: string, nameId: string) {
-    const profile = await includeProfile(userId, immichPersonId);
+  async delete(userId: string, personId: string, nameId: string) {
+    const profile = await includeProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -228,8 +234,8 @@ export class PersonNameService {
     await prisma.personName.delete({ where: { id: nameId } });
   }
 
-  async setPrimary(userId: string, immichPersonId: string, nameId: string) {
-    const profile = await includeProfile(userId, immichPersonId);
+  async setPrimary(userId: string, personId: string, nameId: string) {
+    const profile = await includeProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }

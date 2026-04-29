@@ -2,7 +2,7 @@
  * @file Pure helpers: labels, date/gender formatting, relationship picker data.
  */
 
-import type { Gender, ImmichPerson, RelationshipRecord, RelationshipType } from "../../lib/api";
+import type { Gender, Person, RelationshipRecord, RelationshipType } from "../../lib/api";
 import type { PrimaryFamilyOption } from "./types";
 
 const getGenderedTerm = (
@@ -200,7 +200,7 @@ export const indexRelationshipsByPersonId = (relationships: RelationshipRecord[]
 
 export const buildPrimaryFamilyOptions = (
   personId: string,
-  peopleById: Map<string, ImmichPerson>,
+  peopleById: Map<string, Person>,
   relationships: RelationshipRecord[]
 ): PrimaryFamilyOption[] => {
   const parentIds = new Set<string>();

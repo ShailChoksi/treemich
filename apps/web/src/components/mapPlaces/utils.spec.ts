@@ -5,7 +5,7 @@ import {
   filterPlaces,
   filterPlacesByBounds,
   getAdaptiveClusterCellDegrees,
-  placeClusterIncludesImmichPerson
+  placeClusterIncludesPerson
 } from "./utils";
 
 const point = (overrides: Partial<PlacesMapPoint>): PlacesMapPoint => ({
@@ -75,20 +75,20 @@ describe("clusterPlaces", () => {
   });
 });
 
-describe("placeClusterIncludesImmichPerson", () => {
+describe("placeClusterIncludesPerson", () => {
   it("is true when any clustered place lists the person in sample ids", () => {
     const clusters = clusterPlaces(
       [point({ id: "a", samplePersonIds: ["x"] }), point({ id: "b", samplePersonIds: ["y"] })],
       5
     );
-    expect(placeClusterIncludesImmichPerson(clusters[0]!, "x")).toBe(true);
-    expect(placeClusterIncludesImmichPerson(clusters[0]!, "missing")).toBe(false);
+    expect(placeClusterIncludesPerson(clusters[0]!, "x")).toBe(true);
+    expect(placeClusterIncludesPerson(clusters[0]!, "missing")).toBe(false);
   });
 
   it("is false when person id is empty", () => {
     const clusters = clusterPlaces([point({ id: "a", samplePersonIds: ["x"] })], 5);
-    expect(placeClusterIncludesImmichPerson(clusters[0]!, null)).toBe(false);
-    expect(placeClusterIncludesImmichPerson(clusters[0]!, "")).toBe(false);
+    expect(placeClusterIncludesPerson(clusters[0]!, null)).toBe(false);
+    expect(placeClusterIncludesPerson(clusters[0]!, "")).toBe(false);
   });
 });
 

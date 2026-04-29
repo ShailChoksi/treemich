@@ -118,6 +118,7 @@ describe("evidence routes", () => {
       immichClientFactory: {
         getClient: getClientMock
       } as unknown as AppServices["immichClientFactory"],
+      personService: {} as unknown as AppServices["personService"],
       relationshipService: {
         getPhotoCooccurrence: vi.fn(),
         getProfilesForPersonIds: vi.fn().mockResolvedValue(new Map()),
@@ -150,7 +151,7 @@ describe("evidence routes", () => {
         deleteFamilyLifeEvent: vi.fn()
       } as unknown as AppServices["lifeEventService"],
       personNameService: {
-        listByImmichPersonId: vi.fn().mockResolvedValue([]),
+        listByPersonId: vi.fn().mockResolvedValue([]),
         getPrimaryMapForProfileIds: vi.fn().mockResolvedValue(new Map()),
         getAllFormattedForUser: vi.fn().mockResolvedValue(new Map()),
         create: vi.fn(),
@@ -189,7 +190,7 @@ describe("evidence routes", () => {
         createFamily: vi.fn(),
         patchFamily: vi.fn(),
         deleteFamily: vi.fn(),
-        findAdoptedChildImmichPersonIds: vi.fn().mockResolvedValue([])
+        findAdoptedChildPersonIds: vi.fn().mockResolvedValue([])
       } as unknown as AppServices["familyService"]
     };
 

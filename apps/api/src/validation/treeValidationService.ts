@@ -1,5 +1,5 @@
 import { prisma } from "../db/client.js";
-import { LifeEventService } from "../lifeEvents/service.js";
+import { env } from "../config/env.js";
 import {
   computePersonLifeEventFindings,
   type LifeEventValidationFinding
@@ -12,21 +12,79 @@ import {
 export const mergeTreeFindings = (...batches: LifeEventValidationFinding[][]): LifeEventValidationFinding[] =>
   batches.flat();
 
-export async function computeTreeValidationForUser(
-  userId: string,
-  lifeEventService: LifeEventService
-): Promise<LifeEventValidationFinding[]> {
+export async function computeTreeValidationForUser(userId: string): Promise<LifeEventValidationFinding[]> {
   const findings: LifeEventValidationFinding[] = [];
 
-  const profiles = await prisma.personProfile.findMany({
-    where: { userId },
-    select: { id: true, immichPersonId: true }
-  });
+  const [profiles, relationships] = await Promise.all([
+    prisma.personProfile.findMany({
+      where: { userId },
+      select: { id: true }
+    }),
+    prisma.relationship.findMany({
+      where: { userId }
+    })
+  ]);
+
+  if (profiles.length + relationships.length > env.TREEMICH_TREE_VALIDATION_MAX_ROWS) {
+    throw {
+      statusCode: 413,
+      message: `Tree validation requires scanning ${profiles.length + relationships.length} rows; maximum is ${env.TREEMICH_TREE_VALIDATION_MAX_ROWS}`
+    };
+  }
+
+  const [personEvents, relationshipEvents] = await Promise.all([
+    prisma.lifeEvent.findMany({
+      where: {
+        userId,
+        personProfileId: { in: profiles.map((profile) => profile.id) }
+      },
+      select: {
+        personProfileId: true,
+        eventType: true,
+        year: true,
+        month: true,
+        day: true
+      },
+      orderBy: [{ year: "asc" }, { month: "asc" }, { day: "asc" }, { id: "asc" }]
+    }),
+    prisma.lifeEvent.findMany({
+      where: {
+        userId,
+        relationshipId: { in: relationships.map((relationship) => relationship.id) }
+      },
+      select: {
+        relationshipId: true,
+        eventType: true,
+        year: true,
+        month: true,
+        day: true
+      },
+      orderBy: [{ year: "asc" }, { id: "asc" }]
+    })
+  ]);
+
+  const eventsByProfileId = new Map<string, typeof personEvents>();
+  for (const event of personEvents) {
+    if (!event.personProfileId) {
+      continue;
+    }
+    const events = eventsByProfileId.get(event.personProfileId) ?? [];
+    events.push(event);
+    eventsByProfileId.set(event.personProfileId, events);
+  }
+
+  const eventsByRelationshipId = new Map<string, typeof relationshipEvents>();
+  for (const event of relationshipEvents) {
+    if (!event.relationshipId) {
+      continue;
+    }
+    const events = eventsByRelationshipId.get(event.relationshipId) ?? [];
+    events.push(event);
+    eventsByRelationshipId.set(event.relationshipId, events);
+  }
 
   for (const p of profiles) {
-    const events = await lifeEventService.listPersonLifeEvents(userId, p.immichPersonId, {
-      includeCitations: false
-    });
+    const events = eventsByProfileId.get(p.id) ?? [];
     findings.push(
       ...computePersonLifeEventFindings(
         events.map((e) => ({
@@ -35,19 +93,13 @@ export async function computeTreeValidationForUser(
           month: e.month,
           day: e.day
         })),
-        { immichPersonId: p.immichPersonId }
+        { personId: p.id }
       )
     );
   }
 
-  const relationships = await prisma.relationship.findMany({
-    where: { userId }
-  });
-
   for (const r of relationships) {
-    const relEvents = await lifeEventService.listRelationshipLifeEvents(userId, r.id, {
-      includeCitations: false
-    });
+    const relEvents = eventsByRelationshipId.get(r.id) ?? [];
     const dateParts = relEvents.map((e) => ({
       eventType: e.eventType,
       year: e.year,
@@ -61,14 +113,10 @@ export async function computeTreeValidationForUser(
     if (r.type !== "PARENT_OF" && r.type !== "CHILD_OF") {
       continue;
     }
-    const parentImmich = r.type === "PARENT_OF" ? r.fromPersonId : r.toPersonId;
-    const childImmich = r.type === "PARENT_OF" ? r.toPersonId : r.fromPersonId;
-    const parentEvents = await lifeEventService.listPersonLifeEvents(userId, parentImmich, {
-      includeCitations: false
-    });
-    const childEvents = await lifeEventService.listPersonLifeEvents(userId, childImmich, {
-      includeCitations: false
-    });
+    const parentPersonId = r.type === "PARENT_OF" ? r.fromPersonId : r.toPersonId;
+    const childPersonId = r.type === "PARENT_OF" ? r.toPersonId : r.fromPersonId;
+    const parentEvents = eventsByProfileId.get(parentPersonId) ?? [];
+    const childEvents = eventsByProfileId.get(childPersonId) ?? [];
     const pBirth = parentEvents.find((e) => e.eventType === "BIRTH");
     const cBirth = childEvents.find((e) => e.eventType === "BIRTH");
     if (!pBirth || !cBirth) {
@@ -79,8 +127,8 @@ export async function computeTreeValidationForUser(
         { year: pBirth.year, month: pBirth.month, day: pBirth.day },
         { year: cBirth.year, month: cBirth.month, day: cBirth.day },
         {
-          parentImmichPersonId: parentImmich,
-          childImmichPersonId: childImmich,
+          parentPersonId,
+          childPersonId,
           relationshipId: r.id
         }
       )
@@ -91,9 +139,7 @@ export async function computeTreeValidationForUser(
 }
 
 const findingKey = (f: LifeEventValidationFinding) =>
-  [f.code, f.immichPersonId ?? "", f.relationshipId ?? "", f.relatedImmichPersonId ?? "", f.message].join(
-    "|"
-  );
+  [f.code, f.personId ?? "", f.relationshipId ?? "", f.relatedPersonId ?? "", f.message].join("|");
 
 function dedupeFindings(list: LifeEventValidationFinding[]): LifeEventValidationFinding[] {
   const seen = new Set<string>();

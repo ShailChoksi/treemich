@@ -16,6 +16,9 @@ type Props = {
   treeValidationEngineDisabled: boolean;
   searchIncludeAlternateNames: boolean;
   onSearchIncludeAlternateNamesChange: (next: boolean) => void;
+  providerFilter: "all" | "linked" | "unlinked";
+  onProviderFilterChange: (next: "all" | "linked" | "unlinked") => void;
+  onNewPerson?: () => void;
 };
 
 const SEARCH_TERM_DEBOUNCE_MS = 120;
@@ -32,7 +35,10 @@ const GraphSearchOverlayComponent = ({
   treeValidationIssueCount,
   treeValidationEngineDisabled,
   searchIncludeAlternateNames,
-  onSearchIncludeAlternateNamesChange
+  onSearchIncludeAlternateNamesChange,
+  providerFilter,
+  onProviderFilterChange,
+  onNewPerson
 }: Props) => {
   const [draftSearchTerm, setDraftSearchTerm] = useState(searchTerm);
   const listId = useId();
@@ -125,6 +131,17 @@ const GraphSearchOverlayComponent = ({
         />
         Match alternate Treemich names in people search
       </label>
+      <label className="graph-search-provider-filter">
+        <span>People</span>
+        <select
+          value={providerFilter}
+          onChange={(e) => onProviderFilterChange(e.target.value as typeof providerFilter)}
+        >
+          <option value="all">All</option>
+          <option value="linked">Linked to Immich</option>
+          <option value="unlinked">Not linked to Immich</option>
+        </select>
+      </label>
       {treeValidationEngineDisabled ? (
         <p className="graph-tree-issues-hint">Full-tree validation is disabled (server setting).</p>
       ) : treeValidationIssueCount != null && treeValidationIssueCount > 0 ? (
@@ -144,6 +161,11 @@ const GraphSearchOverlayComponent = ({
       >
         Center view (F)
       </button>
+      {onNewPerson ? (
+        <button type="button" className="secondary-button graph-new-person-button" onClick={onNewPerson}>
+          + New person
+        </button>
+      ) : null}
       {searchFeedback ? (
         <p className="graph-search-feedback" aria-live="polite">
           {searchFeedback}

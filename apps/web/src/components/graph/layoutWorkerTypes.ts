@@ -2,11 +2,11 @@
  * @file Message types exchanged with the layout Web Worker.
  */
 
-import type { ImmichPerson, PhotoCluster, RelationshipRecord } from "../../lib/api";
+import type { Person, PhotoCluster, RelationshipRecord } from "../../lib/api";
 import type { GraphLayoutMode, NodePosition } from "./layout";
 
 export type LayoutWorkerPayload = {
-  people: ImmichPerson[];
+  people: Person[];
   relationships: RelationshipRecord[];
   options?: {
     mode?: GraphLayoutMode;

@@ -50,10 +50,15 @@ export const registerPeopleRelationshipsPostRoute = (app: FastifyInstance) => {
     );
 
     if (body.relationshipType === "SPOUSE_OF") {
-      await app.services.lifeEventService.syncSpouseDatesToLifeEvents(auth.user.id, id, body.toPersonId, {
-        ...(body.marriageAnniversaryDate !== undefined ? { marriageAnniversaryDate } : {}),
-        ...(body.divorceDate !== undefined ? { divorceDate } : {})
-      });
+      await app.services.lifeEventService.syncSpouseDatesToLifeEvents(
+        auth.user.id,
+        created.direct.fromPersonId,
+        created.direct.toPersonId,
+        {
+          ...(body.marriageAnniversaryDate !== undefined ? { marriageAnniversaryDate } : {}),
+          ...(body.divorceDate !== undefined ? { divorceDate } : {})
+        }
+      );
     }
 
     return reply.code(201).send(created);

@@ -44,6 +44,18 @@ export type LifeEventWithRelations = Prisma.LifeEventGetPayload<{
 }>;
 
 export class LifeEventService {
+  private async getPersonProfile(userId: string, personId: string) {
+    return (
+      (await prisma.personProfile.findFirst({ where: { userId, id: personId } })) ??
+      (
+        await prisma.personExternalIdentity.findFirst({
+          where: { userId, providerPersonId: personId },
+          include: { person: true }
+        })
+      )?.person
+    );
+  }
+
   private normalizeText(value: string | null | undefined): string | null {
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
@@ -294,9 +306,9 @@ export class LifeEventService {
 
   async validatePersonLifeEvents(
     userId: string,
-    immichPersonId: string
+    personId: string
   ): Promise<{ findings: ReturnType<typeof computePersonLifeEventFindings> }> {
-    const events = await this.listPersonLifeEvents(userId, immichPersonId, { includeCitations: false });
+    const events = await this.listPersonLifeEvents(userId, personId, { includeCitations: false });
     const findings = computePersonLifeEventFindings(
       events.map((e) => ({
         eventType: e.eventType,
@@ -304,7 +316,7 @@ export class LifeEventService {
         month: e.month,
         day: e.day
       })),
-      { immichPersonId }
+      { personId }
     );
     return { findings };
   }
@@ -346,12 +358,10 @@ export class LifeEventService {
 
   async listPersonLifeEvents(
     userId: string,
-    immichPersonId: string,
+    personId: string,
     options?: { includeCitations?: boolean }
   ): Promise<LifeEventWithRelations[]> {
-    const profile = await prisma.personProfile.findUnique({
-      where: { userId_immichPersonId: { userId, immichPersonId } }
-    });
+    const profile = await this.getPersonProfile(userId, personId);
     if (!profile) {
       return [];
     }
@@ -367,13 +377,11 @@ export class LifeEventService {
 
   async createPersonLifeEvent(
     userId: string,
-    immichPersonId: string,
+    personId: string,
     body: CreateLifeEventBody
   ): Promise<LifeEventWithRelations> {
     this.assertPersonEventAllowed(body.eventType);
-    const profile = await prisma.personProfile.findUnique({
-      where: { userId_immichPersonId: { userId, immichPersonId } }
-    });
+    const profile = await this.getPersonProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -409,13 +417,11 @@ export class LifeEventService {
 
   async updatePersonLifeEvent(
     userId: string,
-    immichPersonId: string,
+    personId: string,
     eventId: string,
     body: PatchLifeEventBody
   ): Promise<LifeEventWithRelations> {
-    const profile = await prisma.personProfile.findUnique({
-      where: { userId_immichPersonId: { userId, immichPersonId } }
-    });
+    const profile = await this.getPersonProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -487,10 +493,8 @@ export class LifeEventService {
     return updatedRow;
   }
 
-  async deletePersonLifeEvent(userId: string, immichPersonId: string, eventId: string): Promise<void> {
-    const profile = await prisma.personProfile.findUnique({
-      where: { userId_immichPersonId: { userId, immichPersonId } }
-    });
+  async deletePersonLifeEvent(userId: string, personId: string, eventId: string): Promise<void> {
+    const profile = await this.getPersonProfile(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -1309,14 +1313,14 @@ export function lifeEventToJson(event: LifeEventWithRelations) {
   };
 }
 
-/** Effective birth ISO for GET /people: life event first, then Immich person birthDate. */
+/** Effective birth ISO for GET /people: Treemich life event first, then optional provider birth date. */
 export function effectiveBirthIsoFromLifeEvent(
   birthEvent: (LifeEvent & { place?: Place | null }) | null | undefined,
-  immichBirth: string | null | undefined
+  providerBirth: string | null | undefined
 ): string | null {
   const fromEvent = birthEvent ? isoFromLifeEventRow(birthEvent) : null;
   if (fromEvent) {
     return fromEvent;
   }
-  return immichBirth?.trim() ? immichBirth.trim() : null;
+  return providerBirth?.trim() ? providerBirth.trim() : null;
 }

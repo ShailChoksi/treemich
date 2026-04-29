@@ -17,7 +17,7 @@ type Props = {
   onCreate: (body: CreateResearchTaskBody) => Promise<void>;
   onUpdate: (
     taskId: string,
-    patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "immichPersonId">>
+    patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "personId">>
   ) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
 };
@@ -49,7 +49,11 @@ export const ResearchTasksSection = ({ personId, tasks, disabled, onCreate, onUp
   };
 
   if (tasks === undefined) {
-    return <p className="hint">Loading research tasks…</p>;
+    return (
+      <div className="skeleton-card sidebar-skeleton" aria-label="Loading research tasks">
+        <span className="sr-only">Loading research tasks…</span>
+      </div>
+    );
   }
 
   return (
@@ -95,7 +99,7 @@ export const ResearchTasksSection = ({ personId, tasks, disabled, onCreate, onUp
               await onCreate({
                 title: newTitle.trim(),
                 status: "OPEN",
-                immichPersonId: createGlobal ? null : personId,
+                personId: createGlobal ? null : personId,
                 dueDate: newDueDate || null,
                 notes: newNotes.trim() ? newNotes.trim() : null
               });
@@ -143,7 +147,7 @@ export const ResearchTasksSection = ({ personId, tasks, disabled, onCreate, onUp
             >
               Remove
             </button>
-            {task.immichPersonId == null ? <span className="hint research-task-meta">Global</span> : null}
+            {task.personId == null ? <span className="hint research-task-meta">Global</span> : null}
             {task.notes ? <p className="hint research-task-meta">{task.notes}</p> : null}
           </li>
         ))}

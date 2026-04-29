@@ -3,11 +3,25 @@
  */
 
 import type { FastifyInstance } from "fastify";
+import { readFile } from "node:fs/promises";
 import { getRequiredAuth } from "../auth/request.js";
+import { env } from "../config/env.js";
 import { prisma } from "../db/client.js";
 import { lifeEventQueryInclude, lifeEventToJson } from "../lifeEvents/service.js";
 import { familyToJson } from "../families/service.js";
-import { buildAccountExportManifestV1, zipAccountExport } from "./export-account.zip.js";
+import { pathForStorageKey, storageKeyFromUrl } from "../evidence/mediaStorage.js";
+import {
+  buildAccountExportManifestV1,
+  type AccountExportZipFile,
+  zipAccountExport
+} from "./export-account.zip.js";
+
+const manifestFileFromZipFile = ({ path, role, personId, personThumbnailId }: AccountExportZipFile) => ({
+  path,
+  role,
+  ...(personId ? { personId } : {}),
+  ...(personThumbnailId ? { personThumbnailId } : {})
+});
 
 const serializeForExport = (value: unknown) =>
   JSON.stringify(value, (_key, v) => {
@@ -24,6 +38,28 @@ const serializeForExport = (value: unknown) =>
     }
     return v;
   });
+
+const countExportRows = async (userId: string) => {
+  const counts = await Promise.all([
+    prisma.personProfile.count({ where: { userId } }),
+    prisma.personExternalIdentity.count({ where: { userId } }),
+    prisma.personThumbnail.count({ where: { userId } }),
+    prisma.relationship.count({ where: { userId } }),
+    prisma.family.count({ where: { userId } }),
+    prisma.place.count({ where: { userId } }),
+    prisma.lifeEvent.count({ where: { userId } }),
+    prisma.personName.count({ where: { userId } }),
+    prisma.researchTask.count({ where: { userId } }),
+    prisma.repository.count({ where: { userId } }),
+    prisma.source.count({ where: { userId } }),
+    prisma.mediaObject.count({ where: { userId } }),
+    prisma.mediaLink.count({ where: { userId } }),
+    prisma.treemichSession.count({ where: { userId } }),
+    prisma.cooccurrenceJob.count({ where: { userId } }),
+    prisma.cooccurrenceEdge.count({ where: { userId } })
+  ]);
+  return counts.reduce((total, count) => total + count, 0);
+};
 
 export type AccountExportPayloadV1 = {
   exportVersion: 1;
@@ -48,6 +84,46 @@ export type AccountExportPayloadV1 = {
   cooccurrenceSchedule: unknown;
 };
 
+export type AccountExportPayloadV2 = Omit<AccountExportPayloadV1, "exportVersion" | "personProfiles"> & {
+  exportVersion: 2;
+  people: unknown[];
+  personExternalIdentities: unknown[];
+  personThumbnails: unknown[];
+};
+
+const safeZipPathSegment = (value: string) => value.replace(/[^A-Za-z0-9._-]/g, "_");
+
+const buildThumbnailBinaryFiles = async (
+  thumbnails: Array<{ id: string; personId: string; storageUrl: string | null }>
+): Promise<{
+  thumbnails: Array<Record<string, unknown>>;
+  files: AccountExportZipFile[];
+}> => {
+  const files: AccountExportZipFile[] = [];
+  const exportedThumbnails: Array<Record<string, unknown>> = [];
+  for (const thumbnail of thumbnails) {
+    const exportRow: Record<string, unknown> = { ...thumbnail };
+    const storageKey = thumbnail.storageUrl ? storageKeyFromUrl(thumbnail.storageUrl) : null;
+    if (storageKey) {
+      const path = `thumbnails/${safeZipPathSegment(thumbnail.personId)}/${safeZipPathSegment(thumbnail.id)}-${safeZipPathSegment(storageKey)}`;
+      try {
+        files.push({
+          path,
+          role: "person_thumbnail_binary",
+          personId: thumbnail.personId,
+          personThumbnailId: thumbnail.id,
+          data: await readFile(pathForStorageKey(storageKey))
+        });
+        exportRow.exportBinaryPath = path;
+      } catch {
+        exportRow.exportBinaryMissing = true;
+      }
+    }
+    exportedThumbnails.push(exportRow);
+  }
+  return { thumbnails: exportedThumbnails, files };
+};
+
 export const registerExportAccountGetRoute = (app: FastifyInstance) => {
   app.get("/export/account", async (request, reply) => {
     const formatRaw = (request.query as { format?: string }).format;
@@ -63,10 +139,30 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
 
     const auth = getRequiredAuth(request);
     const userId = auth.user.id;
+    const exportRowCount = await countExportRows(userId);
+    if (exportRowCount > env.TREEMICH_EXPORT_MAX_ROWS) {
+      return reply.code(413).send({
+        statusCode: 413,
+        error: "Export Too Large",
+        message: `This account export contains ${exportRowCount} rows, exceeding TREEMICH_EXPORT_MAX_ROWS=${env.TREEMICH_EXPORT_MAX_ROWS}. Use a background export path or raise the limit.`
+      });
+    }
+
+    const versionRaw = (request.query as { version?: string }).version;
+    const version = versionRaw === "1" ? 1 : versionRaw === undefined || versionRaw === "2" ? 2 : null;
+    if (version === null) {
+      return reply.code(400).send({
+        statusCode: 400,
+        error: "Invalid version",
+        message: "Use version=1 or version=2 (default)"
+      });
+    }
 
     const [
       user,
-      personProfiles,
+      people,
+      personExternalIdentities,
+      personThumbnails,
       relationships,
       familyRows,
       places,
@@ -87,16 +183,22 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
         where: { id: userId },
         select: {
           id: true,
-          immichBaseUrl: true,
-          immichUserId: true,
-          immichEmail: true,
-          immichName: true,
+          email: true,
+          name: true,
           preferences: true,
           createdAt: true,
           updatedAt: true
         }
       }),
       prisma.personProfile.findMany({ where: { userId } }),
+      prisma.personExternalIdentity.findMany({
+        where: { userId },
+        orderBy: [{ personId: "asc" }, { createdAt: "asc" }]
+      }),
+      prisma.personThumbnail.findMany({
+        where: { userId },
+        orderBy: [{ personId: "asc" }, { createdAt: "asc" }]
+      }),
       prisma.relationship.findMany({ where: { userId } }),
       prisma.family.findMany({
         where: { userId },
@@ -146,12 +248,13 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
       return reply.code(404).send({ statusCode: 404, error: "User not found" });
     }
 
-    const payload: AccountExportPayloadV1 = {
-      exportVersion: 1,
+    const { thumbnails: exportedPersonThumbnails, files: thumbnailFiles } =
+      await buildThumbnailBinaryFiles(personThumbnails);
+
+    const payloadBase = {
       exportedAt: new Date().toISOString(),
       treemichUser: user,
       linkedImmichAccount: linkedAccount,
-      personProfiles,
       relationships,
       families: familyRows.map((row) => familyToJson(row)),
       places,
@@ -168,6 +271,21 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
       cooccurrenceSchedule
     };
 
+    const payload: AccountExportPayloadV1 | AccountExportPayloadV2 =
+      version === 1
+        ? {
+            exportVersion: 1,
+            ...payloadBase,
+            personProfiles: people
+          }
+        : {
+            exportVersion: 2,
+            ...payloadBase,
+            people,
+            personExternalIdentities,
+            personThumbnails: exportedPersonThumbnails
+          };
+
     app.log.info({ userId, event: "account_export", format }, "Treemich account export downloaded");
 
     const jsonBody = serializeForExport(payload);
@@ -179,11 +297,13 @@ export const registerExportAccountGetRoute = (app: FastifyInstance) => {
         .send(jsonBody);
     }
 
+    const extraZipFiles = version === 2 ? thumbnailFiles : [];
     const manifest = buildAccountExportManifestV1({
       exportVersion: payload.exportVersion,
-      exportedAt: payload.exportedAt
+      exportedAt: payload.exportedAt,
+      extraFiles: extraZipFiles.map(manifestFileFromZipFile)
     });
-    const zipBuffer = zipAccountExport(jsonBody, manifest);
+    const zipBuffer = zipAccountExport(jsonBody, manifest, extraZipFiles);
     return reply
       .header("Content-Type", "application/zip")
       .header("Content-Disposition", `attachment; filename="treemich-account-export-${userId}.zip"`)

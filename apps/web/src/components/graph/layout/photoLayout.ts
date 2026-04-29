@@ -2,14 +2,14 @@
  * @file Family-tree layout math: photoLayout.
  */
 
-import type { ImmichPerson, PhotoCluster } from "../../../lib/api";
+import type { Person, PhotoCluster } from "../../../lib/api";
 import type { NodePosition } from "./types";
 
 export const positionPeopleByPhotoClusters = (
-  people: ImmichPerson[],
+  people: Person[],
   photoClusters: PhotoCluster[]
 ): Array<{
-  person: ImmichPerson;
+  person: Person;
   position: NodePosition;
 }> => {
   const peopleById = new Map(people.map((person) => [person.id, person]));
@@ -18,7 +18,7 @@ export const positionPeopleByPhotoClusters = (
     .map((cluster) => {
       const members = cluster.personIds
         .map((personId) => peopleById.get(personId))
-        .filter((person): person is ImmichPerson => !!person);
+        .filter((person): person is Person => !!person);
       members.forEach((member) => consumed.add(member.id));
       return {
         id: cluster.id,

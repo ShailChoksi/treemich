@@ -1,6 +1,6 @@
 # Run Treemich using pre-built images from Docker Hub (no local clone/build).
 #
-# 1. Copy .env.example to .env and set IMMICH_BASE_URL, TREEMICH_ENCRYPTION_KEY, WEB_ORIGIN.
+# 1. Copy .env.example to .env and set TREEMICH_ENCRYPTION_KEY. Set IMMICH_BASE_URL only for optional Immich imports.
 # 2. docker compose -f docker-compose.hub.yml up -d
 #
 # Image tags default to api-latest / web-latest on schoksi/treemich.
@@ -37,7 +37,7 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/treemich
-      IMMICH_BASE_URL: ${IMMICH_BASE_URL}
+      IMMICH_BASE_URL: ${IMMICH_BASE_URL:-}
       IMMICH_PEOPLE_PAGE_SIZE: ${IMMICH_PEOPLE_PAGE_SIZE:-1000}
       TREEMICH_ENCRYPTION_KEY: ${TREEMICH_ENCRYPTION_KEY}
       TREEMICH_SESSION_COOKIE_NAME: ${TREEMICH_SESSION_COOKIE_NAME:-treemich_session}
@@ -45,6 +45,19 @@ services:
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
       RATE_LIMIT_TIME_WINDOW_MS: ${RATE_LIMIT_TIME_WINDOW_MS:-60000}
+      # Feature flags: must be passed explicitly; the API container does not read the host repo .env.
+      TREEMICH_VALIDATION_ENGINE_ENABLED: ${TREEMICH_VALIDATION_ENGINE_ENABLED:-}
+      MAP_UI_ENABLED: ${MAP_UI_ENABLED:-}
+      TREEMICH_PROFILE_PLACE_GEOCODING_ENABLED: ${TREEMICH_PROFILE_PLACE_GEOCODING_ENABLED:-}
+      TREEMICH_FAMILY_MODEL_ENABLED: ${TREEMICH_FAMILY_MODEL_ENABLED:-}
+      TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL: ${TREEMICH_AUTO_PHASE4_FAMILY_BACKFILL:-}
+      TREEMICH_GEDCOM_EXPORT_ENABLED: ${TREEMICH_GEDCOM_EXPORT_ENABLED:-}
+      TREEMICH_GEDCOM_IMPORT_ENABLED: ${TREEMICH_GEDCOM_IMPORT_ENABLED:-false}
+      TREEMICH_MEDIA_STORAGE_DIR: ${TREEMICH_MEDIA_STORAGE_DIR:-/data/media}
+      TREEMICH_GEDCOM_MEDIA_MAX_BYTES: ${TREEMICH_GEDCOM_MEDIA_MAX_BYTES:-100000000}
+      TREEMICH_GEDCOM_MEDIA_MAX_FILE_BYTES: ${TREEMICH_GEDCOM_MEDIA_MAX_FILE_BYTES:-50000000}
+    volumes:
+      - treemich-media:/data/media
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: >
@@ -71,3 +84,4 @@ services:
 
 volumes:
   treemich-postgres:
+  treemich-media:

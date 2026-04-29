@@ -1,14 +1,14 @@
 /**
  * @packageDocumentation
- * Cross-package Treemich contracts: relationship/graph types, Zod schemas for preferences and layout,
- * Immich-facing DTOs, and re-exports for life events, person names, and research tasks.
+ * Cross-package Treemich contracts: person/relationship/graph types, Zod schemas for preferences and layout,
+ * optional provider DTOs, and re-exports for life events, person names, and research tasks.
  */
 
 import { z } from "zod";
 import type { FamilyChildPedigree } from "./families.js";
 import type { AgeFilter, InterpreterIntent } from "./search/interpreter.js";
 
-/** Canonical relationship kinds stored in Treemich (Immich person id endpoints). */
+/** Canonical relationship kinds stored in Treemich person-id space. */
 export const relationshipTypes = [
   "PARENT_OF",
   "CHILD_OF",
@@ -45,7 +45,7 @@ export const filterGraphLayoutTopologyRelationships = <R extends { type: Relatio
   relationships: readonly R[]
 ): R[] => relationships.filter((relationship) => graphLayoutTopologyTypeSet.has(relationship.type));
 
-/** Stored gender enum for Treemich profiles (Immich-backed). */
+/** Stored gender enum for Treemich person profiles. */
 export const genderValues = ["MALE", "FEMALE", "OTHER", "UNKNOWN"] as const;
 export type GenderValue = (typeof genderValues)[number];
 
@@ -55,19 +55,84 @@ export const relationshipTypeSchema = z.enum(relationshipTypes);
 export const graphLayoutModeValues = ["family", "photo"] as const;
 export const graphLayoutModeSchema = z.enum(graphLayoutModeValues);
 
-/** Minimal Immich person row as Treemich uses it in lists and search (ids are Immich person ids). */
-export type ImmichPerson = {
+export const personExternalIdentityProviderValues = ["IMMICH", "GEDCOM", "OTHER"] as const;
+export type PersonExternalIdentityProvider = (typeof personExternalIdentityProviderValues)[number];
+export const personExternalIdentityProviderSchema = z.enum(personExternalIdentityProviderValues);
+
+export const personThumbnailSourceValues = ["UPLOADED", "IMMICH", "GENERATED"] as const;
+export type PersonThumbnailSource = (typeof personThumbnailSourceValues)[number];
+export const personThumbnailSourceSchema = z.enum(personThumbnailSourceValues);
+
+export const createPersonBodySchema = z.object({
+  displayNameOverride: z.string().trim().min(1).max(200).nullable().optional(),
+  givenName: z.string().trim().min(1).max(200).nullable().optional(),
+  surname: z.string().trim().min(1).max(200).nullable().optional(),
+  nicknames: z.string().trim().min(1).max(500).nullable().optional(),
+  gender: genderSchema.optional(),
+  birthDate: z.string().trim().min(1).nullable().optional(),
+  deathDate: z.string().trim().min(1).nullable().optional()
+});
+
+export const patchPersonBodySchema = createPersonBodySchema
+  .partial()
+  .refine((body) => Object.keys(body).length > 0, { message: "At least one person field must be provided" });
+
+export const createPersonExternalIdentityBodySchema = z.object({
+  provider: personExternalIdentityProviderSchema,
+  providerPersonId: z.string().trim().min(1),
+  providerBaseUrl: z.string().trim().min(1).nullable().optional(),
+  displayName: z.string().trim().min(1).nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional()
+});
+
+export type CreatePersonBody = z.infer<typeof createPersonBodySchema>;
+export type PatchPersonBody = z.infer<typeof patchPersonBodySchema>;
+export type CreatePersonExternalIdentityBody = z.infer<typeof createPersonExternalIdentityBodySchema>;
+
+export type PersonExternalIdentityRecord = {
+  id: string;
+  personId: string;
+  provider: PersonExternalIdentityProvider;
+  providerPersonId: string;
+  providerBaseUrl: string | null;
+  displayName: string | null;
+  thumbnailImportedAt: string | null;
+  lastSeenAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PersonThumbnailRecord = {
+  id: string;
+  personId: string;
+  source: PersonThumbnailSource;
+  storageUrl: string | null;
+  mimeType: string | null;
+  checksum: string | null;
+  sourceExternalIdentityId: string | null;
+  importedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Canonical Treemich person row. Immich ids are optional external identities. */
+export type PersonRecord = {
   id: string;
   name: string;
   /** Treemich primary or formatted display; prefer over `name` for UI when set. */
   displayName?: string | null;
   birthDate?: string | null;
   thumbnailPath?: string | null;
+  profile?: TreemichPersonProfile | null;
+  externalIdentities?: PersonExternalIdentityRecord[];
+  thumbnail?: PersonThumbnailRecord | null;
+  hasRelationship?: boolean;
 };
 
-/** Treemich-owned fields layered on an Immich person (persisted in Treemich DB). */
+/** Treemich-owned person profile fields. */
 export type TreemichPersonProfile = {
-  immichPersonId: string;
+  id: string;
   gender: GenderValue;
   givenName?: string | null;
   surname?: string | null;
@@ -76,7 +141,15 @@ export type TreemichPersonProfile = {
   externalIds?: Record<string, string> | null;
 };
 
-/** Directed relationship edge between two Immich person ids. */
+/** Raw person row as returned by the optional Immich provider API. */
+export type ImmichProviderPerson = {
+  id: string;
+  name: string;
+  birthDate?: string | null;
+  thumbnailPath?: string | null;
+};
+
+/** Directed relationship edge between two Treemich person ids. */
 export type RelationshipRecord = {
   /** Present when returned from GET /relationships (Treemich relationship row id). */
   id?: string;
@@ -130,6 +203,9 @@ export type CooccurrenceEdgeRecord = {
   id: string;
   personAId: string;
   personBId: string;
+  sourceProvider?: PersonExternalIdentityProvider | null;
+  sourceImportedAt?: string | null;
+  sourceMetadata?: Record<string, unknown>;
   sharedPhotos: number;
   score: number;
   personAPhotoCount: number;
@@ -141,6 +217,100 @@ export type CooccurrenceEdgeRecord = {
 export type CooccurrenceEdgesResponse = {
   edges: CooccurrenceEdgeRecord[];
   nextCursor: string | null;
+};
+
+export type ImmichImportCandidate = {
+  personId: string;
+  name: string;
+  score: number;
+  reason: "externalIdentity" | "exactName" | "partialName";
+};
+
+export type ImmichImportPreviewRow = {
+  providerPersonId: string;
+  name: string;
+  birthDate?: string | null;
+  thumbnailPath?: string | null;
+  linkedPersonId?: string | null;
+  linkedPersonName?: string | null;
+  candidates: ImmichImportCandidate[];
+};
+
+export type ImmichImportPreviewResponse = {
+  linked: boolean;
+  people: ImmichImportPreviewRow[];
+  totals: {
+    immichPeople: number;
+    linkedPeople: number;
+    unlinkedPeople: number;
+  };
+};
+
+export const immichImportDecisionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("skip"),
+    providerPersonId: z.string().trim().min(1)
+  }),
+  z.object({
+    action: z.literal("link"),
+    providerPersonId: z.string().trim().min(1),
+    personId: z.string().trim().min(1)
+  }),
+  z.object({
+    action: z.literal("create"),
+    providerPersonId: z.string().trim().min(1),
+    givenName: z.string().trim().min(1).nullable().optional(),
+    surname: z.string().trim().min(1).nullable().optional(),
+    gender: genderSchema.optional()
+  })
+]);
+
+export const immichPeopleImportBodySchema = z.object({
+  decisions: z.array(immichImportDecisionSchema).min(1),
+  importThumbnails: z.boolean().optional()
+});
+
+export const immichThumbnailImportBodySchema = z.object({
+  personIds: z.array(z.string().trim().min(1)).optional()
+});
+
+export type ImmichImportDecision = z.infer<typeof immichImportDecisionSchema>;
+export type ImmichPeopleImportBody = z.infer<typeof immichPeopleImportBodySchema>;
+export type ImmichThumbnailImportBody = z.infer<typeof immichThumbnailImportBodySchema>;
+
+export type ImmichImportApplyResult = {
+  providerPersonId: string;
+  action: ImmichImportDecision["action"];
+  personId?: string;
+  status: "created" | "linked" | "skipped" | "alreadyLinked" | "error";
+  message?: string;
+};
+
+export type ImmichPeopleImportResponse = {
+  results: ImmichImportApplyResult[];
+  summary: {
+    created: number;
+    linked: number;
+    skipped: number;
+    alreadyLinked: number;
+    errors: number;
+    thumbnailsImported: number;
+  };
+};
+
+export type ImmichThumbnailImportResponse = {
+  results: Array<{
+    personId: string;
+    providerPersonId: string;
+    status: "imported" | "skipped" | "error";
+    thumbnail?: PersonThumbnailRecord;
+    message?: string;
+  }>;
+  summary: {
+    imported: number;
+    skipped: number;
+    errors: number;
+  };
 };
 
 /** User-facing schedule metadata for automatic co-occurrence refresh. */
@@ -168,10 +338,9 @@ export type CooccurrenceJobResponse = {
   schedule: CooccurrenceScheduleInfo;
 };
 
-/** Logged-in Treemich user (linked Immich account). */
+/** Logged-in Treemich user. Provider account details live in `AuthState.linkStatus`. */
 export type AuthUser = {
   id: string;
-  immichUserId: string;
   email: string;
   name: string;
 };
@@ -200,9 +369,9 @@ export type SearchRelationshipsResponse = {
     hops: RelationshipType[];
     ageFilter?: AgeFilter;
   };
-  sourceCandidates?: ImmichPerson[];
+  sourceCandidates?: PersonRecord[];
   matches?: Array<{
-    person: ImmichPerson;
+    person: PersonRecord;
     profile?: TreemichPersonProfile | null;
   }>;
   message?: string;
@@ -288,7 +457,7 @@ export const graphLayoutRequestSchema = z.object({
   selectedPersonId: z.string().nullable().optional(),
   primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional()
 });
-/** Layout response: stable revision string plus positions keyed by Immich person id. */
+/** Layout response: stable revision string plus positions keyed by Treemich person id. */
 export const graphLayoutResponseSchema = z.object({
   layoutRevision: z.string().min(1),
   algorithmVersion: z.string().min(1),

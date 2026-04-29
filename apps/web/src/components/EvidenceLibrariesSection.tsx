@@ -13,7 +13,6 @@ import {
 import type { RepositoryRecord, SourceRecord } from "../lib/api";
 
 export const EvidenceLibrariesSection = () => {
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [repositories, setRepositories] = useState<RepositoryRecord[]>([]);
@@ -47,12 +46,12 @@ export const EvidenceLibrariesSection = () => {
   }, []);
 
   useEffect(() => {
-    if (!open || loadAttempted.current) {
+    if (loadAttempted.current) {
       return;
     }
     loadAttempted.current = true;
     void load();
-  }, [open, load]);
+  }, [load]);
 
   const onCreateRepository = async () => {
     const name = newRepoName.trim();
@@ -126,15 +125,15 @@ export const EvidenceLibrariesSection = () => {
   };
 
   return (
-    <details
-      className="evidence-libraries-details"
-      open={open}
-      onToggle={(e) => setOpen(e.currentTarget.open)}
-    >
-      <summary className="field-label person-detail-details-summary">Sources &amp; repositories</summary>
+    <section className="evidence-libraries-details">
+      <div className="field-label">Sources &amp; repositories</div>
       {error ? <p className="hint hint--danger">{error}</p> : null}
-      {open && loading ? <p className="hint">Loading…</p> : null}
-      {open && !loading ? (
+      {loading ? (
+        <div className="skeleton-card sidebar-skeleton" aria-label="Loading sources and repositories">
+          <span className="sr-only">Loading...</span>
+        </div>
+      ) : null}
+      {!loading ? (
         <div className="stack evidence-panel-stack">
           <div className="person-detail-form-grid person-detail-form-grid--limit">
             <label className="field-group">
@@ -149,11 +148,11 @@ export const EvidenceLibrariesSection = () => {
             <div className="field-group evidence-field-align-end">
               <button
                 type="button"
-                className="secondary-button"
+                className="secondary-button workspace-action-button"
                 onClick={() => void onCreateRepository()}
                 disabled={repoSaving}
               >
-                {repoSaving ? "Saving…" : "Add repository"}
+                {repoSaving ? "Saving..." : "Add repository"}
               </button>
             </div>
             <label className="field-group">
@@ -183,11 +182,11 @@ export const EvidenceLibrariesSection = () => {
             <div className="field-group evidence-grid-full-width">
               <button
                 type="button"
-                className="secondary-button"
+                className="secondary-button workspace-action-button"
                 onClick={() => void onCreateSource()}
                 disabled={sourceSaving}
               >
-                {sourceSaving ? "Saving…" : "Add source"}
+                {sourceSaving ? "Saving..." : "Add source"}
               </button>
             </div>
           </div>
@@ -232,11 +231,11 @@ export const EvidenceLibrariesSection = () => {
               <div className="field-group evidence-grid-full-width">
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="secondary-button workspace-action-button"
                   onClick={() => void onMergeSources()}
                   disabled={mergeSaving}
                 >
-                  {mergeSaving ? "Merging…" : "Merge sources"}
+                  {mergeSaving ? "Merging..." : "Merge sources"}
                 </button>
               </div>
             </div>
@@ -291,19 +290,21 @@ export const EvidenceLibrariesSection = () => {
               </ul>
             )}
           </div>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              loadAttempted.current = true;
-              void load();
-            }}
-            disabled={loading}
-          >
-            Refresh
-          </button>
+          <div className="workspace-action-row">
+            <button
+              type="button"
+              className="secondary-button workspace-action-button"
+              onClick={() => {
+                loadAttempted.current = true;
+                void load();
+              }}
+              disabled={loading}
+            >
+              Refresh
+            </button>
+          </div>
         </div>
       ) : null}
-    </details>
+    </section>
   );
 };

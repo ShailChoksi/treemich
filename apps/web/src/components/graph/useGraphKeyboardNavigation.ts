@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useMemo, useRef } from "react";
-import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
+import type { Person, RelationshipRecord } from "../../lib/api";
 import {
   buildDirectionalNeighborBuckets,
   type DirectionalNeighborBuckets,
@@ -22,7 +22,7 @@ type UseGraphKeyboardNavigationOptions = {
   selectedPersonId: string | null;
   relationships: RelationshipRecord[];
   visiblePositionsById: Map<string, NodePosition>;
-  peopleById: Map<string, ImmichPerson>;
+  peopleById: Map<string, Person>;
   setSelectedPersonId: (personId: string | null) => void;
   setFocusPersonId: (personId: string | null) => void;
   setPinnedPersonId: (personId: string | null) => void;
@@ -34,18 +34,28 @@ type NextTraversalOptions = {
   direction: KeyboardDirection;
   buckets: DirectionalNeighborBuckets;
   visiblePositionsById: Map<string, NodePosition>;
-  peopleById: Map<string, ImmichPerson>;
+  peopleById: Map<string, Person>;
   previousCycle: TraversalCycleState | null;
 };
 
-const isTypingTarget = (target: EventTarget | null) => {
+/** True when focus is in a control where graph navigation/camera hotkeys should not run. Exported for tests. */
+export const isGraphKeyboardSuppressedTarget = (target: EventTarget | null) => {
   const element = target as HTMLElement | null;
-  return Boolean(
-    element && (element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.isContentEditable)
-  );
+  if (!element) {
+    return false;
+  }
+  const tag = element.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || element.isContentEditable) {
+    return true;
+  }
+  const role = element.getAttribute("role");
+  if (role === "combobox" || role === "listbox" || role === "searchbox" || role === "textbox") {
+    return true;
+  }
+  return false;
 };
 
-const getPersonName = (peopleById: Map<string, ImmichPerson>, personId: string) =>
+const getPersonName = (peopleById: Map<string, Person>, personId: string) =>
   peopleById.get(personId)?.name ?? personId;
 
 const getDirectionalPositionScore = (
@@ -92,7 +102,7 @@ const sortDirectionalCandidates = (
   direction: KeyboardDirection,
   selectedPersonId: string,
   visiblePositionsById: Map<string, NodePosition>,
-  peopleById: Map<string, ImmichPerson>
+  peopleById: Map<string, Person>
 ) => {
   const uniqueCandidateIds = [
     ...new Set(candidateIds.filter((candidateId) => candidateId !== selectedPersonId))
@@ -210,7 +220,10 @@ export const useGraphKeyboardNavigation = ({
       if (!enabled || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
         return;
       }
-      if (isTypingTarget(event.target)) {
+      if (event.defaultPrevented) {
+        return;
+      }
+      if (isGraphKeyboardSuppressedTarget(event.target)) {
         return;
       }
 

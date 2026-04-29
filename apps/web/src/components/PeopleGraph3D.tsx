@@ -6,13 +6,15 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
+  createPerson,
   searchRelationships,
-  type ImmichPerson,
+  type Person,
   type RelationshipRecord,
   type RelationshipType,
   type UserPreferences
 } from "../lib/api";
 import { AddRelativePopup } from "./graph/AddRelativePopup";
+import type { AddRelativeSubmitPayload } from "./graph/AddRelativePopup";
 import { findPersonBySearchTerm, useGraphSearch } from "./graph/useGraphSearch";
 import { useGraphCamera } from "./graph/useGraphCamera";
 import { useGraphSelection } from "./graph/useGraphSelection";
@@ -32,9 +34,11 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { GraphLayerControls } from "./graph/GraphLayerControls";
 import { useGraphKeyboardNavigation } from "./graph/useGraphKeyboardNavigation";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
+import { RELATIONSHIP_TYPES } from "../lib/relationshipConstants";
+import type { GraphUiSnapshot } from "../lib/workspaceUiState";
 
 type Props = {
-  people: ImmichPerson[];
+  people: Person[];
   relationships: RelationshipRecord[];
   serverPositionsByPersonId?: Record<string, [number, number, number]>;
   serverLayoutRevision?: string | null;
@@ -44,6 +48,7 @@ type Props = {
   isLoading: boolean;
   isSavingRelationship: boolean;
   loadError: string | null;
+  layoutError?: string | null;
   focusPersonRequest: string | null;
   cameraFocusPersonRequest: string | null;
   defaultToNoRelationshipsGraphState: boolean;
@@ -59,7 +64,18 @@ type Props = {
     targetPersonId: string,
     relationshipType: RelationshipType
   ) => Promise<void>;
+  onNewPerson?: () => void;
   onPreferencesChange: (prefs: Partial<UserPreferences>) => void;
+  onRetryGraphLoad?: () => void;
+  onRetryLayout?: () => void;
+  /** When false, global graph camera/arrow shortcuts do not run (e.g. other workspaces). */
+  graphKeyboardEnabled?: boolean;
+  /** Bumps when workspace layout resizes; triggers canvas/GL refresh without window.resize. */
+  layoutResizeSignal?: number;
+  initialUiState?: GraphUiSnapshot;
+  onUiStateChange?: (next: GraphUiSnapshot) => void;
+  /** When false, the graph canvas is hidden but still mounted (preserving WebGL context and state). */
+  isVisible?: boolean;
 };
 
 const DEFAULT_RENDER_LIMIT = 120;
@@ -76,6 +92,55 @@ type GraphViewPreferencesState = {
   showSingleFamilyTree: boolean;
 };
 
+type ProviderFilter = "all" | "linked" | "unlinked";
+
+export const canLoadPersonThumbnail = (person: Person) =>
+  Boolean(
+    person.thumbnailPath?.trim() ||
+    person.thumbnail?.storageUrl?.trim() ||
+    person.externalIdentities?.some((identity) => identity.provider === "IMMICH")
+  );
+
+const thumbnailCacheKeyForPerson = (person: Person): string | undefined => {
+  const thumbnail = person.thumbnail;
+  if (thumbnail) {
+    return [
+      thumbnail.id,
+      thumbnail.updatedAt,
+      thumbnail.importedAt,
+      thumbnail.checksum,
+      thumbnail.storageUrl,
+      thumbnail.source
+    ]
+      .filter(Boolean)
+      .join(":");
+  }
+
+  const immichIdentity = person.externalIdentities?.find((identity) => identity.provider === "IMMICH");
+  return [
+    person.thumbnailPath,
+    immichIdentity?.id,
+    immichIdentity?.providerPersonId,
+    immichIdentity?.thumbnailImportedAt,
+    immichIdentity?.updatedAt
+  ]
+    .filter(Boolean)
+    .join(":");
+};
+
+export const resolveAddRelativeRelationshipType = (
+  slot: AddRelativeSlot,
+  selectedRelationshipType?: RelationshipType
+): RelationshipType => {
+  if (slot === "parent") {
+    return RELATIONSHIP_TYPES.childOf;
+  }
+  if (slot === "child") {
+    return RELATIONSHIP_TYPES.parentOf;
+  }
+  return selectedRelationshipType ?? RELATIONSHIP_TYPES.siblingOf;
+};
+
 const resolveInitialGraphViewPreferences = (
   savedPreferences: UserPreferences | null,
   defaultToNoRelationshipsGraphState: boolean,
@@ -90,7 +155,7 @@ const resolveInitialGraphViewPreferences = (
 });
 
 /**
- * Interactive 3D graph: Immich people, Treemich relationships, layout worker, search, and chrome controls.
+ * Interactive 3D graph: Treemich people, relationships, layout worker, search, and chrome controls.
  * Exported as memo-wrapped `PeopleGraph3D`.
  */
 const PeopleGraph3DComponent = ({
@@ -104,6 +169,7 @@ const PeopleGraph3DComponent = ({
   isLoading,
   isSavingRelationship,
   loadError,
+  layoutError = null,
   focusPersonRequest,
   cameraFocusPersonRequest,
   defaultToNoRelationshipsGraphState,
@@ -115,12 +181,22 @@ const PeopleGraph3DComponent = ({
   onCameraFocusPersonConsumed,
   onSelectedPersonChange,
   onCreateRelationship,
-  onPreferencesChange
+  onNewPerson,
+  onPreferencesChange,
+  onRetryGraphLoad,
+  onRetryLayout,
+  graphKeyboardEnabled = true,
+  layoutResizeSignal = 0,
+  initialUiState,
+  onUiStateChange,
+  isVisible = true
 }: Props) => {
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
-  const [focusPersonId, setFocusPersonId] = useState<string | null>(null);
-  const [pinnedPersonId, setPinnedPersonId] = useState<string | null>(null);
+  const [focusPersonId, setFocusPersonId] = useState<string | null>(initialUiState?.focusPersonId ?? null);
+  const [pinnedPersonId, setPinnedPersonId] = useState<string | null>(initialUiState?.pinnedPersonId ?? null);
   const [addRelativeIntent, setAddRelativeIntent] = useState<AddRelativeIntent | null>(null);
+  const [thumbnailProgress, setThumbnailProgress] = useState<{ loaded: number; total: number } | null>(null);
+  const [providerFilter, setProviderFilter] = useState<ProviderFilter>("all");
   const [graphViewPreferences, setGraphViewPreferences] = useState<GraphViewPreferencesState>(() =>
     resolveInitialGraphViewPreferences(
       savedPreferences ?? null,
@@ -130,9 +206,9 @@ const PeopleGraph3DComponent = ({
   );
   const { filterVisibility, showSingleFamilyTree } = graphViewPreferences;
   const [singleFamilyTreeAnchorId, setSingleFamilyTreeAnchorId] = useState<string | null>(null);
-  const [cameraPositionForCulling, setCameraPositionForCulling] = useState<[number, number, number]>([
-    0, 2, 18
-  ]);
+  const [cameraPositionForCulling, setCameraPositionForCulling] = useState<[number, number, number]>(
+    initialUiState?.camera?.position ?? [0, 2, 18]
+  );
   const prefsAppliedRef = useRef(false);
   const lastCameraSampleRef = useRef(new Vector3(0, 2, 18));
   const hasInitializedCameraRef = useRef(false);
@@ -161,6 +237,27 @@ const PeopleGraph3DComponent = ({
     setPinnedPersonId,
     onSelectedPersonChange
   });
+  const filteredPeople = useMemo(() => {
+    if (providerFilter === "all") {
+      return people;
+    }
+    return people.filter((person) => {
+      const linkedToImmich = person.externalIdentities?.some((identity) => identity.provider === "IMMICH");
+      return providerFilter === "linked" ? linkedToImmich : !linkedToImmich;
+    });
+  }, [people, providerFilter]);
+  const filteredPersonIds = useMemo(
+    () => new Set(filteredPeople.map((person) => person.id)),
+    [filteredPeople]
+  );
+  const filteredRelationships = useMemo(
+    () =>
+      relationships.filter(
+        (relationship) =>
+          filteredPersonIds.has(relationship.fromPersonId) && filteredPersonIds.has(relationship.toPersonId)
+      ),
+    [filteredPersonIds, relationships]
+  );
   const {
     peopleById,
     selectedPerson,
@@ -173,8 +270,8 @@ const PeopleGraph3DComponent = ({
     renderNearPersonIds,
     isWorkerLayoutPending
   } = useGraphLayoutState({
-    people,
-    relationships,
+    people: filteredPeople,
+    relationships: filteredRelationships,
     photoEdges: EMPTY_PHOTO_EDGES,
     photoClusters: EMPTY_PHOTO_CLUSTERS,
     viewMode: "family",
@@ -192,7 +289,19 @@ const PeopleGraph3DComponent = ({
     serverLayoutAlgorithmVersion,
     renderLimit: DEFAULT_RENDER_LIMIT
   });
-  const peopleIds = useMemo(() => people.map((person) => person.id), [people]);
+  const thumbnailCandidatePersonIds = useMemo(
+    () => filteredPeople.filter(canLoadPersonThumbnail).map((person) => person.id),
+    [filteredPeople]
+  );
+  const thumbnailCacheKeys = useMemo(
+    () =>
+      Object.fromEntries(
+        filteredPeople
+          .filter(canLoadPersonThumbnail)
+          .map((person) => [person.id, thumbnailCacheKeyForPerson(person)] as const)
+      ),
+    [filteredPeople]
+  );
 
   const handleSearchFallback = useCallback(async (query: string) => {
     const response = await searchRelationships(query);
@@ -225,6 +334,8 @@ const PeopleGraph3DComponent = ({
     setFocusPersonId,
     setPinnedPersonId,
     setHoveredPersonId,
+    initialSearchTerm: initialUiState?.searchTerm ?? "",
+    initialHighlightedPersonIds: initialUiState?.highlightedPersonIds ?? [],
     onSearchFallback: handleSearchFallback
   });
   const { frameAllNodes, focusPersonById, focusActiveNode, topDownView, nudgeCamera } =
@@ -240,9 +351,16 @@ const PeopleGraph3DComponent = ({
       lastCameraSampleRef
     });
 
-  useGraphCamera({ frameAllNodes, focusActiveNode, topDownView });
+  const graphShortcutsActive = graphKeyboardEnabled && !addRelativeIntent;
+
+  useGraphCamera({
+    enabled: graphShortcutsActive,
+    frameAllNodes,
+    focusActiveNode,
+    topDownView
+  });
   useGraphKeyboardNavigation({
-    enabled: !addRelativeIntent,
+    enabled: graphShortcutsActive,
     selectedPersonId,
     relationships,
     visiblePositionsById,
@@ -282,6 +400,10 @@ const PeopleGraph3DComponent = ({
     if (hasInitializedCameraRef.current) {
       return;
     }
+    if (initialUiState?.camera) {
+      hasInitializedCameraRef.current = true;
+      return;
+    }
 
     if (cameraFocusPersonRequest && visiblePositionsById.has(cameraFocusPersonRequest)) {
       setFocusPersonId(cameraFocusPersonRequest);
@@ -298,6 +420,40 @@ const PeopleGraph3DComponent = ({
     frameAllNodes,
     onCameraFocusPersonConsumed,
     visiblePositionsById
+  ]);
+
+  const handleCameraSample = useCallback((position: [number, number, number]) => {
+    setCameraPositionForCulling(position);
+  }, []);
+
+  useEffect(() => {
+    if (!onUiStateChange) {
+      return;
+    }
+    const camera = cameraRef.current;
+    const target = orbitControlsRef.current?.target;
+    onUiStateChange({
+      schemaVersion: 1,
+      searchTerm,
+      focusPersonId,
+      pinnedPersonId,
+      highlightedPersonIds: [...highlightedPersonIds],
+      camera:
+        camera && target
+          ? {
+              position: [camera.position.x, camera.position.y, camera.position.z],
+              target: [target.x, target.y, target.z]
+            }
+          : (initialUiState?.camera ?? null)
+    });
+  }, [
+    cameraPositionForCulling,
+    focusPersonId,
+    highlightedPersonIds,
+    initialUiState?.camera,
+    onUiStateChange,
+    pinnedPersonId,
+    searchTerm
   ]);
 
   useEffect(() => {
@@ -353,44 +509,57 @@ const PeopleGraph3DComponent = ({
     [focusPersonById, handleNodeClick]
   );
 
-  const handleOpenAddRelative = (slot: AddRelativeSlot) => {
-    if (!selectedPersonId) {
-      return;
-    }
-    setAddRelativeIntent({
-      slot,
-      selectedPersonId
-    });
-  };
+  const handleOpenAddRelative = useCallback(
+    (slot: AddRelativeSlot) => {
+      if (!selectedPersonId) {
+        return;
+      }
+      setAddRelativeIntent({
+        slot,
+        selectedPersonId
+      });
+    },
+    [selectedPersonId]
+  );
 
-  const handleAddRelative = async (personName: string, relationshipType?: RelationshipType) => {
+  const handleAddRelative = async (payload: AddRelativeSubmitPayload) => {
     if (!addRelativeIntent) {
       throw new Error("Select a person first.");
     }
 
-    const match = findPersonBySearchTerm(people, personName);
-    if (!personName.trim()) {
-      throw new Error("Type a person name.");
-    }
-    if (!match) {
-      throw new Error(`No person found for "${personName}"`);
-    }
-    if (match.id === addRelativeIntent.selectedPersonId) {
-      throw new Error("Choose a different person.");
-    }
-
-    let nextRelationshipType: RelationshipType;
-    if (addRelativeIntent.slot === "parent") {
-      nextRelationshipType = "CHILD_OF";
-    } else if (addRelativeIntent.slot === "child") {
-      nextRelationshipType = "PARENT_OF";
+    let targetId: string;
+    let targetName: string;
+    if (payload.type === "new") {
+      const newPerson = await createPerson({
+        givenName: payload.givenName,
+        surname: payload.surname,
+        gender: payload.gender
+      });
+      targetId = newPerson.id;
+      targetName = getPersonDisplayLabel(newPerson);
     } else {
-      nextRelationshipType = relationshipType ?? "SIBLING_OF";
+      const match = findPersonBySearchTerm(people, payload.personName);
+      if (!payload.personName.trim()) {
+        throw new Error("Type a person name.");
+      }
+      if (!match) {
+        throw new Error(`No person found for "${payload.personName}"`);
+      }
+      if (match.id === addRelativeIntent.selectedPersonId) {
+        throw new Error("Choose a different person.");
+      }
+      targetId = match.id;
+      targetName = match.name;
     }
 
-    await onCreateRelationship(addRelativeIntent.selectedPersonId, match.id, nextRelationshipType);
+    const nextRelationshipType = resolveAddRelativeRelationshipType(
+      addRelativeIntent.slot,
+      payload.relationshipType
+    );
+
+    await onCreateRelationship(addRelativeIntent.selectedPersonId, targetId, nextRelationshipType);
     setAddRelativeIntent(null);
-    setSearchFeedback(`Added ${match.name}`);
+    setSearchFeedback(payload.type === "new" ? `Created and added ${targetName}` : `Added ${targetName}`);
   };
 
   const handleClearSearch = () => {
@@ -398,6 +567,10 @@ const PeopleGraph3DComponent = ({
     setSearchFeedback(null);
     clearHighlights();
   };
+
+  const handleThumbnailProgress = useCallback((progress: { loaded: number; total: number }) => {
+    setThumbnailProgress(progress);
+  }, []);
 
   const handleToggleFilter = (filter: GraphFilter) => {
     setGraphViewPreferences((current) => {
@@ -430,13 +603,19 @@ const PeopleGraph3DComponent = ({
   };
 
   const peopleForSearchList = useMemo(
-    () => people.map((p) => ({ id: p.id, name: getPersonDisplayLabel(p) })),
-    [people]
+    () => filteredPeople.map((p) => ({ id: p.id, name: getPersonDisplayLabel(p) })),
+    [filteredPeople]
   );
+  const graphSelectionSummary = selectedPerson
+    ? `Selected person: ${getPersonDisplayLabel(selectedPerson)}. ${renderVisiblePeople.length} people and ${renderVisibleRelationshipLines.length} relationships are currently visible in the graph.`
+    : `No person selected. ${renderVisiblePeople.length} people and ${renderVisibleRelationshipLines.length} relationships are currently visible in the graph.`;
 
   return (
     <section className="card graph-card">
       <div className="graph-surface">
+        <p className="sr-only" aria-live="polite">
+          {graphSelectionSummary}
+        </p>
         <GraphSearchOverlay
           searchTerm={searchTerm}
           onSearchTermChange={setSearchTerm}
@@ -451,6 +630,9 @@ const PeopleGraph3DComponent = ({
           onSearchIncludeAlternateNamesChange={(next) =>
             onPreferencesChange({ searchIncludeAlternateNames: next })
           }
+          providerFilter={providerFilter}
+          onProviderFilterChange={setProviderFilter}
+          onNewPerson={onNewPerson}
         />
         <GraphLayerControls
           filterVisibility={filterVisibility}
@@ -461,19 +643,23 @@ const PeopleGraph3DComponent = ({
         <GraphSurfaceOverlays
           isLoading={isLoading}
           loadError={loadError}
+          layoutError={layoutError}
           isLayoutWorkerPending={isWorkerLayoutPending}
+          onRetryGraphLoad={onRetryGraphLoad}
+          onRetryLayout={onRetryLayout}
         />
         {addRelativeIntent && selectedPerson ? (
           <AddRelativePopup
             slot={addRelativeIntent.slot}
             selectedPersonName={getPersonDisplayLabel(selectedPerson)}
-            people={people}
+            people={filteredPeople}
             busy={isSavingRelationship}
             onCancel={() => setAddRelativeIntent(null)}
             onSubmit={handleAddRelative}
           />
         ) : null}
         <ErrorBoundary
+          errorContext="Graph canvas"
           fallback={
             <div className="graph-overlay graph-overlay-error">
               <p>Graph rendering failed. Reload the page to recover WebGL rendering.</p>
@@ -481,6 +667,7 @@ const PeopleGraph3DComponent = ({
           }
         >
           <GraphCanvasScene
+            layoutResizeSignal={layoutResizeSignal}
             displayVisiblePeople={renderVisiblePeople}
             visibleRelationshipLines={renderVisibleRelationshipLines}
             renderVisibilityBucketByPersonId={renderVisibilityBucketByPersonId}
@@ -489,21 +676,25 @@ const PeopleGraph3DComponent = ({
             showNodeActionButtons={!addRelativeIntent}
             hoveredPersonId={hoveredPersonId}
             highlightedPersonIds={highlightedPersonIds}
-            peopleIds={peopleIds}
+            peopleIds={thumbnailCandidatePersonIds}
+            thumbnailCacheKeys={thumbnailCacheKeys}
             prioritizedNodeIds={prioritizedNodeIds}
             renderNearPersonIds={renderNearPersonIds}
             setHoveredPersonId={setHoveredPersonId}
             onNodeClick={handlePersonNodeClick}
             onNodeActionOpen={handleOpenAddRelative}
             onCanvasMissed={handleCanvasMissed}
-            onCameraSample={setCameraPositionForCulling}
+            onCameraSample={handleCameraSample}
+            initialCameraState={initialUiState?.camera ?? null}
             cameraRef={cameraRef}
             orbitControlsRef={orbitControlsRef}
             lastCameraSampleRef={lastCameraSampleRef}
+            isVisible={isVisible}
+            onThumbnailProgress={handleThumbnailProgress}
           />
         </ErrorBoundary>
       </div>
-      <GraphFooterStatus status={status} busy={isSavingRelationship} />
+      <GraphFooterStatus status={status} busy={isSavingRelationship} thumbnailProgress={thumbnailProgress} />
     </section>
   );
 };

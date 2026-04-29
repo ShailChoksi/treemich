@@ -41,7 +41,11 @@ export const FamilyLifeEventsBlock = ({ familyId, events, onCreate, onPatch, onD
   };
 
   if (events === undefined) {
-    return <p className="hint">Loading household events…</p>;
+    return (
+      <div className="skeleton-card sidebar-skeleton" aria-label="Loading household events">
+        <span className="sr-only">Loading household events…</span>
+      </div>
+    );
   }
 
   return (

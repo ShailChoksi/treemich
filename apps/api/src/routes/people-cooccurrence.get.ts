@@ -1,11 +1,10 @@
 /**
- * @file Registers `GET /people/:id/cooccurrence` — photo co-occurrence suggestions for one person.
+ * @file Registers `GET /people/cooccurrence` — persisted photo co-occurrence suggestions.
  */
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";
-import { getImmichClientForRequest } from "../services.js";
 
 const querySchema = z.object({
   minSharedPhotos: z.coerce.number().int().positive().max(1000).default(2),
@@ -21,18 +20,13 @@ export const registerPeopleCooccurrenceGetRoute = (app: FastifyInstance) => {
       minScore: query.minScore
     };
 
-    const persisted = await app.services.cooccurrenceService.getPersistedPhotoCooccurrence(
-      auth.user.id,
-      options
-    );
-    if (persisted) {
-      return persisted;
-    }
-
-    return app.services.relationshipService.getPhotoCooccurrence(
-      auth.user.id,
-      await getImmichClientForRequest(request),
-      options
+    return (
+      (await app.services.cooccurrenceService.getPersistedPhotoCooccurrence(auth.user.id, options)) ?? {
+        clusters: [],
+        edges: [],
+        computedAt: new Date(0).toISOString(),
+        sourcePhotoCount: 0
+      }
     );
   });
 };

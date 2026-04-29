@@ -16,10 +16,16 @@ import {
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
+import {
+  mediaDownloadUrlForKey,
+  openStoredMediaReadStream,
+  assertSafeStorageKey
+} from "../evidence/mediaStorage.js";
 
 const idParams = z.object({ id: z.string().min(1) });
 const mediaIdParams = z.object({ mediaId: z.string().min(1) });
 const linkIdParams = z.object({ linkId: z.string().min(1) });
+const storageKeyParams = z.object({ storageKey: z.string().min(1) });
 
 export const registerEvidenceRoutes = (app: FastifyInstance) => {
   app.get("/evidence/repositories", async (request) => {
@@ -88,6 +94,24 @@ export const registerEvidenceRoutes = (app: FastifyInstance) => {
     const auth = getRequiredAuth(request);
     const rows = await app.services.evidenceService.listMediaObjects(auth.user.id);
     return { mediaObjects: rows };
+  });
+
+  app.get("/evidence/media/file/:storageKey", async (request, reply) => {
+    const auth = getRequiredAuth(request);
+    const { storageKey } = storageKeyParams.parse(request.params);
+    const safeKey = assertSafeStorageKey(storageKey);
+    const media = await app.services.evidenceService.getMediaObjectByStorageUrl(
+      auth.user.id,
+      mediaDownloadUrlForKey(safeKey)
+    );
+    if (!media) {
+      return reply.code(404).send({ statusCode: 404, error: "Media file not found" });
+    }
+    const { stream, byteSize } = await openStoredMediaReadStream(safeKey);
+    return reply
+      .header("Content-Type", media.mimeType ?? "application/octet-stream")
+      .header("Content-Length", String(byteSize))
+      .send(stream);
   });
 
   app.post("/evidence/media", async (request, reply) => {

@@ -6,10 +6,11 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";
-import { isMapUiEnabled } from "../config/env.js";
+import { env, isMapUiEnabled } from "../config/env.js";
 
 const querySchema = z.object({
-  includeLiving: z.enum(["true", "false"]).optional()
+  includeLiving: z.enum(["true", "false"]).optional(),
+  limit: z.coerce.number().int().positive().max(10_000).optional()
 });
 
 type PlaceAggregate = {
@@ -25,7 +26,7 @@ type PlaceAggregate = {
 export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
   app.get("/places/map", async (request) => {
     const auth = getRequiredAuth(request);
-    const { includeLiving } = querySchema.parse(request.query);
+    const { includeLiving, limit } = querySchema.parse(request.query);
     const mapUiEnabled = isMapUiEnabled();
     if (!mapUiEnabled) {
       return { mapUiEnabled: false as const, places: [] as PlaceAggregate[] };
@@ -44,7 +45,7 @@ export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
         year: true,
         personProfile: {
           select: {
-            immichPersonId: true
+            id: true
           }
         },
         place: {
@@ -70,14 +71,7 @@ export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
     )
       .map((row) => row.personProfileId)
       .filter((value): value is string => value != null);
-    const deceasedProfiles =
-      deceasedProfileIds.length > 0
-        ? await prisma.personProfile.findMany({
-            where: { id: { in: deceasedProfileIds } },
-            select: { immichPersonId: true }
-          })
-        : [];
-    const deceased = new Set<string>(deceasedProfiles.map((row) => row.immichPersonId));
+    const deceased = new Set<string>(deceasedProfileIds);
 
     const byPlace = new Map<string, PlaceAggregate & { personIds: Set<string> }>();
     for (const event of events) {
@@ -85,8 +79,8 @@ export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
       if (!place || place.latitude == null || place.longitude == null) {
         continue;
       }
-      const immichPersonId = event.personProfile?.immichPersonId ?? null;
-      if (!includeLivingPeople && immichPersonId && !deceased.has(immichPersonId)) {
+      const personId = event.personProfile?.id ?? null;
+      if (!includeLivingPeople && personId && !deceased.has(personId)) {
         continue;
       }
       const existing = byPlace.get(place.id) ?? {
@@ -100,8 +94,8 @@ export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
         personIds: new Set<string>()
       };
       existing.eventCount += 1;
-      if (immichPersonId) {
-        existing.personIds.add(immichPersonId);
+      if (personId) {
+        existing.personIds.add(personId);
       }
       if (event.year != null && (existing.lastEventYear == null || event.year > existing.lastEventYear)) {
         existing.lastEventYear = event.year;
@@ -120,7 +114,8 @@ export const registerPlacesMapGetRoute = (app: FastifyInstance) => {
         lastEventYear: entry.lastEventYear,
         samplePersonIds: [...entry.personIds].sort((left, right) => left.localeCompare(right)).slice(0, 5)
       }))
-      .sort((left, right) => right.eventCount - left.eventCount || left.name.localeCompare(right.name));
+      .sort((left, right) => right.eventCount - left.eventCount || left.name.localeCompare(right.name))
+      .slice(0, Math.min(limit ?? env.TREEMICH_PLACES_MAP_MAX_POINTS, env.TREEMICH_PLACES_MAP_MAX_POINTS));
 
     return { mapUiEnabled: true as const, places };
   });

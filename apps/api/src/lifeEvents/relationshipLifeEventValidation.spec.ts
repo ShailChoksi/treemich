@@ -49,8 +49,8 @@ describe("computeParentBornAfterChildFindings", () => {
   it("returns empty when a birth is missing", () => {
     expect(
       computeParentBornAfterChildFindings({ year: 1980, month: 1, day: 1 }, null, {
-        parentImmichPersonId: "a",
-        childImmichPersonId: "b",
+        parentPersonId: "a",
+        childPersonId: "b",
         relationshipId: "r"
       })
     ).toEqual([]);
@@ -61,7 +61,7 @@ describe("computeParentBornAfterChildFindings", () => {
       computeParentBornAfterChildFindings(
         { year: null, month: 1, day: 1 },
         { year: 2000, month: 1, day: 1 },
-        { parentImmichPersonId: "a", childImmichPersonId: "b", relationshipId: "r" }
+        { parentPersonId: "a", childPersonId: "b", relationshipId: "r" }
       )
     ).toEqual([]);
   });
@@ -70,10 +70,10 @@ describe("computeParentBornAfterChildFindings", () => {
     const f = computeParentBornAfterChildFindings(
       { year: 2010, month: 1, day: 1 },
       { year: 2000, month: 1, day: 1 },
-      { parentImmichPersonId: "p", childImmichPersonId: "c", relationshipId: "r1" }
+      { parentPersonId: "p", childPersonId: "c", relationshipId: "r1" }
     );
     expect(f[0]?.code).toBe("parent_birth_after_child");
-    expect(f[0]?.immichPersonId).toBe("p");
-    expect(f[0]?.relatedImmichPersonId).toBe("c");
+    expect(f[0]?.personId).toBe("p");
+    expect(f[0]?.relatedPersonId).toBe("c");
   });
 });

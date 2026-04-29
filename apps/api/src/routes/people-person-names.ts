@@ -31,7 +31,7 @@ export const registerPeoplePersonNamesRoutes = (app: FastifyInstance) => {
   app.get("/people/:id/names", async (request) => {
     const auth = getRequiredAuth(request);
     const { id } = personParamsSchema.parse(request.params);
-    return { names: await app.services.personNameService.listByImmichPersonId(auth.user.id, id) };
+    return { names: await app.services.personNameService.listByPersonId(auth.user.id, id) };
   });
 
   app.post("/people/:id/names", async (request, reply) => {

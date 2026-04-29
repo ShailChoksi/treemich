@@ -2,12 +2,12 @@
  * @file Pick closest graph items to a screen point (hit testing helpers).
  */
 
-import type { ImmichPerson } from "../../lib/api";
+import type { Person } from "../../lib/api";
 import { distanceSquared, type NodePosition } from "./layout";
 
 /** Keeps up to `limit` items closest to `origin` (by squared distance). */
 export const pickNearest = (
-  items: Array<{ person: ImmichPerson; position: NodePosition }>,
+  items: Array<{ person: Person; position: NodePosition }>,
   origin: NodePosition,
   limit: number
 ) => {
@@ -15,7 +15,7 @@ export const pickNearest = (
     return items;
   }
 
-  const nearest: Array<{ item: { person: ImmichPerson; position: NodePosition }; distance: number }> = [];
+  const nearest: Array<{ item: { person: Person; position: NodePosition }; distance: number }> = [];
   for (const item of items) {
     const candidate = {
       item,

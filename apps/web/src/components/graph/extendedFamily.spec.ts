@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
+import type { Person, RelationshipRecord } from "../../lib/api";
 import {
   buildSiblingIndex,
   buildSpouseIndex,
@@ -7,7 +7,7 @@ import {
   computeInLawFamily
 } from "./extendedFamily";
 
-const person = (id: string, name: string): ImmichPerson => ({
+const person = (id: string, name: string): Person => ({
   id,
   name,
   hasRelationship: false

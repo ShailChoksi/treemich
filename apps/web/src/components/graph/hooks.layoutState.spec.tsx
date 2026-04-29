@@ -2,7 +2,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildGraphLayoutRevision } from "@treemich/shared";
-import type { ImmichPerson } from "../../lib/api";
+import type { Person } from "../../lib/api";
 import { type NodePosition } from "./layout";
 import * as layout from "./layout";
 import * as layoutWorkerClient from "./layoutWorkerClient";
@@ -27,9 +27,9 @@ afterEach(() => {
 describe("pickNearest", () => {
   it("returns nearest people to origin up to limit", () => {
     const items = [
-      { person: { id: "a", name: "A" } as ImmichPerson, position: [10, 0, 0] as NodePosition },
-      { person: { id: "b", name: "B" } as ImmichPerson, position: [2, 0, 0] as NodePosition },
-      { person: { id: "c", name: "C" } as ImmichPerson, position: [1, 0, 0] as NodePosition }
+      { person: { id: "a", name: "A" } as Person, position: [10, 0, 0] as NodePosition },
+      { person: { id: "b", name: "B" } as Person, position: [2, 0, 0] as NodePosition },
+      { person: { id: "c", name: "C" } as Person, position: [1, 0, 0] as NodePosition }
     ];
 
     const nearest = pickNearest(items, [0, 0, 0], 2);
@@ -149,7 +149,7 @@ describe("useGraphLayoutState", () => {
       id: `person-${index}`,
       name: `Person ${index}`,
       hasRelationship: true
-    })) as ImmichPerson[];
+    })) as Person[];
     const relationships = [{ fromPersonId: "person-0", toPersonId: "person-1", type: "SIBLING_OF" as const }];
 
     const Probe = () => {
@@ -201,12 +201,12 @@ describe("useGraphLayoutState", () => {
       id: index === 0 ? "anchor" : `person-${index}`,
       name: `Person ${index}`,
       hasRelationship: true
-    })) as ImmichPerson[];
+    })) as Person[];
     const baseRelationships = [
       { fromPersonId: "anchor", toPersonId: "person-1", type: "SIBLING_OF" as const }
     ];
 
-    const Probe = ({ people }: { people: ImmichPerson[] }) => {
+    const Probe = ({ people }: { people: Person[] }) => {
       const state = useGraphLayoutState(
         createLayoutStateHookProps({
           people,
@@ -257,7 +257,7 @@ describe("useGraphLayoutState", () => {
       id: `person-${index}`,
       name: `Person ${index}`,
       hasRelationship: true
-    })) as ImmichPerson[];
+    })) as Person[];
     const relationships = [{ fromPersonId: "person-0", toPersonId: "person-1", type: "SIBLING_OF" as const }];
 
     const Probe = () => {
@@ -303,7 +303,7 @@ describe("useGraphLayoutState", () => {
       id: `person-${index}`,
       name: `Person ${index}`,
       hasRelationship: true
-    })) as ImmichPerson[];
+    })) as Person[];
     const relationshipsA = [{ fromPersonId: "person-0", toPersonId: "person-1", type: "PARENT_OF" as const }];
     const relationshipsB = [{ fromPersonId: "person-0", toPersonId: "person-2", type: "PARENT_OF" as const }];
 
@@ -349,7 +349,7 @@ describe("useGraphLayoutState", () => {
       id: `person-${index}`,
       name: `Person ${index}`,
       hasRelationship: true
-    })) as ImmichPerson[];
+    })) as Person[];
     const relationships = [{ fromPersonId: "person-0", toPersonId: "person-1", type: "SIBLING_OF" as const }];
 
     const Probe = () => {
@@ -388,7 +388,7 @@ describe("useGraphLayoutState", () => {
       id: `person-${index}`,
       name: `Person ${index}`,
       hasRelationship: true
-    })) as ImmichPerson[];
+    })) as Person[];
     const relationships = [{ fromPersonId: "person-0", toPersonId: "person-1", type: "SIBLING_OF" as const }];
     const serverPositionsByPersonId = Object.fromEntries(
       people.map((person, index) => [person.id, [index, 0, 0] as NodePosition])
@@ -440,7 +440,7 @@ describe("useGraphLayoutState", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root: Root = createRoot(container);
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "p1", name: "Alex", hasRelationship: true },
       { id: "p2", name: "Blair", hasRelationship: true },
       { id: "p3", name: "Casey", hasRelationship: true }
@@ -486,7 +486,7 @@ describe("useGraphLayoutState", () => {
     let renderIds: string[] = [];
     let renderLineCount = 0;
 
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "p1", name: "Alex", hasRelationship: true },
       { id: "p2", name: "Blair", hasRelationship: true }
     ];

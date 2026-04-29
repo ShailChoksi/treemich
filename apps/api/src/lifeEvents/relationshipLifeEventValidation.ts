@@ -40,7 +40,7 @@ type PartialYmd = { year: number | null; month: number | null; day: number | nul
 export function computeParentBornAfterChildFindings(
   parentBirth: PartialYmd,
   childBirth: PartialYmd,
-  context: { parentImmichPersonId: string; childImmichPersonId: string; relationshipId: string }
+  context: { parentPersonId: string; childPersonId: string; relationshipId: string }
 ): LifeEventValidationFinding[] {
   if (!parentBirth || !childBirth) {
     return [];
@@ -56,8 +56,8 @@ export function computeParentBornAfterChildFindings(
         code: "parent_birth_after_child",
         severity: "error" as const,
         message: "A parent is dated as born after a child in this link.",
-        immichPersonId: context.parentImmichPersonId,
-        relatedImmichPersonId: context.childImmichPersonId,
+        personId: context.parentPersonId,
+        relatedPersonId: context.childPersonId,
         relationshipId: context.relationshipId
       }
     ];

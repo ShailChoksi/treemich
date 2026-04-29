@@ -3,11 +3,11 @@
  */
 
 import { Line, OrbitControls } from "@react-three/drei";
-import { Canvas, type RootState } from "@react-three/fiber";
-import { useCallback } from "react";
+import { Canvas, invalidate, type RootState, useThree } from "@react-three/fiber";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { MOUSE, PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import type { ImmichPerson } from "../../lib/api";
+import type { Person } from "../../lib/api";
 import type { AddRelativeSlot } from "./NodeActionButtons";
 import type { GraphVisibilityBucket } from "./graphVisibility";
 import type { NodePosition } from "./layout";
@@ -15,7 +15,7 @@ import type { RelationshipKind } from "./relationshipStyles";
 import { AnimatedNodes } from "./scene/AnimatedNodes";
 import { createWebGlRenderer } from "./scene/createWebGlRenderer";
 import { useOrbitPositionSync } from "./scene/useOrbitPositionSync";
-import { useThumbnailLoader } from "./useThumbnailLoader";
+import { InvalidateOnThumbnailUpdate, useThumbnailLoader } from "./useThumbnailLoader";
 
 type VisibleLine = {
   key: string;
@@ -26,13 +26,30 @@ type VisibleLine = {
 };
 
 type DisplayPerson = {
-  person: ImmichPerson;
+  person: Person;
   displayPosition: NodePosition;
 };
 
 const orbitControlMouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN } as const;
 
+const CanvasResizeNudge = ({ layoutResizeSignal }: { layoutResizeSignal: number }) => {
+  const { gl, setSize } = useThree();
+  useLayoutEffect(() => {
+    const parent = gl.domElement.parentElement;
+    if (parent) {
+      const w = parent.clientWidth;
+      const h = parent.clientHeight;
+      if (w > 0 && h > 0) {
+        setSize(w, h);
+      }
+    }
+    invalidate();
+  }, [gl, layoutResizeSignal, setSize]);
+  return null;
+};
+
 type Props = {
+  layoutResizeSignal: number;
   displayVisiblePeople: DisplayPerson[];
   visibleRelationshipLines: VisibleLine[];
   relationshipStyleByKind: Record<RelationshipKind, { color: string; opacity: number }>;
@@ -41,20 +58,27 @@ type Props = {
   hoveredPersonId: string | null;
   highlightedPersonIds: Set<string>;
   peopleIds: string[];
+  thumbnailCacheKeys?: Record<string, string | undefined>;
   prioritizedNodeIds: Set<string>;
   renderVisibilityBucketByPersonId: Map<string, GraphVisibilityBucket>;
   renderNearPersonIds: string[];
+  /** When false, the graph is not visible (e.g. another workspace active) */
+  isVisible: boolean;
   setHoveredPersonId: (updater: (current: string | null) => string | null) => void;
   onNodeClick: (personId: string) => void;
   onNodeActionOpen: (slot: AddRelativeSlot) => void;
   onCanvasMissed: () => void;
   onCameraSample: (position: NodePosition) => void;
+  initialCameraState?: { position: NodePosition; target: NodePosition } | null;
   cameraRef: React.MutableRefObject<PerspectiveCamera | null>;
   orbitControlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
   lastCameraSampleRef: React.MutableRefObject<Vector3>;
+  /** Reports thumbnail loading progress (loaded/total). */
+  onThumbnailProgress?: (progress: { loaded: number; total: number }) => void;
 };
 
 export const GraphCanvasScene = ({
+  layoutResizeSignal,
   displayVisiblePeople,
   visibleRelationshipLines,
   relationshipStyleByKind,
@@ -63,18 +87,23 @@ export const GraphCanvasScene = ({
   hoveredPersonId,
   highlightedPersonIds,
   peopleIds,
+  thumbnailCacheKeys,
   prioritizedNodeIds,
   renderVisibilityBucketByPersonId,
   renderNearPersonIds,
+  isVisible,
   setHoveredPersonId,
   onNodeClick,
   onNodeActionOpen,
   onCanvasMissed,
   onCameraSample,
+  initialCameraState = null,
   cameraRef,
   orbitControlsRef,
-  lastCameraSampleRef
+  lastCameraSampleRef,
+  onThumbnailProgress
 }: Props) => {
+  const hasRestoredCameraRef = useRef(false);
   const handleNodeHover = useCallback(
     (personId: string, hovered: boolean) => {
       setHoveredPersonId((current) => {
@@ -112,23 +141,51 @@ export const GraphCanvasScene = ({
     lastCameraSampleRef,
     onSampledPosition: handleCameraSample
   });
-  const { thumbnailNodeIds, thumbnailTextures } = useThumbnailLoader({
+  const { thumbnailNodeIds, thumbnailTextures, thumbnailProgress } = useThumbnailLoader({
     peopleIds,
+    thumbnailCacheKeys,
     prioritizedNodeIds,
     renderNearPersonIds,
     displayVisiblePeople,
-    cameraSampleRef: lastCameraSampleRef
+    cameraSampleRef: lastCameraSampleRef,
+    visible: isVisible
   });
+
+  // Report thumbnail progress to parent (PeopleGraph3D) for the progress indicator.
+  useEffect(() => {
+    onThumbnailProgress?.(thumbnailProgress);
+  }, [thumbnailProgress, onThumbnailProgress]);
+
+  useEffect(() => {
+    if (hasRestoredCameraRef.current || !initialCameraState || !cameraRef.current) {
+      return;
+    }
+    hasRestoredCameraRef.current = true;
+    cameraRef.current.position.set(...initialCameraState.position);
+    lastCameraSampleRef.current.set(...initialCameraState.position);
+    const controls = orbitControlsRef.current;
+    if (controls) {
+      controls.target.set(...initialCameraState.target);
+      controls.update();
+    }
+    onCameraSample(initialCameraState.position);
+    invalidate();
+  }, [cameraRef, initialCameraState, lastCameraSampleRef, onCameraSample, orbitControlsRef]);
 
   return (
     <Canvas
-      camera={{ position: [0, 2, 18], fov: 55 }}
+      role="img"
+      aria-label="Family relationship graph"
+      camera={{ position: initialCameraState?.position ?? [0, 2, 18], fov: 55 }}
       dpr={[1, 1.5]}
       frameloop="demand"
       onPointerMissed={onCanvasMissed}
       onCreated={handleCanvasCreated}
       gl={createWebGlRenderer}
+      style={{ visibility: isVisible ? "visible" : "hidden" }}
     >
+      <CanvasResizeNudge layoutResizeSignal={layoutResizeSignal} />
+      <InvalidateOnThumbnailUpdate thumbnailTextures={thumbnailTextures} visible={isVisible} />
       <ambientLight intensity={1.1} />
       <pointLight position={[15, 15, 10]} intensity={1.2} />
       <OrbitControls

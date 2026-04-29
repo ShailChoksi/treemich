@@ -1,4 +1,4 @@
-import { CooccurrenceJobStatus, PrismaClient } from "@prisma/client";
+import { CooccurrenceJobStatus, PrismaClient, type Prisma } from "@prisma/client";
 import type {
   CooccurrenceEdgeRecord,
   CooccurrenceJobResponse,
@@ -8,6 +8,7 @@ import type {
 } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import type { ImmichClient } from "../integrations/immich/client.js";
+import type { ImmichAssetPeople } from "../integrations/immich/client.js";
 import {
   buildPhotoCooccurrenceResult,
   buildPhotoCooccurrenceStats,
@@ -20,6 +21,8 @@ import { getCooccurrencePreferences, parseUserPreferences } from "../preferences
 const insertBatchSize = 1000;
 const defaultPageSize = 100;
 const maxPageSize = 2000;
+const maxClusterEdges = 10_000;
+const maxPersistedResponseEdges = 5_000;
 const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
 type CooccurrenceServiceOptions = {
@@ -158,7 +161,8 @@ export class CooccurrenceService {
   private buildPersistedEdges(
     userId: string,
     stats: ReturnType<typeof buildPhotoCooccurrenceStats>,
-    computedAt: Date
+    computedAt: Date,
+    options?: { sourceProvider?: "IMMICH"; sourceMetadata?: Record<string, unknown> }
   ) {
     const rows: Array<{
       userId: string;
@@ -169,6 +173,9 @@ export class CooccurrenceService {
       personAPhotoCount: number;
       personBPhotoCount: number;
       computedAt: Date;
+      sourceProvider?: "IMMICH";
+      sourceImportedAt?: Date;
+      sourceMetadata?: Prisma.InputJsonValue;
     }> = [];
 
     for (const [key, sharedPhotos] of stats.pairSharedCounts.entries()) {
@@ -191,7 +198,14 @@ export class CooccurrenceService {
         score,
         personAPhotoCount,
         personBPhotoCount,
-        computedAt
+        computedAt,
+        ...(options?.sourceProvider
+          ? {
+              sourceProvider: options.sourceProvider,
+              sourceImportedAt: computedAt,
+              sourceMetadata: (options.sourceMetadata ?? {}) as Prisma.InputJsonValue
+            }
+          : {})
       });
     }
 
@@ -204,6 +218,52 @@ export class CooccurrenceService {
     );
 
     return rows;
+  }
+
+  private async mapImmichAssetsToTreemichPeople(userId: string, assets: ImmichAssetPeople[]) {
+    const providerPersonIds = [
+      ...new Set(assets.flatMap((asset) => asset.personIds).filter((personId) => personId.trim().length > 0))
+    ];
+    if (providerPersonIds.length === 0) {
+      return {
+        mappedAssets: [] as ImmichAssetPeople[],
+        linkedImmichPersonCount: 0,
+        skippedImmichPersonCount: 0
+      };
+    }
+
+    const identities = await this.prismaClient.personExternalIdentity.findMany({
+      where: {
+        userId,
+        provider: "IMMICH",
+        providerPersonId: { in: providerPersonIds }
+      },
+      select: { providerPersonId: true, personId: true }
+    });
+
+    const personIdByImmichId = new Map<string, string>();
+    for (const identity of identities) {
+      personIdByImmichId.set(identity.providerPersonId, identity.personId);
+    }
+
+    const mappedAssets = assets
+      .map((asset) => ({
+        assetId: asset.assetId,
+        personIds: [
+          ...new Set(
+            asset.personIds
+              .map((providerPersonId) => personIdByImmichId.get(providerPersonId))
+              .filter((personId): personId is string => Boolean(personId))
+          )
+        ]
+      }))
+      .filter((asset) => asset.personIds.length > 0);
+
+    return {
+      mappedAssets,
+      linkedImmichPersonCount: personIdByImmichId.size,
+      skippedImmichPersonCount: providerPersonIds.length - personIdByImmichId.size
+    };
   }
 
   private async executeComputation(jobId: string, userId: string, immichClient: ImmichClient) {
@@ -220,37 +280,44 @@ export class CooccurrenceService {
 
     try {
       const assets = await immichClient.listAssetsWithPeople();
-      const stats = buildPhotoCooccurrenceStats(assets);
+      const mapped = await this.mapImmichAssetsToTreemichPeople(userId, assets);
+      const stats = buildPhotoCooccurrenceStats(mapped.mappedAssets);
       const computedAt = this.now();
-      const rows = this.buildPersistedEdges(userId, stats, computedAt);
+      const rows = this.buildPersistedEdges(userId, stats, computedAt, {
+        sourceProvider: "IMMICH",
+        sourceMetadata: {
+          sourceAssetCount: assets.length,
+          mappedAssetCount: mapped.mappedAssets.length,
+          linkedImmichPersonCount: mapped.linkedImmichPersonCount,
+          skippedImmichPersonCount: mapped.skippedImmichPersonCount
+        }
+      });
 
-      await this.prismaClient.$transaction(async (tx) => {
-        await tx.cooccurrenceEdge.deleteMany({
-          where: { userId }
-        });
+      await this.prismaClient.cooccurrenceEdge.deleteMany({
+        where: { userId }
+      });
 
-        for (let index = 0; index < rows.length; index += insertBatchSize) {
-          const batch = rows.slice(index, index + insertBatchSize);
-          if (batch.length === 0) {
-            continue;
-          }
-
-          await tx.cooccurrenceEdge.createMany({
-            data: batch
-          });
+      for (let index = 0; index < rows.length; index += insertBatchSize) {
+        const batch = rows.slice(index, index + insertBatchSize);
+        if (batch.length === 0) {
+          continue;
         }
 
-        await tx.cooccurrenceJob.update({
-          where: { id: jobId },
-          data: {
-            status: CooccurrenceJobStatus.COMPLETED,
-            sourcePhotoCount: stats.sourcePhotoCount,
-            edgeCount: rows.length,
-            progress: 1,
-            completedAt: computedAt,
-            errorMessage: null
-          }
+        await this.prismaClient.cooccurrenceEdge.createMany({
+          data: batch
         });
+      }
+
+      await this.prismaClient.cooccurrenceJob.update({
+        where: { id: jobId },
+        data: {
+          status: CooccurrenceJobStatus.COMPLETED,
+          sourcePhotoCount: assets.length,
+          edgeCount: rows.length,
+          progress: 1,
+          completedAt: computedAt,
+          errorMessage: null
+        }
       });
     } catch (error) {
       await this.prismaClient.cooccurrenceJob.update({
@@ -445,6 +512,14 @@ export class CooccurrenceService {
         id: row.id,
         personAId: row.personAId,
         personBId: row.personBId,
+        sourceProvider: row.sourceProvider,
+        sourceImportedAt: toIsoStringOrNull(row.sourceImportedAt),
+        sourceMetadata:
+          row.sourceMetadata != null &&
+          typeof row.sourceMetadata === "object" &&
+          !Array.isArray(row.sourceMetadata)
+            ? (row.sourceMetadata as Record<string, unknown>)
+            : {},
         sharedPhotos: row.sharedPhotos,
         score: row.score,
         personAPhotoCount: row.personAPhotoCount,
@@ -475,6 +550,14 @@ export class CooccurrenceService {
       id: row.id,
       personAId: row.personAId,
       personBId: row.personBId,
+      sourceProvider: row.sourceProvider,
+      sourceImportedAt: toIsoStringOrNull(row.sourceImportedAt),
+      sourceMetadata:
+        row.sourceMetadata != null &&
+        typeof row.sourceMetadata === "object" &&
+        !Array.isArray(row.sourceMetadata)
+          ? (row.sourceMetadata as Record<string, unknown>)
+          : {},
       sharedPhotos: row.sharedPhotos,
       score: row.score,
       personAPhotoCount: row.personAPhotoCount,
@@ -494,7 +577,9 @@ export class CooccurrenceService {
               OR: [{ personAId: options.personId }, { personBId: options.personId }]
             }
           : {})
-      }
+      },
+      orderBy: [{ sharedPhotos: "desc" }, { score: "desc" }, { id: "asc" }],
+      take: maxClusterEdges
     });
 
     return buildClustersFromEdges(rows);
@@ -518,8 +603,12 @@ export class CooccurrenceService {
 
     const rows = await this.prismaClient.cooccurrenceEdge.findMany({
       where: {
-        userId
-      }
+        userId,
+        sharedPhotos: { gte: Math.max(1, Math.trunc(options.minSharedPhotos)) },
+        score: { gte: Math.max(0, Math.min(1, options.minScore)) }
+      },
+      orderBy: [{ sharedPhotos: "desc" }, { score: "desc" }, { id: "asc" }],
+      take: maxPersistedResponseEdges
     });
 
     const personPhotoCounts = new Map<string, number>();

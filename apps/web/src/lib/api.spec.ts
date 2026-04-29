@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ApiHttpError,
+  computeGraphLayout,
   createFamily,
   createFamilyLifeEvent,
   createResearchTask,
   createPersonLifeEvent,
+  deletePerson,
   deleteFamily,
   deleteFamilyLifeEvent,
   getFamiliesForPerson,
@@ -123,6 +125,44 @@ describe("immichPersonUrl", () => {
     expect(immichPersonUrl("person-abc", undefined)).toBeNull();
     expect(immichPersonUrl("person-abc", null)).toBeNull();
     expect(immichPersonUrl("person-abc", "   ")).toBeNull();
+  });
+});
+
+describe("computeGraphLayout", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("throws ApiHttpError with Zod issue path when the API returns validation details", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          statusCode: 400,
+          error: "Validation Error",
+          issues: [{ path: ["people", 0, "name"], message: "String must contain at least 1 character(s)" }]
+        }),
+        { status: 400, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    await expect(
+      computeGraphLayout({
+        people: [{ id: "p1", name: "x" }],
+        relationships: [],
+        viewMode: "family"
+      })
+    ).rejects.toMatchObject({
+      name: "ApiHttpError",
+      statusCode: 400,
+      message: expect.stringContaining("people.0.name")
+    });
   });
 });
 
@@ -327,7 +367,7 @@ describe("phase-2 API helpers", () => {
         headers: { "content-type": "application/json" }
       })
     );
-    await createResearchTask({ title: "Task", status: "OPEN", immichPersonId: null });
+    await createResearchTask({ title: "Task", status: "OPEN", personId: null });
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "/api/research/tasks",
       expect.objectContaining({ method: "POST", credentials: "include" })
@@ -595,8 +635,8 @@ describe("family API helpers", () => {
         JSON.stringify({
           id: "fam-new",
           userId: "u1",
-          parent1ImmichPersonId: "a",
-          parent2ImmichPersonId: "b",
+          parent1PersonId: "a",
+          parent2PersonId: "b",
           notes: null,
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
@@ -607,8 +647,8 @@ describe("family API helpers", () => {
     );
 
     const row = await createFamily({
-      parent1ImmichPersonId: "a",
-      parent2ImmichPersonId: "b",
+      parent1PersonId: "a",
+      parent2PersonId: "b",
       children: []
     });
     expect(row.id).toBe("fam-new");
@@ -660,8 +700,8 @@ describe("family API helpers", () => {
         JSON.stringify({
           id: "fam-1",
           userId: "u1",
-          parent1ImmichPersonId: "p1",
-          parent2ImmichPersonId: null,
+          parent1PersonId: "p1",
+          parent2PersonId: null,
           notes: "x",
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
@@ -729,5 +769,176 @@ describe("family API helpers", () => {
       "/api/families/fam-1/life-events/ev-9",
       expect.objectContaining({ method: "DELETE", credentials: "include" })
     );
+  });
+});
+
+describe("people API helpers", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("getPeople fetches from GET /people and returns the people array", async () => {
+    const { getPeople } = await import("./api");
+    const people = [{ id: "p1", name: "Alice" }];
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ people }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const result = await getPeople();
+
+    expect(result).toEqual(people);
+    const [[url] = []] = vi.mocked(globalThis.fetch).mock.calls;
+    expect(String(url)).toContain("/api/people");
+  });
+
+  it("getPeople passes search query as ?q= parameter", async () => {
+    const { getPeople } = await import("./api");
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ people: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    await getPeople("alice");
+
+    const [[url] = []] = vi.mocked(globalThis.fetch).mock.calls;
+    expect(String(url)).toContain("q=alice");
+  });
+
+  it("getPeople returns an empty array when the response omits the people key", async () => {
+    const { getPeople } = await import("./api");
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } })
+    );
+
+    const result = await getPeople();
+    expect(result).toEqual([]);
+  });
+
+  it("createPerson POSTs to /people and returns the created person", async () => {
+    const { createPerson } = await import("./api");
+    const created = { id: "p-new", name: "Bob Jones" };
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(created), {
+        status: 201,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const result = await createPerson({ givenName: "Bob", surname: "Jones" });
+
+    expect(result).toEqual(created);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/people"),
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: expect.stringContaining("Bob")
+      })
+    );
+  });
+
+  it("createPerson throws ApiHttpError on non-OK response", async () => {
+    const { createPerson, ApiHttpError } = await import("./api");
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: "Validation failed" }), {
+        status: 422,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    await expect(createPerson({ givenName: "X" })).rejects.toBeInstanceOf(ApiHttpError);
+  });
+
+  it("links and unlinks person external identities", async () => {
+    const { createPersonExternalIdentity, deletePersonExternalIdentity } = await import("./api");
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "identity-1", provider: "IMMICH", providerPersonId: "immich-1" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const created = await createPersonExternalIdentity("person-1", {
+      provider: "IMMICH",
+      providerPersonId: "immich-1"
+    });
+    await deletePersonExternalIdentity("person-1", "identity-1");
+
+    expect(created.providerPersonId).toBe("immich-1");
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toContain(
+      "/people/person-1/external-identities"
+    );
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[1]?.[0])).toContain(
+      "/people/person-1/external-identities/identity-1"
+    );
+  });
+
+  it("uploads and imports person thumbnails", async () => {
+    const { uploadPersonThumbnail, importPersonImmichThumbnail } = await import("./api");
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "thumb-1", source: "UPLOADED" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "thumb-2", source: "IMMICH" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        })
+      );
+
+    const uploaded = await uploadPersonThumbnail(
+      "person-1",
+      new File(["portrait"], "portrait.jpg", { type: "image/jpeg" })
+    );
+    const imported = await importPersonImmichThumbnail("person-1");
+
+    expect(uploaded.source).toBe("UPLOADED");
+    expect(imported.source).toBe("IMMICH");
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toContain(
+      "/people/person-1/thumbnail/upload"
+    );
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[1]?.[0])).toContain(
+      "/people/person-1/thumbnail/import/immich"
+    );
+  });
+
+  it("deletePerson sends DELETE /people/:id", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await deletePerson("pp-1");
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/people/pp-1"),
+      expect.objectContaining({ method: "DELETE", credentials: "include" })
+    );
+  });
+
+  it("deletePerson throws ApiHttpError on non-OK response", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: "Person not found" }), {
+        status: 404,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    await expect(deletePerson("missing")).rejects.toBeInstanceOf(ApiHttpError);
   });
 });

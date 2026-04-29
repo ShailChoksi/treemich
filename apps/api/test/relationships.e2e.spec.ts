@@ -33,6 +33,8 @@ const treemichUserFindUniqueOrThrowMock = vi.fn();
 const treemichUserFindUniqueMock = vi.fn();
 const treemichUserUpdateMock = vi.fn();
 const personProfileFindManyMock = vi.fn();
+const personExternalIdentityFindManyMock = vi.fn();
+const personThumbnailFindManyMock = vi.fn();
 const relationshipFindManyForExportMock = vi.fn();
 const placeFindManyMock = vi.fn();
 const lifeEventFindManyForExportMock = vi.fn();
@@ -48,7 +50,21 @@ const sourceFindManyMock = vi.fn();
 const mediaObjectFindManyMock = vi.fn();
 const mediaLinkFindManyMock = vi.fn();
 const familyFindManyMock = vi.fn();
-const findAdoptedChildImmichPersonIdsMock = vi.fn();
+const countForExportMock = vi.fn();
+const findAdoptedChildPersonIdsMock = vi.fn();
+const listPersonServiceMock = vi.fn().mockResolvedValue([]);
+const updatePersonServiceMock = vi.fn().mockResolvedValue({ id: "pp1" });
+const createPersonServiceMock = vi.fn();
+const getPersonServiceMock = vi.fn();
+const resolvePersonIdMock = vi.fn().mockImplementation((_userId: string, id: string) => Promise.resolve(id));
+const listExternalIdentitiesMock = vi.fn().mockResolvedValue([]);
+const addExternalIdentityMock = vi.fn();
+const deleteExternalIdentityMock = vi.fn();
+const deletePersonServiceMock = vi.fn();
+const loginWithPasswordMock = vi.fn().mockResolvedValue({
+  sessionToken: "session-token",
+  state: { authenticated: false, linkStatus: { linked: false } }
+});
 const lifeEventServiceMock = {
   getSpouseMarriageDivorceIsoForPairs: vi.fn().mockResolvedValue(new Map()),
   getBirthDeathByPersonProfileIds: vi.fn().mockResolvedValue(new Map()),
@@ -70,7 +86,7 @@ const lifeEventServiceMock = {
 };
 
 const personNameServiceMock = {
-  listByImmichPersonId: vi.fn().mockResolvedValue([]),
+  listByPersonId: vi.fn().mockResolvedValue([]),
   getPrimaryMapForProfileIds: vi.fn().mockResolvedValue(new Map()),
   getAllFormattedForUser: vi.fn().mockResolvedValue(new Map()),
   create: vi.fn(),
@@ -111,21 +127,23 @@ vi.mock("../src/db/client.js", () => ({
       findUnique: treemichUserFindUniqueMock,
       update: treemichUserUpdateMock
     },
-    personProfile: { findMany: personProfileFindManyMock },
-    relationship: { findMany: relationshipFindManyForExportMock },
-    place: { findMany: placeFindManyMock },
-    lifeEvent: { findMany: lifeEventFindManyForExportMock },
-    personName: { findMany: personNameFindManyMock },
-    family: { findMany: familyFindManyMock },
-    researchTask: { findMany: researchTaskFindManyMock },
-    repository: { findMany: repositoryFindManyMock },
-    source: { findMany: sourceFindManyMock },
-    mediaObject: { findMany: mediaObjectFindManyMock },
-    mediaLink: { findMany: mediaLinkFindManyMock },
-    treemichSession: { findMany: treemichSessionFindManyMock },
+    personProfile: { findMany: personProfileFindManyMock, count: countForExportMock },
+    personExternalIdentity: { findMany: personExternalIdentityFindManyMock, count: countForExportMock },
+    personThumbnail: { findMany: personThumbnailFindManyMock, count: countForExportMock },
+    relationship: { findMany: relationshipFindManyForExportMock, count: countForExportMock },
+    place: { findMany: placeFindManyMock, count: countForExportMock },
+    lifeEvent: { findMany: lifeEventFindManyForExportMock, count: countForExportMock },
+    personName: { findMany: personNameFindManyMock, count: countForExportMock },
+    family: { findMany: familyFindManyMock, count: countForExportMock },
+    researchTask: { findMany: researchTaskFindManyMock, count: countForExportMock },
+    repository: { findMany: repositoryFindManyMock, count: countForExportMock },
+    source: { findMany: sourceFindManyMock, count: countForExportMock },
+    mediaObject: { findMany: mediaObjectFindManyMock, count: countForExportMock },
+    mediaLink: { findMany: mediaLinkFindManyMock, count: countForExportMock },
+    treemichSession: { findMany: treemichSessionFindManyMock, count: countForExportMock },
     linkedImmichAccount: { findUnique: linkedImmichAccountFindUniqueMock },
-    cooccurrenceJob: { findMany: cooccurrenceJobFindManyMock },
-    cooccurrenceEdge: { findMany: cooccurrenceEdgeFindManyMock },
+    cooccurrenceJob: { findMany: cooccurrenceJobFindManyMock, count: countForExportMock },
+    cooccurrenceEdge: { findMany: cooccurrenceEdgeFindManyMock, count: countForExportMock },
     cooccurrenceSchedule: { findUnique: cooccurrenceScheduleFindUniqueMock }
   }
 }));
@@ -192,6 +210,47 @@ describe("Treemich API routes", () => {
     listAssetsWithPeople: listAssetsWithPeopleMock
   };
 
+  const makeSearchPersonRow = (person: {
+    id: string;
+    name: string;
+    gender?: string;
+    externalDisplayName?: string | null;
+  }) => {
+    const [givenName, ...surnameParts] = person.name.split(/\s+/);
+    return {
+      id: person.id,
+      userId: "user-1",
+      gender: person.gender ?? "UNKNOWN",
+      displayNameOverride: null,
+      givenName: givenName ?? person.name,
+      surname: surnameParts.join(" ") || null,
+      nicknames: null,
+      externalIds: {},
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      externalIdentities: person.externalDisplayName
+        ? [
+            {
+              id: `identity-${person.id}`,
+              userId: "user-1",
+              personId: person.id,
+              provider: "IMMICH",
+              providerPersonId: `immich-${person.id}`,
+              providerBaseUrl: "http://localhost:2283/api",
+              displayName: person.externalDisplayName,
+              thumbnailImportedAt: null,
+              lastSeenAt: null,
+              metadata: {},
+              createdAt: new Date("2026-01-01T00:00:00.000Z"),
+              updatedAt: new Date("2026-01-01T00:00:00.000Z")
+            }
+          ]
+        : [],
+      personNames: [],
+      thumbnails: []
+    };
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     lifeEventServiceMock.getBirthDeathByPersonProfileIds.mockResolvedValue(new Map());
@@ -202,7 +261,7 @@ describe("Treemich API routes", () => {
     lifeEventServiceMock.validatePersonLifeEvents.mockResolvedValue({ findings: [] });
     lifeEventServiceMock.listRelationshipLifeEvents.mockResolvedValue([]);
     lifeEventServiceMock.listFamilyLifeEvents.mockResolvedValue([]);
-    personNameServiceMock.listByImmichPersonId.mockResolvedValue([]);
+    personNameServiceMock.listByPersonId.mockResolvedValue([]);
     personNameServiceMock.getPrimaryMapForProfileIds.mockResolvedValue(new Map());
     personNameServiceMock.getAllFormattedForUser.mockResolvedValue(new Map());
     researchTaskServiceMock.list.mockResolvedValue([]);
@@ -212,9 +271,20 @@ describe("Treemich API routes", () => {
     process.env.TREEMICH_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     process.env.TREEMICH_SESSION_COOKIE_NAME = "treemich_session";
     queryRawMock.mockResolvedValue([1]);
+    countForExportMock.mockResolvedValue(0);
     treemichUserFindUniqueMock.mockResolvedValue(null);
-    personProfileFindManyMock.mockResolvedValue([]);
+    personProfileFindManyMock.mockImplementation(async (args?: { include?: Record<string, unknown> }) => {
+      if (args?.include && "externalIdentities" in args.include && "personNames" in args.include) {
+        const people = (await listPeopleMock()) as
+          | Array<{ id: string; name: string; gender?: string }>
+          | undefined;
+        return (people ?? []).map(makeSearchPersonRow);
+      }
+      return [];
+    });
     relationshipFindManyForExportMock.mockResolvedValue([]);
+    personExternalIdentityFindManyMock.mockResolvedValue([]);
+    personThumbnailFindManyMock.mockResolvedValue([]);
     placeFindManyMock.mockResolvedValue([]);
     lifeEventFindManyForExportMock.mockResolvedValue([]);
     treemichSessionFindManyMock.mockResolvedValue([]);
@@ -239,11 +309,20 @@ describe("Treemich API routes", () => {
         linked: false
       }
     });
+    listPersonServiceMock.mockResolvedValue([]);
+    resolvePersonIdMock.mockImplementation((_userId: string, id: string) => Promise.resolve(id));
+    listExternalIdentitiesMock.mockResolvedValue([]);
+    deletePersonServiceMock.mockResolvedValue(undefined);
+    loginWithPasswordMock.mockResolvedValue({
+      sessionToken: "session-token",
+      state: { authenticated: false, linkStatus: { linked: false } }
+    });
   });
 
   beforeEach(async () => {
     const services: AppServices = {
       authService: {
+        loginWithPassword: loginWithPasswordMock,
         loginWithImmich: loginWithImmichMock,
         getAuthState: getAuthStateMock,
         requireSession: requireSessionMock,
@@ -272,6 +351,17 @@ describe("Treemich API routes", () => {
         listRelationships: listRelationshipsMock,
         getPhotoCooccurrence: getPhotoCooccurrenceMock
       } as unknown as AppServices["relationshipService"],
+      personService: {
+        list: listPersonServiceMock,
+        create: createPersonServiceMock,
+        get: getPersonServiceMock,
+        update: updatePersonServiceMock,
+        resolvePersonId: resolvePersonIdMock,
+        listExternalIdentities: listExternalIdentitiesMock,
+        addExternalIdentity: addExternalIdentityMock,
+        deleteExternalIdentity: deleteExternalIdentityMock,
+        delete: deletePersonServiceMock
+      } as unknown as AppServices["personService"],
       lifeEventService: lifeEventServiceMock as unknown as AppServices["lifeEventService"],
       personNameService: personNameServiceMock as unknown as AppServices["personNameService"],
       researchTaskService: researchTaskServiceMock as unknown as AppServices["researchTaskService"],
@@ -283,7 +373,7 @@ describe("Treemich API routes", () => {
         createFamily: vi.fn(),
         patchFamily: vi.fn(),
         deleteFamily: vi.fn(),
-        findAdoptedChildImmichPersonIds: findAdoptedChildImmichPersonIdsMock
+        findAdoptedChildPersonIds: findAdoptedChildPersonIdsMock
       } as unknown as AppServices["familyService"]
     };
 
@@ -337,8 +427,8 @@ describe("Treemich API routes", () => {
 
   it("creates spouse relationship edge with optional dates", async () => {
     upsertRelationshipMock.mockResolvedValueOnce({
-      direct: { id: "r-spouse-1" },
-      inverse: { id: "r-spouse-2" }
+      direct: { id: "r-spouse-1", fromPersonId: "p1", toPersonId: "p2" },
+      inverse: { id: "r-spouse-2", fromPersonId: "p2", toPersonId: "p1" }
     });
 
     const response = await app.inject({
@@ -408,8 +498,15 @@ describe("Treemich API routes", () => {
   });
 
   it("loads people via treemich backend", async () => {
-    listPeopleMock.mockResolvedValueOnce([{ id: "p1", name: "Mike" }]);
-    getProfilesForPersonIdsMock.mockResolvedValueOnce(new Map([["p1", { gender: "MALE" }]]));
+    const mockPerson = {
+      id: "p1",
+      givenName: "Mike",
+      surname: null,
+      gender: "MALE",
+      externalIdentities: [],
+      thumbnails: []
+    };
+    listPersonServiceMock.mockResolvedValueOnce([mockPerson]);
     getConnectedPersonIdsMock.mockResolvedValueOnce(new Set(["p1"]));
 
     const response = await app.inject({
@@ -418,20 +515,14 @@ describe("Treemich API routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(getClientMock).toHaveBeenCalledWith(authContext.linkedAccount);
     const json = response.json();
     expect(json.people).toHaveLength(1);
-    expect(json.people[0].name).toBe("Mike");
-    expect(json.people[0].profile.gender).toBe("MALE");
+    expect(json.people[0].id).toBe("p1");
     expect(json.people[0].hasRelationship).toBe(true);
   });
 
   it("updates gender profile", async () => {
-    upsertProfileMock.mockResolvedValueOnce({
-      id: "pp1",
-      immichPersonId: "p1",
-      gender: "MALE"
-    });
+    updatePersonServiceMock.mockResolvedValueOnce({ id: "pp1", gender: "MALE" });
 
     const response = await app.inject({
       method: "PATCH",
@@ -442,15 +533,14 @@ describe("Treemich API routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(upsertProfileMock).toHaveBeenCalledWith("user-1", "p1", {
+    expect(updatePersonServiceMock).toHaveBeenCalledWith("user-1", "p1", {
       gender: "MALE"
     });
   });
 
   it("updates extended person profile fields", async () => {
-    upsertProfileMock.mockResolvedValueOnce({
+    updatePersonServiceMock.mockResolvedValueOnce({
       id: "pp1",
-      immichPersonId: "p1",
       gender: "FEMALE",
       givenName: "Alex",
       surname: "Johnson",
@@ -464,22 +554,19 @@ describe("Treemich API routes", () => {
         givenName: "Alex",
         surname: "Johnson",
         nicknames: "AJ",
-        deathDate: "",
-        birthCity: "Boston",
-        birthCountry: "USA"
+        deathDate: null
       }
     });
 
     expect(response.statusCode).toBe(200);
-    expect(upsertProfileMock).toHaveBeenCalledWith("user-1", "p1", {
+    expect(updatePersonServiceMock).toHaveBeenCalledWith("user-1", "p1", {
       givenName: "Alex",
       surname: "Johnson",
-      nicknames: "AJ"
+      nicknames: "AJ",
+      deathDate: null
     });
     expect(lifeEventServiceMock.syncPersonProfileFieldsToLifeEvents).toHaveBeenCalledWith("user-1", "pp1", {
-      deathDate: null,
-      birthCity: "Boston",
-      birthCountry: "USA"
+      deathDate: null
     });
   });
 
@@ -536,8 +623,59 @@ describe("Treemich API routes", () => {
     expect(json.matches[0].person.name).toBe("John");
   });
 
+  it("searches standalone Treemich relatives without an Immich-linked session", async () => {
+    requireSessionMock.mockResolvedValueOnce({
+      ...authContext,
+      linkedAccount: null,
+      user: { ...authContext.user, linkedAccount: null }
+    });
+    personProfileFindManyMock.mockResolvedValueOnce([
+      makeSearchPersonRow({ id: "mike-id", name: "Mike" }),
+      makeSearchPersonRow({ id: "zoe-id", name: "Zoe" })
+    ]);
+    traverseRelationshipChainMock.mockResolvedValueOnce(["zoe-id"]);
+    getProfilesForPersonIdsMock.mockResolvedValueOnce(
+      new Map([["zoe-id", { id: "zoe-id", gender: "FEMALE" }]])
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/search?q=daughter%20of%20Mike"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(getClientMock).not.toHaveBeenCalled();
+    expect(listPeopleMock).not.toHaveBeenCalled();
+    expect(traverseRelationshipChainMock).toHaveBeenCalledWith("user-1", ["mike-id"], ["CHILD_OF"]);
+    const json = response.json();
+    expect(json.matches).toHaveLength(1);
+    expect(json.matches[0].person.name).toBe("Zoe");
+  });
+
+  it("matches NL search sources by linked external identity display name", async () => {
+    personProfileFindManyMock.mockResolvedValueOnce([
+      makeSearchPersonRow({ id: "source-id", name: "Person source-id", externalDisplayName: "Mike" }),
+      makeSearchPersonRow({ id: "target-id", name: "Jane" })
+    ]);
+    traverseRelationshipChainMock.mockResolvedValueOnce(["target-id"]);
+    getProfilesForPersonIdsMock.mockResolvedValueOnce(
+      new Map([["target-id", { id: "target-id", gender: "FEMALE" }]])
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/search?q=daughter%20of%20Mike"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(traverseRelationshipChainMock).toHaveBeenCalledWith("user-1", ["source-id"], ["CHILD_OF"]);
+    const json = response.json();
+    expect(json.sourceCandidates[0].name).toBe("Person source-id");
+    expect(json.matches[0].person.name).toBe("Jane");
+  });
+
   it("searches adopted children via family pedigree instead of graph hops", async () => {
-    findAdoptedChildImmichPersonIdsMock.mockResolvedValueOnce(["ada-id"]);
+    findAdoptedChildPersonIdsMock.mockResolvedValueOnce(["ada-id"]);
     getProfilesForPersonIdsMock.mockResolvedValueOnce(new Map([["ada-id", { gender: "FEMALE" }]]));
     listPeopleMock.mockResolvedValueOnce([
       { id: "ada-id", name: "Ada" },
@@ -550,7 +688,7 @@ describe("Treemich API routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(findAdoptedChildImmichPersonIdsMock).toHaveBeenCalledWith("user-1", ["mike-id"]);
+    expect(findAdoptedChildPersonIdsMock).toHaveBeenCalledWith("user-1", ["mike-id"]);
     expect(traverseRelationshipChainMock).toHaveBeenCalledTimes(0);
     const json = response.json();
     expect(json.matches).toHaveLength(1);
@@ -884,15 +1022,15 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it("falls back to immich birthDate when profile has no override", async () => {
+    it("uses person-native birth events for age filters", async () => {
       traverseRelationshipChainMock.mockResolvedValueOnce(["c-1"]);
       getProfilesForPersonIdsMock.mockResolvedValueOnce(new Map([["c-1", { id: "pp-c1", gender: "MALE" }]]));
       lifeEventServiceMock.getBirthDeathByPersonProfileIds.mockResolvedValueOnce(
-        new Map([["pp-c1", { birth: null, death: null }]])
+        new Map([["pp-c1", { birth: { year: 1990, month: 5, day: 15 }, death: null }]])
       );
       listPeopleMock.mockResolvedValueOnce([
         { id: "mike-id", name: "Mike" },
-        { id: "c-1", name: "Cousin With Immich Date", birthDate: "1990-05-15" }
+        { id: "c-1", name: "Cousin With Person Date" }
       ]);
 
       const response = await app.inject({
@@ -903,7 +1041,7 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       const json = response.json();
       expect(json.matches).toHaveLength(1);
-      expect(json.matches[0].person.name).toBe("Cousin With Immich Date");
+      expect(json.matches[0].person.name).toBe("Cousin With Person Date");
     });
   });
 
@@ -968,7 +1106,8 @@ describe("Treemich API routes", () => {
       url: "/auth/login",
       payload: {
         email: "mike@example.com",
-        password: "secret"
+        password: "secret",
+        provider: "immich"
       }
     });
 
@@ -1003,7 +1142,8 @@ describe("Treemich API routes", () => {
         url: "/auth/login",
         payload: {
           email: "mike@example.com",
-          password: "secret"
+          password: "secret",
+          provider: "immich"
         }
       });
 
@@ -1015,11 +1155,237 @@ describe("Treemich API routes", () => {
       url: "/auth/login",
       payload: {
         email: "mike@example.com",
-        password: "secret"
+        password: "secret",
+        provider: "immich"
       }
     });
 
     expect(rateLimitedResponse.statusCode).toBe(429);
+  });
+
+  it("logs in with standalone Treemich credentials (provider: treemich) without Immich", async () => {
+    loginWithPasswordMock.mockResolvedValueOnce({
+      sessionToken: "standalone-token",
+      state: {
+        authenticated: true,
+        user: { id: "user-standalone", email: "bob@example.com", name: "Bob" },
+        linkStatus: { linked: false }
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "bob@example.com", password: "mypassword" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(loginWithPasswordMock).toHaveBeenCalledWith("bob@example.com", "mypassword");
+    expect(loginWithImmichMock).not.toHaveBeenCalled();
+    expect(response.headers["set-cookie"]).toContain("treemich_session=standalone-token");
+  });
+
+  it("defaults POST /auth/login to provider=treemich when provider is omitted", async () => {
+    loginWithPasswordMock.mockResolvedValueOnce({
+      sessionToken: "tok",
+      state: {
+        authenticated: true,
+        user: { id: "u1", email: "a@b.com", name: "A" },
+        linkStatus: { linked: false }
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "a@b.com", password: "pw" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(loginWithPasswordMock).toHaveBeenCalledTimes(1);
+    expect(loginWithImmichMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a new person via POST /people and syncs birthDate as a life event", async () => {
+    createPersonServiceMock.mockResolvedValueOnce({
+      id: "pp-new",
+      name: "Carol Jones",
+      profile: { id: "pp-new", gender: "FEMALE", givenName: "Carol", surname: "Jones" },
+      externalIdentities: [],
+      thumbnail: null,
+      hasRelationship: false
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people",
+      payload: { givenName: "Carol", surname: "Jones", gender: "FEMALE", birthDate: "1990-05-15" }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(createPersonServiceMock).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ givenName: "Carol", surname: "Jones", gender: "FEMALE" })
+    );
+    expect(lifeEventServiceMock.syncPersonProfileFieldsToLifeEvents).toHaveBeenCalledWith(
+      "user-1",
+      "pp-new",
+      expect.objectContaining({ birthDate: "1990-05-15" })
+    );
+    expect(response.json().id).toBe("pp-new");
+  });
+
+  it("creates a person via POST /people without a birthDate and skips life-event sync", async () => {
+    createPersonServiceMock.mockResolvedValueOnce({
+      id: "pp-no-birth",
+      name: "Dave",
+      profile: { id: "pp-no-birth", gender: "UNKNOWN" },
+      externalIdentities: [],
+      thumbnail: null,
+      hasRelationship: false
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people",
+      payload: { givenName: "Dave" }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(lifeEventServiceMock.syncPersonProfileFieldsToLifeEvents).not.toHaveBeenCalled();
+  });
+
+  it("returns a single person via GET /people/:id", async () => {
+    getPersonServiceMock.mockResolvedValueOnce({
+      id: "pp-1",
+      userId: "user-1",
+      gender: "MALE",
+      givenName: "Alice",
+      surname: "Smith",
+      displayNameOverride: null,
+      nicknames: null,
+      externalIds: {},
+      externalIdentities: [],
+      thumbnails: [],
+      createdAt: new Date("2025-01-01"),
+      updatedAt: new Date("2025-01-01")
+    });
+
+    const response = await app.inject({ method: "GET", url: "/people/pp-1" });
+
+    expect(response.statusCode).toBe(200);
+    expect(getPersonServiceMock).toHaveBeenCalledWith("user-1", "pp-1");
+    expect(response.json().person.id).toBe("pp-1");
+  });
+
+  it("returns 404 when GET /people/:id cannot find the person", async () => {
+    const { HttpNotFoundError } = await import("../src/lifeEvents/errors.js");
+    getPersonServiceMock.mockRejectedValueOnce(new HttpNotFoundError("Person not found"));
+
+    const response = await app.inject({ method: "GET", url: "/people/ghost" });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("adds an external identity via POST /people/:id/external-identities", async () => {
+    addExternalIdentityMock.mockResolvedValueOnce({
+      id: "ident-new",
+      personId: "pp-1",
+      provider: "IMMICH",
+      providerPersonId: "immich-xyz",
+      providerBaseUrl: null,
+      displayName: null,
+      thumbnailImportedAt: null,
+      lastSeenAt: null,
+      metadata: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people/pp-1/external-identities",
+      payload: { provider: "IMMICH", providerPersonId: "immich-xyz" }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(addExternalIdentityMock).toHaveBeenCalledWith(
+      "user-1",
+      "pp-1",
+      expect.objectContaining({ provider: "IMMICH", providerPersonId: "immich-xyz" })
+    );
+    expect(response.json().id).toBe("ident-new");
+  });
+
+  it("returns 409 when POST /people/:id/external-identities conflicts", async () => {
+    const { HttpConflictError } = await import("../src/lifeEvents/errors.js");
+    addExternalIdentityMock.mockRejectedValueOnce(new HttpConflictError("External identity already exists"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people/pp-1/external-identities",
+      payload: { provider: "IMMICH", providerPersonId: "immich-dupe" }
+    });
+
+    expect(response.statusCode).toBe(409);
+  });
+
+  it("lists external identities via GET /people/:id/external-identities", async () => {
+    listExternalIdentitiesMock.mockResolvedValueOnce([
+      { id: "ident-1", personId: "pp-1", provider: "IMMICH", providerPersonId: "immich-abc" }
+    ]);
+
+    const response = await app.inject({ method: "GET", url: "/people/pp-1/external-identities" });
+
+    expect(response.statusCode).toBe(200);
+    expect(listExternalIdentitiesMock).toHaveBeenCalledWith("user-1", "pp-1");
+    expect(response.json().externalIdentities).toHaveLength(1);
+  });
+
+  it("deletes an external identity via DELETE /people/:id/external-identities/:identityId", async () => {
+    deleteExternalIdentityMock.mockResolvedValueOnce(undefined);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/people/pp-1/external-identities/ident-1"
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(deleteExternalIdentityMock).toHaveBeenCalledWith("user-1", "pp-1", "ident-1");
+  });
+
+  it("returns 404 when DELETE /people/:id/external-identities/:identityId does not exist", async () => {
+    const { HttpNotFoundError } = await import("../src/lifeEvents/errors.js");
+    deleteExternalIdentityMock.mockRejectedValueOnce(new HttpNotFoundError("External identity not found"));
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/people/pp-1/external-identities/ghost-ident"
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("deletes a person via DELETE /people/:id", async () => {
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/people/pp-1"
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(deletePersonServiceMock).toHaveBeenCalledWith("user-1", "pp-1");
+  });
+
+  it("returns 404 when DELETE /people/:id cannot find the person for this user", async () => {
+    const { HttpNotFoundError } = await import("../src/lifeEvents/errors.js");
+    deletePersonServiceMock.mockRejectedValueOnce(new HttpNotFoundError("Person not found"));
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/people/other-user-person"
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 
   it("requires auth for protected routes with a consistent error shape but still bypasses /health", async () => {
@@ -1463,7 +1829,7 @@ describe("Treemich API routes", () => {
   });
 
   it("lists person names", async () => {
-    personNameServiceMock.listByImmichPersonId.mockResolvedValueOnce([
+    personNameServiceMock.listByPersonId.mockResolvedValueOnce([
       {
         id: "n1",
         type: "BIRTH",
@@ -1508,7 +1874,7 @@ describe("Treemich API routes", () => {
         id: "rt1",
         title: "Find census record",
         status: "OPEN",
-        immichPersonId: "p1",
+        personId: "p1",
         dueDate: null,
         notes: null,
         createdAt: "2026-01-01T00:00:00.000Z",
@@ -1527,7 +1893,7 @@ describe("Treemich API routes", () => {
           id: "rt1",
           title: "Find census record",
           status: "OPEN",
-          immichPersonId: "p1",
+          personId: "p1",
           dueDate: null,
           notes: null,
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -1592,12 +1958,12 @@ describe("Treemich API routes", () => {
       .mockResolvedValueOnce([
         {
           year: 1950,
-          personProfile: { immichPersonId: "p1" },
+          personProfile: { id: "p1" },
           place: { id: "pl1", name: "Paris", latitude: 48.8566, longitude: 2.3522 }
         },
         {
           year: 1970,
-          personProfile: { immichPersonId: "p2" },
+          personProfile: { id: "p2" },
           place: { id: "pl1", name: "Paris", latitude: 48.8566, longitude: 2.3522 }
         }
       ])
@@ -1629,17 +1995,16 @@ describe("Treemich API routes", () => {
       .mockResolvedValueOnce([
         {
           year: 1950,
-          personProfile: { immichPersonId: "p1" },
+          personProfile: { id: "p1" },
           place: { id: "pl1", name: "Paris", latitude: 48.8566, longitude: 2.3522 }
         },
         {
           year: 1970,
-          personProfile: { immichPersonId: "p2" },
+          personProfile: { id: "p2" },
           place: { id: "pl1", name: "Paris", latitude: 48.8566, longitude: 2.3522 }
         }
       ])
-      .mockResolvedValueOnce([{ personProfileId: "pp2" }]);
-    personProfileFindManyMock.mockResolvedValueOnce([{ immichPersonId: "p2" }]);
+      .mockResolvedValueOnce([{ personProfileId: "p2" }]);
 
     const response = await app.inject({
       method: "GET",
@@ -1893,33 +2258,18 @@ describe("Treemich API routes", () => {
     expect(lifeEventServiceMock.deleteFamilyLifeEvent).toHaveBeenCalledWith("user-1", "fam-1", "flev-9");
   });
 
-  it("merges GET /people birthDate from BIRTH life event over legacy override (post-migration parity)", async () => {
-    listPeopleMock.mockResolvedValueOnce([{ id: "p1", name: "Mike", birthDate: "1990-01-01" }]);
-    getProfilesForPersonIdsMock.mockResolvedValueOnce(
-      new Map([
-        [
-          "p1",
-          {
-            id: "pp1",
-            immichPersonId: "p1",
-            gender: "MALE"
-          }
-        ]
-      ])
-    );
-    getConnectedPersonIdsMock.mockResolvedValueOnce(new Set(["p1"]));
-
-    lifeEventServiceMock.getBirthDeathByPersonProfileIds.mockResolvedValue(
-      new Map([
-        [
-          "pp1",
-          {
-            birth: { year: 2001, month: 3, day: 14 } as never,
-            death: null
-          }
-        ]
-      ])
-    );
+  it("returns birthDate from personService when present", async () => {
+    const mockPerson = {
+      id: "pp1",
+      givenName: "Mike",
+      surname: null,
+      gender: "MALE",
+      birthDate: "2001-03-14",
+      externalIdentities: [],
+      thumbnails: []
+    };
+    listPersonServiceMock.mockResolvedValueOnce([mockPerson]);
+    getConnectedPersonIdsMock.mockResolvedValueOnce(new Set(["pp1"]));
 
     const response = await app.inject({
       method: "GET",
@@ -1960,7 +2310,7 @@ describe("Treemich API routes", () => {
       expect(response.json()).toMatchObject({ statusCode: 404 });
     });
 
-    it("returns JSON attachment with export metadata and no session token hashes", async () => {
+    it("returns JSON attachment with export v2 person-native data and no secrets", async () => {
       const createdAt = new Date("2024-06-01T12:00:00.000Z");
       treemichUserFindUniqueMock.mockResolvedValueOnce({
         id: "user-1",
@@ -1976,13 +2326,43 @@ describe("Treemich API routes", () => {
         {
           id: "pp-1",
           userId: "user-1",
-          immichPersonId: "p1",
           gender: "MALE",
           displayNameOverride: null,
           givenName: "Mike",
           surname: "Smith",
           nicknames: null,
           externalIds: {},
+          createdAt,
+          updatedAt: createdAt
+        }
+      ]);
+      personExternalIdentityFindManyMock.mockResolvedValueOnce([
+        {
+          id: "ident-1",
+          userId: "user-1",
+          personId: "pp-1",
+          provider: "IMMICH",
+          providerPersonId: "p1",
+          providerBaseUrl: "http://localhost:2283/api",
+          displayName: "Mike",
+          thumbnailImportedAt: null,
+          lastSeenAt: createdAt,
+          metadata: {},
+          createdAt,
+          updatedAt: createdAt
+        }
+      ]);
+      personThumbnailFindManyMock.mockResolvedValueOnce([
+        {
+          id: "thumb-1",
+          userId: "user-1",
+          personId: "pp-1",
+          source: "IMMICH",
+          storageUrl: null,
+          mimeType: "image/jpeg",
+          checksum: "abc123",
+          sourceExternalIdentityId: "ident-1",
+          importedAt: createdAt,
           createdAt,
           updatedAt: createdAt
         }
@@ -2048,16 +2428,20 @@ describe("Treemich API routes", () => {
         exportVersion: number;
         exportedAt: string;
         treemichUser: { id: string };
-        personProfiles: unknown[];
+        people: unknown[];
+        personExternalIdentities: unknown[];
+        personThumbnails: unknown[];
         lifeEvents: Array<{ id: string; eventType: string }>;
         treemichSessions: Array<Record<string, unknown>>;
         linkedImmichAccount: Record<string, unknown> | null;
       };
 
-      expect(payload.exportVersion).toBe(1);
+      expect(payload.exportVersion).toBe(2);
       expect(payload.exportedAt).toBeTruthy();
       expect(payload.treemichUser.id).toBe("user-1");
-      expect(payload.personProfiles).toHaveLength(1);
+      expect(payload.people).toHaveLength(1);
+      expect(payload.personExternalIdentities).toHaveLength(1);
+      expect(payload.personThumbnails).toHaveLength(1);
       expect(payload.lifeEvents).toHaveLength(1);
       expect(payload.lifeEvents[0]?.eventType).toBe("BIRTH");
       expect(payload.treemichSessions).toHaveLength(1);
@@ -2066,6 +2450,8 @@ describe("Treemich API routes", () => {
       expect(payload.linkedImmichAccount).toBeTruthy();
       const link = payload.linkedImmichAccount as Record<string, unknown>;
       expect(Object.hasOwn(link, "encryptedAccessToken")).toBe(false);
+      expect(Object.hasOwn(link, "accessTokenIv")).toBe(false);
+      expect(Object.hasOwn(link, "accessTokenTag")).toBe(false);
     });
 
     it("returns 400 for unsupported format query", async () => {
@@ -2091,6 +2477,8 @@ describe("Treemich API routes", () => {
       };
       treemichUserFindUniqueMock.mockResolvedValueOnce(userRow).mockResolvedValueOnce(userRow);
       personProfileFindManyMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      personExternalIdentityFindManyMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      personThumbnailFindManyMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       relationshipFindManyForExportMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       placeFindManyMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       lifeEventFindManyForExportMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
@@ -2128,7 +2516,7 @@ describe("Treemich API routes", () => {
         files: Array<{ path: string }>;
       };
       expect(manifest.treemichExportManifestVersion).toBe(1);
-      expect(manifest.payloadExportVersion).toBe(1);
+      expect(manifest.payloadExportVersion).toBe(2);
       expect(manifest.files.some((f) => f.path === "account.json")).toBe(true);
     });
   });
