@@ -49,6 +49,13 @@ const jsonResponse = (data: unknown, status = 200) =>
     })
   );
 
+const setInputValue = (input: HTMLInputElement, value: string) => {
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  valueSetter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+};
+
 const birthEventPayload = {
   id: "lev-b",
   eventType: "BIRTH",
@@ -135,7 +142,13 @@ describe("PeoplePage + life events (integration)", () => {
         if (peopleLoadCount > 1) {
           return jsonResponse({
             people: [
-              { id: "p1", name: "Alex", hasRelationship: true, birthDate: "1990-01-01" },
+              {
+                id: "p1",
+                name: "Alex Smith",
+                hasRelationship: true,
+                birthDate: "1990-01-01",
+                profile: { id: "p1", gender: "UNKNOWN", givenName: "Alex", surname: "Smith", nicknames: null }
+              },
               { id: "p2", name: "Blair", hasRelationship: true, birthDate: null },
               { id: "p3", name: "Charlie Brown", hasRelationship: true, birthDate: null }
             ]
@@ -143,7 +156,13 @@ describe("PeoplePage + life events (integration)", () => {
         }
         return jsonResponse({
           people: [
-            { id: "p1", name: "Alex", hasRelationship: true, birthDate: "1990-01-01" },
+            {
+              id: "p1",
+              name: "Alex Smith",
+              hasRelationship: true,
+              birthDate: "1990-01-01",
+              profile: { id: "p1", gender: "UNKNOWN", givenName: "Alex", surname: "Smith", nicknames: null }
+            },
             { id: "p2", name: "Blair", hasRelationship: true, birthDate: null }
           ]
         });
@@ -190,17 +209,24 @@ describe("PeoplePage + life events (integration)", () => {
       }
 
       if (method === "PATCH" && /\/people\/p1$/.test(url) && !url.includes("life-events")) {
+        const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, string | null>) : {};
         return jsonResponse({
           id: "p1",
-          gender: "UNKNOWN",
-          givenName: null,
-          surname: null,
-          nicknames: null
+          gender: body.gender ?? "UNKNOWN",
+          givenName: body.givenName ?? null,
+          surname: body.surname ?? null,
+          nicknames: body.nicknames ?? null
         });
       }
 
       if (method === "PATCH" && url.includes("/people/p1/life-events/")) {
-        return jsonResponse(birthEventPayload);
+        const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, number | null>) : {};
+        return jsonResponse({
+          ...birthEventPayload,
+          year: body.year ?? birthEventPayload.year,
+          month: body.month ?? birthEventPayload.month,
+          day: body.day ?? birthEventPayload.day
+        });
       }
 
       return jsonResponse({ error: `unmocked ${method} ${url}` }, 404);
@@ -295,6 +321,133 @@ describe("PeoplePage + life events (integration)", () => {
       (call) => String(call[0]).match(/\/people\/p1$/) && call[1]?.method === "PATCH"
     );
     expect(profilePatch).toBeTruthy();
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("updates graph person name immediately after profile save", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (latestGraphProps?.people?.some((person) => person.id === "p1")) {
+        break;
+      }
+    }
+
+    expect(latestGraphProps?.people?.find((person) => person.id === "p1")?.name).toBe("Alex Smith");
+
+    const profileContent = container.querySelector("#person-detail-section-content-profile");
+    const labels = [...(profileContent?.querySelectorAll(".field-group") ?? [])];
+    const inputByLabel = (text: string) =>
+      labels
+        .find((label) => label.querySelector(".field-label")?.textContent === text)
+        ?.querySelector("input") ?? null;
+    const givenNameInput = inputByLabel("Given name") as HTMLInputElement | null;
+    const surnameInput = inputByLabel("Surname") as HTMLInputElement | null;
+    expect(givenNameInput).toBeTruthy();
+    expect(surnameInput).toBeTruthy();
+
+    await act(async () => {
+      setInputValue(givenNameInput!, "Taylor");
+      setInputValue(surnameInput!, "Jones");
+    });
+
+    const saveButton = container.querySelector(".person-detail-primary-action") as HTMLButtonElement | null;
+    expect(saveButton?.textContent).toContain("Save profile");
+
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    for (let i = 0; i < 20; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const graphPerson = latestGraphProps?.people?.find((person) => person.id === "p1");
+      if (graphPerson?.name === "Taylor Jones") {
+        break;
+      }
+    }
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const profilePatch = fetchMock.mock.calls.find(
+      (call) => String(call[0]).match(/\/people\/p1$/) && call[1]?.method === "PATCH"
+    );
+    expect(profilePatch?.[1]?.body).toBe(
+      JSON.stringify({ gender: "UNKNOWN", givenName: "Taylor", surname: "Jones", nicknames: null })
+    );
+    expect(latestGraphProps?.people?.find((person) => person.id === "p1")?.name).toBe("Taylor Jones");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("updates birth date display and graph people immediately after profile save", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (container.textContent?.includes("Birth date: Jan 1, 1990")) {
+        break;
+      }
+    }
+
+    expect(container.textContent).toContain("Birth date: Jan 1, 1990");
+    expect(latestGraphProps?.people?.find((person) => person.id === "p1")?.birthDate).toBe("1990-01-01");
+
+    const birthInput = container.querySelector(
+      '#person-detail-section-content-profile input[type="date"]'
+    ) as HTMLInputElement | null;
+    expect(birthInput).toBeTruthy();
+
+    await act(async () => {
+      setInputValue(birthInput!, "1992-02-03");
+    });
+
+    const saveButton = container.querySelector(".person-detail-primary-action") as HTMLButtonElement | null;
+    expect(saveButton?.textContent).toContain("Save profile");
+
+    await act(async () => {
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    for (let i = 0; i < 20; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const graphPerson = latestGraphProps?.people?.find((person) => person.id === "p1");
+      if (
+        graphPerson?.birthDate === "1992-02-03" &&
+        container.textContent?.includes("Birth date: Feb 3, 1992")
+      ) {
+        break;
+      }
+    }
+
+    expect(latestGraphProps?.people?.find((person) => person.id === "p1")?.birthDate).toBe("1992-02-03");
+    expect(container.textContent).toContain("Birth date: Feb 3, 1992");
 
     act(() => {
       root.unmount();

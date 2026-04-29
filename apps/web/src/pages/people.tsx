@@ -1,5 +1,5 @@
 import type { CreateFamilyLifeEventBody, CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
-import { filterGraphLayoutTopologyRelationships } from "@treemich/shared";
+import { filterGraphLayoutTopologyRelationships, formatPersonNameDisplay } from "@treemich/shared";
 import {
   useCallback,
   useEffect,
@@ -123,6 +123,14 @@ const sortRelationshipsStable = (relationships: RelationshipRecord[]) =>
 
 const normalizeName = (value: string | null | undefined) => value?.trim().toLocaleLowerCase() ?? "";
 const isAbortError = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
+
+const profileNamePatchForPerson = (profile: NonNullable<PersonRecord["profile"]>) => {
+  const name = formatPersonNameDisplay({
+    givenName: profile.givenName,
+    surname: profile.surname
+  });
+  return name ? { name, displayName: null } : {};
+};
 
 const samePeopleList = (left: PersonRecord[], right: PersonRecord[]) =>
   left.length === right.length &&
@@ -1214,6 +1222,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           person.id === personToSave.id
             ? {
                 ...person,
+                ...profileNamePatchForPerson(savedProfile),
+                birthDate: displayValues.birthDate || null,
                 profile: savedProfile
               }
             : person
@@ -1243,6 +1253,14 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         ...current,
         [personToSave.id]: displayValues
       }));
+      setPersonTimelineById((current) => {
+        if (!(personToSave.id in current)) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[personToSave.id];
+        return next;
+      });
       profileDraftDirtyRef.current = false;
       void loadMapPlaces(mapIncludeLivingRef.current);
       setStatus("Profile saved");
