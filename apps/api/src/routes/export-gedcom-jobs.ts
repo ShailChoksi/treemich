@@ -9,6 +9,7 @@ import { getRequiredAuth } from "../auth/request.js";
 import { env, isGedcomExportEnabled } from "../config/env.js";
 import { prisma } from "../db/client.js";
 import { scheduleGedcomExportJob } from "../gedcom/exportJobRunner.js";
+import { EXPENSIVE_ROUTE_RATE_LIMIT } from "./rate-limit.js";
 
 const truthyBody = (v: unknown): boolean =>
   v === true || v === "true" || v === "1" || v === "yes" || v === "on";
@@ -79,32 +80,36 @@ export const registerExportGedcomJobRoutes = (app: FastifyInstance) => {
     return;
   }
 
-  app.post<{ Body: z.infer<typeof createJobBodySchema> }>("/export/gedcom/jobs", async (request) => {
-    const auth = getRequiredAuth(request);
-    const body = createJobBodySchema.parse(request.body ?? {});
-    const redactLiving = truthyBody(body.redactLiving);
-    const includeTreemichCustomTags = falsyBody(body.includeTreemichCustomTags) ? false : true;
+  app.post<{ Body: z.infer<typeof createJobBodySchema> }>(
+    "/export/gedcom/jobs",
+    { config: { rateLimit: EXPENSIVE_ROUTE_RATE_LIMIT } },
+    async (request) => {
+      const auth = getRequiredAuth(request);
+      const body = createJobBodySchema.parse(request.body ?? {});
+      const redactLiving = truthyBody(body.redactLiving);
+      const includeTreemichCustomTags = falsyBody(body.includeTreemichCustomTags) ? false : true;
 
-    const job = await prisma.gedcomExportJob.create({
-      data: {
-        userId: auth.user.id,
-        redactLiving,
-        includeTreemichCustomTags
-      }
-    });
-    scheduleGedcomExportJob(job.id, app.log);
+      const job = await prisma.gedcomExportJob.create({
+        data: {
+          userId: auth.user.id,
+          redactLiving,
+          includeTreemichCustomTags
+        }
+      });
+      scheduleGedcomExportJob(job.id, app.log);
 
-    app.log.info(
-      { userId: auth.user.id, event: "gedcom_export_job", jobId: job.id },
-      "GEDCOM export job queued"
-    );
+      app.log.info(
+        { userId: auth.user.id, event: "gedcom_export_job", jobId: job.id },
+        "GEDCOM export job queued"
+      );
 
-    return {
-      id: job.id,
-      status: job.status,
-      createdAt: job.createdAt.toISOString()
-    };
-  });
+      return {
+        id: job.id,
+        status: job.status,
+        createdAt: job.createdAt.toISOString()
+      };
+    }
+  );
 
   app.get("/export/gedcom/jobs/:jobId", async (request, reply) => {
     const auth = getRequiredAuth(request);
@@ -147,46 +152,54 @@ export const registerExportGedcomJobRoutes = (app: FastifyInstance) => {
     };
   });
 
-  app.get("/export/gedcom/jobs/:jobId/ged", async (request, reply) => {
-    const auth = getRequiredAuth(request);
-    const { jobId } = jobIdParamsSchema.parse(request.params);
-    const job = await prisma.gedcomExportJob.findFirst({
-      where: { id: jobId, userId: auth.user.id },
-      select: { status: true, gedcomUtf8: true }
-    });
-    if (!job) {
-      return reply.code(404).send({ statusCode: 404, error: "Job not found" });
-    }
-    if (job.status !== "COMPLETED" || !job.gedcomUtf8) {
-      return reply.code(409).send({
-        statusCode: 409,
-        error: "Result not ready",
-        message: "Export job is not completed or has no stored GEDCOM payload."
+  app.get(
+    "/export/gedcom/jobs/:jobId/ged",
+    { config: { rateLimit: EXPENSIVE_ROUTE_RATE_LIMIT } },
+    async (request, reply) => {
+      const auth = getRequiredAuth(request);
+      const { jobId } = jobIdParamsSchema.parse(request.params);
+      const job = await prisma.gedcomExportJob.findFirst({
+        where: { id: jobId, userId: auth.user.id },
+        select: { status: true, gedcomUtf8: true }
       });
+      if (!job) {
+        return reply.code(404).send({ statusCode: 404, error: "Job not found" });
+      }
+      if (job.status !== "COMPLETED" || !job.gedcomUtf8) {
+        return reply.code(409).send({
+          statusCode: 409,
+          error: "Result not ready",
+          message: "Export job is not completed or has no stored GEDCOM payload."
+        });
+      }
+      return sendGedcomResult(reply, jobId, job.gedcomUtf8);
     }
-    return sendGedcomResult(reply, jobId, job.gedcomUtf8);
-  });
+  );
 
-  app.get("/export/gedcom/jobs/:jobId/ged/:token", async (request, reply) => {
-    const { jobId, token } = signedDownloadParamsSchema.parse(request.params);
-    const verified = verifyExportDownloadToken(token, jobId);
-    if (!verified) {
-      return reply.code(403).send({ statusCode: 403, error: "Invalid or expired export download token" });
-    }
-    const job = await prisma.gedcomExportJob.findFirst({
-      where: { id: jobId, userId: verified.userId },
-      select: { status: true, gedcomUtf8: true }
-    });
-    if (!job) {
-      return reply.code(404).send({ statusCode: 404, error: "Job not found" });
-    }
-    if (job.status !== "COMPLETED" || !job.gedcomUtf8) {
-      return reply.code(409).send({
-        statusCode: 409,
-        error: "Result not ready",
-        message: "Export job is not completed or has no stored GEDCOM payload."
+  app.get(
+    "/export/gedcom/jobs/:jobId/ged/:token",
+    { config: { rateLimit: EXPENSIVE_ROUTE_RATE_LIMIT } },
+    async (request, reply) => {
+      const { jobId, token } = signedDownloadParamsSchema.parse(request.params);
+      const verified = verifyExportDownloadToken(token, jobId);
+      if (!verified) {
+        return reply.code(403).send({ statusCode: 403, error: "Invalid or expired export download token" });
+      }
+      const job = await prisma.gedcomExportJob.findFirst({
+        where: { id: jobId, userId: verified.userId },
+        select: { status: true, gedcomUtf8: true }
       });
+      if (!job) {
+        return reply.code(404).send({ statusCode: 404, error: "Job not found" });
+      }
+      if (job.status !== "COMPLETED" || !job.gedcomUtf8) {
+        return reply.code(409).send({
+          statusCode: 409,
+          error: "Result not ready",
+          message: "Export job is not completed or has no stored GEDCOM payload."
+        });
+      }
+      return sendGedcomResult(reply, jobId, job.gedcomUtf8);
     }
-    return sendGedcomResult(reply, jobId, job.gedcomUtf8);
-  });
+  );
 };

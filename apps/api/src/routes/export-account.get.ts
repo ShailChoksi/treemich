@@ -15,6 +15,7 @@ import {
   type AccountExportZipFile,
   zipAccountExport
 } from "./export-account.zip.js";
+import { EXPENSIVE_ROUTE_RATE_LIMIT } from "./rate-limit.js";
 
 const manifestFileFromZipFile = ({ path, role, personId, personThumbnailId }: AccountExportZipFile) => ({
   path,
@@ -125,188 +126,192 @@ const buildThumbnailBinaryFiles = async (
 };
 
 export const registerExportAccountGetRoute = (app: FastifyInstance) => {
-  app.get("/export/account", async (request, reply) => {
-    const formatRaw = (request.query as { format?: string }).format;
-    const format =
-      formatRaw === "zip" ? "zip" : formatRaw === undefined || formatRaw === "json" ? "json" : null;
-    if (format === null) {
-      return reply.code(400).send({
-        statusCode: 400,
-        error: "Invalid format",
-        message: "Use format=json (default) or format=zip"
-      });
-    }
+  app.get(
+    "/export/account",
+    { config: { rateLimit: EXPENSIVE_ROUTE_RATE_LIMIT } },
+    async (request, reply) => {
+      const formatRaw = (request.query as { format?: string }).format;
+      const format =
+        formatRaw === "zip" ? "zip" : formatRaw === undefined || formatRaw === "json" ? "json" : null;
+      if (format === null) {
+        return reply.code(400).send({
+          statusCode: 400,
+          error: "Invalid format",
+          message: "Use format=json (default) or format=zip"
+        });
+      }
 
-    const auth = getRequiredAuth(request);
-    const userId = auth.user.id;
-    const exportRowCount = await countExportRows(userId);
-    if (exportRowCount > env.TREEMICH_EXPORT_MAX_ROWS) {
-      return reply.code(413).send({
-        statusCode: 413,
-        error: "Export Too Large",
-        message: `This account export contains ${exportRowCount} rows, exceeding TREEMICH_EXPORT_MAX_ROWS=${env.TREEMICH_EXPORT_MAX_ROWS}. Use a background export path or raise the limit.`
-      });
-    }
+      const auth = getRequiredAuth(request);
+      const userId = auth.user.id;
+      const exportRowCount = await countExportRows(userId);
+      if (exportRowCount > env.TREEMICH_EXPORT_MAX_ROWS) {
+        return reply.code(413).send({
+          statusCode: 413,
+          error: "Export Too Large",
+          message: `This account export contains ${exportRowCount} rows, exceeding TREEMICH_EXPORT_MAX_ROWS=${env.TREEMICH_EXPORT_MAX_ROWS}. Use a background export path or raise the limit.`
+        });
+      }
 
-    const versionRaw = (request.query as { version?: string }).version;
-    const version = versionRaw === "1" ? 1 : versionRaw === undefined || versionRaw === "2" ? 2 : null;
-    if (version === null) {
-      return reply.code(400).send({
-        statusCode: 400,
-        error: "Invalid version",
-        message: "Use version=1 or version=2 (default)"
-      });
-    }
+      const versionRaw = (request.query as { version?: string }).version;
+      const version = versionRaw === "1" ? 1 : versionRaw === undefined || versionRaw === "2" ? 2 : null;
+      if (version === null) {
+        return reply.code(400).send({
+          statusCode: 400,
+          error: "Invalid version",
+          message: "Use version=1 or version=2 (default)"
+        });
+      }
 
-    const [
-      user,
-      people,
-      personExternalIdentities,
-      personThumbnails,
-      relationships,
-      familyRows,
-      places,
-      lifeEvents,
-      personNames,
-      researchTasks,
-      repositories,
-      sources,
-      mediaObjects,
-      mediaLinks,
-      sessions,
-      linkedAccount,
-      cooccurrenceJobs,
-      cooccurrenceEdges,
-      cooccurrenceSchedule
-    ] = await Promise.all([
-      prisma.treemichUser.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          preferences: true,
-          createdAt: true,
-          updatedAt: true
-        }
-      }),
-      prisma.personProfile.findMany({ where: { userId } }),
-      prisma.personExternalIdentity.findMany({
-        where: { userId },
-        orderBy: [{ personId: "asc" }, { createdAt: "asc" }]
-      }),
-      prisma.personThumbnail.findMany({
-        where: { userId },
-        orderBy: [{ personId: "asc" }, { createdAt: "asc" }]
-      }),
-      prisma.relationship.findMany({ where: { userId } }),
-      prisma.family.findMany({
-        where: { userId },
-        include: { children: true },
-        orderBy: { id: "asc" }
-      }),
-      prisma.place.findMany({ where: { userId } }),
-      prisma.lifeEvent.findMany({
-        where: { userId },
-        include: lifeEventQueryInclude
-      }),
-      prisma.personName.findMany({ where: { userId } }),
-      prisma.researchTask.findMany({ where: { userId } }),
-      prisma.repository.findMany({ where: { userId } }),
-      prisma.source.findMany({ where: { userId }, include: { repository: true } }),
-      prisma.mediaObject.findMany({ where: { userId } }),
-      prisma.mediaLink.findMany({ where: { userId } }),
-      prisma.treemichSession.findMany({
-        where: { userId },
-        select: {
-          id: true,
-          expiresAt: true,
-          createdAt: true,
-          updatedAt: true
-        }
-      }),
-      prisma.linkedImmichAccount.findUnique({
-        where: { userId },
-        select: {
-          id: true,
-          immichBaseUrl: true,
-          immichUserId: true,
-          immichEmail: true,
-          immichName: true,
-          accessTokenExpiresAt: true,
-          lastValidatedAt: true,
-          createdAt: true,
-          updatedAt: true
-        }
-      }),
-      prisma.cooccurrenceJob.findMany({ where: { userId } }),
-      prisma.cooccurrenceEdge.findMany({ where: { userId } }),
-      prisma.cooccurrenceSchedule.findUnique({ where: { userId } })
-    ]);
-
-    if (!user) {
-      return reply.code(404).send({ statusCode: 404, error: "User not found" });
-    }
-
-    const { thumbnails: exportedPersonThumbnails, files: thumbnailFiles } =
-      await buildThumbnailBinaryFiles(personThumbnails);
-
-    const payloadBase = {
-      exportedAt: new Date().toISOString(),
-      treemichUser: user,
-      linkedImmichAccount: linkedAccount,
-      relationships,
-      families: familyRows.map((row) => familyToJson(row)),
-      places,
-      lifeEvents: lifeEvents.map((row) => lifeEventToJson(row)),
-      personNames,
-      researchTasks,
-      repositories,
-      sources,
-      mediaObjects,
-      mediaLinks,
-      treemichSessions: sessions,
-      cooccurrenceJobs,
-      cooccurrenceEdges,
-      cooccurrenceSchedule
-    };
-
-    const payload: AccountExportPayloadV1 | AccountExportPayloadV2 =
-      version === 1
-        ? {
-            exportVersion: 1,
-            ...payloadBase,
-            personProfiles: people
+      const [
+        user,
+        people,
+        personExternalIdentities,
+        personThumbnails,
+        relationships,
+        familyRows,
+        places,
+        lifeEvents,
+        personNames,
+        researchTasks,
+        repositories,
+        sources,
+        mediaObjects,
+        mediaLinks,
+        sessions,
+        linkedAccount,
+        cooccurrenceJobs,
+        cooccurrenceEdges,
+        cooccurrenceSchedule
+      ] = await Promise.all([
+        prisma.treemichUser.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            preferences: true,
+            createdAt: true,
+            updatedAt: true
           }
-        : {
-            exportVersion: 2,
-            ...payloadBase,
-            people,
-            personExternalIdentities,
-            personThumbnails: exportedPersonThumbnails
-          };
+        }),
+        prisma.personProfile.findMany({ where: { userId } }),
+        prisma.personExternalIdentity.findMany({
+          where: { userId },
+          orderBy: [{ personId: "asc" }, { createdAt: "asc" }]
+        }),
+        prisma.personThumbnail.findMany({
+          where: { userId },
+          orderBy: [{ personId: "asc" }, { createdAt: "asc" }]
+        }),
+        prisma.relationship.findMany({ where: { userId } }),
+        prisma.family.findMany({
+          where: { userId },
+          include: { children: true },
+          orderBy: { id: "asc" }
+        }),
+        prisma.place.findMany({ where: { userId } }),
+        prisma.lifeEvent.findMany({
+          where: { userId },
+          include: lifeEventQueryInclude
+        }),
+        prisma.personName.findMany({ where: { userId } }),
+        prisma.researchTask.findMany({ where: { userId } }),
+        prisma.repository.findMany({ where: { userId } }),
+        prisma.source.findMany({ where: { userId }, include: { repository: true } }),
+        prisma.mediaObject.findMany({ where: { userId } }),
+        prisma.mediaLink.findMany({ where: { userId } }),
+        prisma.treemichSession.findMany({
+          where: { userId },
+          select: {
+            id: true,
+            expiresAt: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        }),
+        prisma.linkedImmichAccount.findUnique({
+          where: { userId },
+          select: {
+            id: true,
+            immichBaseUrl: true,
+            immichUserId: true,
+            immichEmail: true,
+            immichName: true,
+            accessTokenExpiresAt: true,
+            lastValidatedAt: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        }),
+        prisma.cooccurrenceJob.findMany({ where: { userId } }),
+        prisma.cooccurrenceEdge.findMany({ where: { userId } }),
+        prisma.cooccurrenceSchedule.findUnique({ where: { userId } })
+      ]);
 
-    app.log.info({ userId, event: "account_export", format }, "Treemich account export downloaded");
+      if (!user) {
+        return reply.code(404).send({ statusCode: 404, error: "User not found" });
+      }
 
-    const jsonBody = serializeForExport(payload);
+      const { thumbnails: exportedPersonThumbnails, files: thumbnailFiles } =
+        await buildThumbnailBinaryFiles(personThumbnails);
 
-    if (format === "json") {
+      const payloadBase = {
+        exportedAt: new Date().toISOString(),
+        treemichUser: user,
+        linkedImmichAccount: linkedAccount,
+        relationships,
+        families: familyRows.map((row) => familyToJson(row)),
+        places,
+        lifeEvents: lifeEvents.map((row) => lifeEventToJson(row)),
+        personNames,
+        researchTasks,
+        repositories,
+        sources,
+        mediaObjects,
+        mediaLinks,
+        treemichSessions: sessions,
+        cooccurrenceJobs,
+        cooccurrenceEdges,
+        cooccurrenceSchedule
+      };
+
+      const payload: AccountExportPayloadV1 | AccountExportPayloadV2 =
+        version === 1
+          ? {
+              exportVersion: 1,
+              ...payloadBase,
+              personProfiles: people
+            }
+          : {
+              exportVersion: 2,
+              ...payloadBase,
+              people,
+              personExternalIdentities,
+              personThumbnails: exportedPersonThumbnails
+            };
+
+      app.log.info({ userId, event: "account_export", format }, "Treemich account export downloaded");
+
+      const jsonBody = serializeForExport(payload);
+
+      if (format === "json") {
+        return reply
+          .header("Content-Type", "application/json; charset=utf-8")
+          .header("Content-Disposition", `attachment; filename="treemich-account-export-${userId}.json"`)
+          .send(jsonBody);
+      }
+
+      const extraZipFiles = version === 2 ? thumbnailFiles : [];
+      const manifest = buildAccountExportManifestV1({
+        exportVersion: payload.exportVersion,
+        exportedAt: payload.exportedAt,
+        extraFiles: extraZipFiles.map(manifestFileFromZipFile)
+      });
+      const zipBuffer = zipAccountExport(jsonBody, manifest, extraZipFiles);
       return reply
-        .header("Content-Type", "application/json; charset=utf-8")
-        .header("Content-Disposition", `attachment; filename="treemich-account-export-${userId}.json"`)
-        .send(jsonBody);
+        .header("Content-Type", "application/zip")
+        .header("Content-Disposition", `attachment; filename="treemich-account-export-${userId}.zip"`)
+        .send(zipBuffer);
     }
-
-    const extraZipFiles = version === 2 ? thumbnailFiles : [];
-    const manifest = buildAccountExportManifestV1({
-      exportVersion: payload.exportVersion,
-      exportedAt: payload.exportedAt,
-      extraFiles: extraZipFiles.map(manifestFileFromZipFile)
-    });
-    const zipBuffer = zipAccountExport(jsonBody, manifest, extraZipFiles);
-    return reply
-      .header("Content-Type", "application/zip")
-      .header("Content-Disposition", `attachment; filename="treemich-account-export-${userId}.zip"`)
-      .send(zipBuffer);
-  });
+  );
 };

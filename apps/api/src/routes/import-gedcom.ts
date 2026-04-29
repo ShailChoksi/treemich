@@ -15,6 +15,7 @@ import {
   scheduleGedcomImportJob,
   validateFamMatches
 } from "../gedcom/importRunner.js";
+import { EXPENSIVE_ROUTE_RATE_LIMIT } from "./rate-limit.js";
 
 const gedcomUtf8Field = z.string().refine(
   (s) => Buffer.byteLength(s, "utf8") <= maxGedcomImportBytes(),
@@ -103,7 +104,7 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
 
   app.post<{ Body: z.infer<typeof previewBodySchema> }>(
     "/import/gedcom/preview",
-    { bodyLimit },
+    { bodyLimit, config: { rateLimit: EXPENSIVE_ROUTE_RATE_LIMIT } },
     async (request) => {
       const auth = getRequiredAuth(request);
       const body = previewBodySchema.parse(request.body);
@@ -133,7 +134,10 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
 
   app.post(
     "/import/gedcom/preview/archive",
-    { bodyLimit: maxGedcomMediaArchiveBytes() + 256_000 },
+    {
+      bodyLimit: maxGedcomMediaArchiveBytes() + 256_000,
+      config: { rateLimit: EXPENSIVE_ROUTE_RATE_LIMIT }
+    },
     async (request) => {
       const auth = getRequiredAuth(request);
       const { archive } = await readArchiveUpload(request);
@@ -167,7 +171,7 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
 
   app.post<{ Body: z.infer<typeof createJobBodySchema> }>(
     "/import/gedcom/jobs",
-    { bodyLimit },
+    { bodyLimit, config: { rateLimit: EXPENSIVE_ROUTE_RATE_LIMIT } },
     async (request, reply) => {
       const auth = getRequiredAuth(request);
       const body = createJobBodySchema.parse(request.body);
@@ -205,7 +209,10 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
 
   app.post(
     "/import/gedcom/jobs/archive",
-    { bodyLimit: maxGedcomMediaArchiveBytes() + 256_000 },
+    {
+      bodyLimit: maxGedcomMediaArchiveBytes() + 256_000,
+      config: { rateLimit: EXPENSIVE_ROUTE_RATE_LIMIT }
+    },
     async (request, reply) => {
       const auth = getRequiredAuth(request);
       const { fileName, archive, byteSize, fields } = await readArchiveUpload(request);

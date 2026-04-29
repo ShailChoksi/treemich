@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import rateLimit from "@fastify/rate-limit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const scheduleGedcomExportJobMock = vi.fn();
@@ -135,5 +136,29 @@ describe("export GEDCOM job routes", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain("HEAD");
+  });
+
+  it("applies explicit per-route rate limits to expensive export job creation", async () => {
+    await app.close();
+    const { EXPENSIVE_ROUTE_RATE_LIMIT } = await import("./rate-limit.js");
+    const { registerExportGedcomJobRoutes } = await import("./export-gedcom-jobs.js");
+    app = Fastify();
+    await app.register(rateLimit, { max: 1000, timeWindow: 60_000 });
+    await app.register(registerExportGedcomJobRoutes);
+    await app.ready();
+    gedcomExportJobCreateMock.mockResolvedValue({
+      id: "job-1",
+      status: "PENDING",
+      createdAt: new Date()
+    });
+
+    for (let i = 0; i < EXPENSIVE_ROUTE_RATE_LIMIT.max; i += 1) {
+      const res = await app.inject({ method: "POST", url: "/export/gedcom/jobs", payload: {} });
+      expect(res.statusCode).toBe(200);
+    }
+
+    const limited = await app.inject({ method: "POST", url: "/export/gedcom/jobs", payload: {} });
+    expect(limited.statusCode).toBe(429);
+    expect(gedcomExportJobCreateMock).toHaveBeenCalledTimes(EXPENSIVE_ROUTE_RATE_LIMIT.max);
   });
 });

@@ -9,6 +9,7 @@ import { prisma } from "../db/client.js";
 import { loadGedcomExportInput } from "../gedcom/loadExportInput.js";
 import { buildGedcomDocument } from "../gedcom/writer.js";
 import { buildGedcomZipManifestV1, zipGedcomExport } from "./export-gedcom.zip.js";
+import { EXPENSIVE_ROUTE_RATE_LIMIT } from "./rate-limit.js";
 
 const truthyQuery = (v: string | undefined): boolean =>
   v === "1" || v === "true" || v === "yes" || v === "on";
@@ -21,7 +22,7 @@ export const registerExportGedcomGetRoute = (app: FastifyInstance) => {
     return;
   }
 
-  app.get("/export/gedcom", async (request, reply) => {
+  app.get("/export/gedcom", { config: { rateLimit: EXPENSIVE_ROUTE_RATE_LIMIT } }, async (request, reply) => {
     const q = request.query as {
       format?: string;
       redactLiving?: string;
