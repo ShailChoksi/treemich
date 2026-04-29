@@ -13,7 +13,7 @@ import type {
   ReportWarning
 } from "@treemich/shared";
 import { lifeEventTypeLabels } from "@treemich/shared";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, Relationship } from "@prisma/client";
 import { prisma } from "../db/client.js";
 import { HttpNotFoundError, HttpValidationError } from "../lifeEvents/errors.js";
 import { reportMaxDepth, reportMaxPeople } from "../config/env.js";
@@ -44,7 +44,7 @@ type FamilyRow = Prisma.FamilyGetPayload<{
   };
 }>;
 
-type RelationshipRow = Prisma.RelationshipGetPayload<{}>;
+type RelationshipRow = Relationship;
 
 type ReportData = {
   people: Map<string, PersonRow>;
