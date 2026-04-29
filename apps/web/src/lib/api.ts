@@ -33,11 +33,16 @@ import type {
   MediaObjectRecord,
   MediaLinkTargetType,
   MergeSourcesBody,
+  MergePeopleBody,
   PatchFamilyBody,
   PatchLifeEventBody,
+  PatchPersonDuplicateCandidateBody,
   PatchPersonNameBody,
   PatchResearchTaskBody,
   PersonNameTypeValue,
+  PersonDuplicateCandidateRecord,
+  PersonDuplicateRecomputeResponse,
+  PersonMergeResult,
   PersonExternalIdentityRecord,
   PersonThumbnailRecord,
   PersonRecord,
@@ -86,11 +91,16 @@ export type {
   MediaLinkTargetType,
   MediaObjectRecord,
   MergeSourcesBody,
+  MergePeopleBody,
   PatchFamilyBody,
   PatchLifeEventBody,
+  PatchPersonDuplicateCandidateBody,
   PatchPersonNameBody,
   PatchResearchTaskBody,
   PersonNameTypeValue,
+  PersonDuplicateCandidateRecord,
+  PersonDuplicateRecomputeResponse,
+  PersonMergeResult,
   PersonExternalIdentityRecord,
   PersonThumbnailRecord,
   PersonRecord,
@@ -345,6 +355,84 @@ export const deletePerson = async (personId: string): Promise<void> => {
     })
   );
   await ensureOk(response, "Failed to delete person");
+};
+
+export type DuplicateCandidateFilters = {
+  status?: "PENDING" | "DISMISSED" | "MERGED";
+  limit?: number;
+  offset?: number;
+};
+
+const duplicateCandidateQuery = (filters?: DuplicateCandidateFilters) => {
+  const params = new URLSearchParams();
+  if (filters?.status) {
+    params.set("status", filters.status);
+  }
+  if (filters?.limit != null) {
+    params.set("limit", String(filters.limit));
+  }
+  if (filters?.offset != null) {
+    params.set("offset", String(filters.offset));
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+};
+
+export const getDuplicateCandidates = async (
+  filters?: DuplicateCandidateFilters,
+  options?: RequestOptions
+): Promise<PersonDuplicateCandidateRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/people/duplicates${duplicateCandidateQuery(filters)}`,
+    {
+      cache: "no-store",
+      signal: options?.signal
+    }
+  );
+  await ensureOk(response, "Failed to load duplicate candidates");
+  const body = (await response.json()) as { candidates?: PersonDuplicateCandidateRecord[] };
+  return body.candidates ?? [];
+};
+
+export const recomputeDuplicateCandidates = async (): Promise<PersonDuplicateRecomputeResponse> => {
+  const response = await fetch(
+    `${treemichApi}/people/duplicates/recompute`,
+    withSession({ method: "POST", headers: { "Content-Type": "application/json" } })
+  );
+  await ensureOk(response, "Failed to recompute duplicate candidates");
+  return (await response.json()) as PersonDuplicateRecomputeResponse;
+};
+
+export const updateDuplicateCandidate = async (
+  candidateId: string,
+  body: PatchPersonDuplicateCandidateBody
+): Promise<PersonDuplicateCandidateRecord> => {
+  const response = await fetch(
+    `${treemichApi}/people/duplicates/${encodeURIComponent(candidateId)}`,
+    withSession({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to update duplicate candidate");
+  return (await response.json()) as PersonDuplicateCandidateRecord;
+};
+
+export const mergeDuplicateCandidate = async (
+  candidateId: string,
+  body: MergePeopleBody
+): Promise<PersonMergeResult> => {
+  const response = await fetch(
+    `${treemichApi}/people/duplicates/${encodeURIComponent(candidateId)}/merge`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to merge people");
+  return (await response.json()) as PersonMergeResult;
 };
 
 /** `PATCH /people/:id` — Treemich profile fields (gender, names, etc.). */

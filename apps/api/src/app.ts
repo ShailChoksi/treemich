@@ -33,6 +33,7 @@ import { registerGraphLayoutPostRoute } from "./routes/graph-layout.post.js";
 import { registerImmichProviderRoutes } from "./routes/immich-provider.js";
 import { registerPeopleGetRoute } from "./routes/people.get.js";
 import { registerPeopleCooccurrenceGetRoute } from "./routes/people-cooccurrence.get.js";
+import { registerPersonDuplicateRoutes } from "./routes/person-duplicates.js";
 import { registerPeopleRelationshipsDeleteRoute } from "./routes/people-relationships.delete.js";
 import { registerPeopleRelationshipsPatchRoute } from "./routes/people-relationships.patch.js";
 import { registerPeopleLifeEventsRoutes } from "./routes/people-life-events.js";
@@ -224,6 +225,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerGraphLayoutPostRoute);
   app.register(registerImmichProviderRoutes);
   app.register(registerPeopleGetRoute);
+  app.register(registerPersonDuplicateRoutes);
   app.register(registerPeopleCooccurrenceGetRoute);
   app.register(registerPeopleThumbnailGetRoute);
   app.register(registerPeopleRelationshipsPostRoute);

@@ -1,6 +1,6 @@
-# Genealogy phases 1–5: completion analysis
+# Genealogy phases 1–5 plus Phase D: completion analysis
 
-This document records **why** the rolled-up plan marks some Phase 1–5 streams as **Partial** (vs **Yes**), what **finishing** them typically involves, and **blockers**. It complements the source plan **“Genealogy feature gap analysis”** (e.g. `genealogy_feature_gap_analysis_0122440a.plan.md` in your Cursor `plans` folder) and the per-phase **Completion status** tables there. Check that plan file for authoritative tables and line-by-line status.
+This document records **why** the rolled-up plan marks some Phase 1–5 and Phase D streams as **Partial** (vs **Yes**), what **finishing** them typically involves, and **blockers**. It complements the source plan **“Genealogy feature gap analysis”** (e.g. `genealogy_feature_gap_analysis_0122440a.plan.md` in your Cursor `plans` folder) and the per-phase **Completion status** tables there. Check that plan file for authoritative tables and line-by-line status.
 
 **How to use:** Treat **Yes** as “shipped for Treemich’s MVP scope.” **Partial** usually means _gap vs a desktop-genealogy ideal_, _optional polish_, _different architecture than the plan’s example_, or _unverified_ behavior—not necessarily that the feature is missing.
 
@@ -8,13 +8,14 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 ## Cross-phase summary
 
-| Phase | Substantive status (plan)        | Partial rows in completion table | Dominant reason for partials                                                          |
-| ----- | -------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
-| **1** | Complete                         | 0                                | NL search can include `PersonName` rows through the saved search preference           |
-| **2** | Complete                         | 1 (Geocoding)                    | Pipelines/flags exist; not “every place auto-filled” by default                       |
-| **3** | Complete                         | 0 (all Yes)                      | Extensions called out only under “Remaining (explicit)”                               |
-| **4** | Complete                         | 0                                | Pedigree-specific graph line styling is implemented                                   |
-| **5** | Complete for Treemich GEDCOM MVP | Several                          | Bar set at Gramps-class toolchain + infra (workers, full CI, storage/error artifacts) |
+| Phase | Substantive status (plan)                            | Partial rows in completion table | Dominant reason for partials                                                          |
+| ----- | ---------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
+| **1** | Complete                                             | 0                                | NL search can include `PersonName` rows through the saved search preference           |
+| **2** | Complete                                             | 1 (Geocoding)                    | Pipelines/flags exist; not “every place auto-filled” by default                       |
+| **3** | Complete                                             | 0 (all Yes)                      | Extensions called out only under “Remaining (explicit)”                               |
+| **4** | Complete                                             | 0                                | Pedigree-specific graph line styling is implemented                                   |
+| **5** | Complete for Treemich GEDCOM MVP                     | Several                          | Bar set at Gramps-class toolchain + infra (workers, full CI, storage/error artifacts) |
+| **D** | Complete for focused Treemich duplicate review/merge | Several verification gaps        | Core queue/API/UI/merge/audit shipped; live DB regression and manual smoke remain     |
 
 ---
 
@@ -22,7 +23,7 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 **Plan exit:** Event types and `customLabel` round-trip; alternate names editable; validation surfaces real issues on bad synthetic data.
 
-### Completion table: partials
+### Phase 1 completion table: partials
 
 | Stream                              | Met?    | Why partial (if applicable)                                                                                                             | Effort to close | Blockers |
 | ----------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------- |
@@ -44,7 +45,7 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 **Plan exit:** Tasks CRUD stable; timeline shows event types; map acceptable at ~500 pins (plan suggests a load-test harness; not required to be checked in).
 
-### Completion table: partials
+### Phase 2 completion table: partials
 
 | Stream         | Met?        | Why partial (if applicable)                                                                                                  | Effort to close                                                  | Blockers                                   |
 | -------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------ |
@@ -65,14 +66,14 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 **Plan exit:** Shared sources, citations on life events, media openable; migration path from older citation shape (already consolidated in schema).
 
-### Completion table: partials
+### Phase 3 completion table: partials
 
 **None** — all streams **Yes**.
 
-### Remaining (explicit)
+### Phase 3 remaining (explicit)
 
 - **`MediaLinkTargetType` for `Family`**: shipped in Phase C with target validation, family UI attach/unlink, and GEDCOM FAM-root OBJE import/export alignment.
-- **Deduplication UX** beyond merge-sources API: medium.
+- **Source deduplication UX** beyond merge-sources API: medium. Person duplicate review/merge shipped in Phase D.
 - **Signed URLs / object storage** hardening for large evidence files: medium–high (infra, security, cost).
 
 ---
@@ -81,14 +82,14 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 **Plan exit:** Manual spot-checks; Phase 5a emits **FAM** in GEDCOM (see Phase 5 / writer).
 
-### Completion table: partials
+### Phase 4 completion table: partials
 
 | Stream                                                                    | Met?    | Why partial (if applicable)                                                                                            | Effort to close | Blockers |
 | ------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------- | --------------- | -------- |
 | ADR 0001, schema, migration, life events, API, UI, NL, account `families` | Yes     | —                                                                                                                      | —               | —        |
 | **Graph**                                                                 | **Yes** | Layout uses parent/child edges and pedigree-specific parent-edge styling is implemented for non-biological child links | —               | —        |
 
-### Remaining (explicit)
+### Phase 4 remaining (explicit)
 
 - Optional **dry-run / preview UI** for Phase 4 **backfill** (CLI + logs today): medium.
 - **`Family.externalIds.gedcomFam`**: plan marks **done** (migration 0020); behavior tied to GEDCOM in Phase 5.
@@ -101,7 +102,7 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 **Product constraint:** People are Treemich-owned identities. GEDCOM import can create Treemich people with `unmatchedIndiPolicy: "CREATE"`; creating people inside Immich remains out of scope.
 
-### Completion table: partials (high level)
+### Phase 5 completion table: partials (high level)
 
 | Stream                                        | Met?                            | Why partial                                                                                                                                                              | Effort to close                                       | Blockers                                |
 | --------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | --------------------------------------- |
@@ -128,6 +129,32 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 ---
 
+## Phase D — Duplicate candidates and guarded merge
+
+**Plan exit:** User-reviewed duplicate candidate queue; merge requires explicit confirmation; Treemich-owned person references move to the canonical person in one DB transaction; external identities are preserved; audit entries record merge outcome.
+
+### Phase D completion table: partials (high level)
+
+| Stream                   | Met?          | Why partial                                                                                                                                                                                                                                                                        | Effort to close                                     | Blockers                          |
+| ------------------------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------- |
+| Candidate schema + audit | Yes           | `PersonDuplicateCandidate`, `PersonDuplicateCandidateStatus`, and `PersonMergeAudit` shipped in migration `0029_phase_d_person_duplicates`                                                                                                                                         | —                                                   | —                                 |
+| Shared contracts         | Yes           | `packages/shared/src/personDuplicates.ts` has list, patch, merge, reason, recompute, and result types/schemas                                                                                                                                                                      | —                                                   | —                                 |
+| Detection API            | Yes / Partial | `POST /people/duplicates/recompute` scores normalized names, surname/given initial, birth/death dates, close family graph overlap, and co-occurrence support; broad fuzzy matching/tuning remains future polish                                                                    | Low–medium: add corpus/tuning data                  | Product scoring judgment          |
+| Review API               | Yes           | `GET /people/duplicates`, `PATCH /people/duplicates/:id`, and persisted dismissed state exist                                                                                                                                                                                      | —                                                   | —                                 |
+| Merge engine             | Yes / Partial | Guarded transaction moves known person FKs/pseudo-FKs, dedupes relationship/family child/person media/co-occurrence collisions, preserves external identities, writes `PersonMergeAudit`, then deletes the duplicate profile. Live DB FK regression suite still needs to be added. | Medium: add throwaway DB regression seed/assertions | Test DB setup, collision fixtures |
+| Web workspace            | Yes / Partial | `DuplicateReviewWorkspace` is mounted as active Duplicates workspace with recompute, refresh, open-person actions, dismiss, canonical selection, and merge confirmation. Page-level integration smoke remains optional hardening.                                                  | Low: add page integration smoke                     | UI test fixture breadth           |
+| Verification             | Partial       | Focused shared/API/web tests, lint, Prettier, Prisma format/generate passed. Throwaway migration smoke, live DB merge regression, and manual UI smoke remain.                                                                                                                      | Low–medium                                          | Test database/runtime             |
+
+### Phase D remaining (explicit)
+
+- Add a live DB `person-merge` regression suite covering every person reference surface and collision case.
+- Run `npx prisma migrate deploy --schema apps/api/prisma/schema.prisma` against a throwaway database that includes migration `0029_phase_d_person_duplicates`.
+- Manual smoke: create likely duplicate people, recompute, dismiss/reopen, merge into canonical, verify graph/person details/families/research still load.
+- Broader duplicate scoring corpus/tuning for large real-world trees.
+- Immich-native face merge remains out of scope; Treemich preserves distinct Immich external identities on the canonical person.
+
+---
+
 ## Tracking
 
 | Follow-up                                | Suggested owner      | Suggested signal                            |
@@ -137,6 +164,7 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 | Media on `Family` (Phase 3)              | Product + full-stack | ADR + schema                                |
 | Graph pedigree styling (Phase 4)         | Frontend             | Implemented; keep regression tests          |
 | GEDCOM partials (Phase 5)                | Platform + product   | Roadmap; Immich contact for people creation |
+| Duplicate merge hardening (Phase D)      | Platform + QA        | Add live DB FK regression and manual smoke  |
 
 ---
 

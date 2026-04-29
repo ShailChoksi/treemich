@@ -25,6 +25,7 @@ import type {
   PlacesMapPoint,
   ResearchTaskRecord,
   RelationshipRecord,
+  PersonDuplicateCandidateRecord,
   TimelineEventRecord,
   RelationshipType,
   UserPreferences,
@@ -56,6 +57,7 @@ import {
   deleteRelationship,
   deleteRelationshipLifeEvent,
   getPeople,
+  getDuplicateCandidates,
   getPlacesMap,
   getPersonLifeEvents,
   getPersonTimeline,
@@ -74,7 +76,10 @@ import {
   updatePersonProfile,
   updateUserPreferences,
   recomputeValidationFindings,
-  updateValidationFinding
+  updateValidationFinding,
+  recomputeDuplicateCandidates,
+  updateDuplicateCandidate,
+  mergeDuplicateCandidate
 } from "../lib/api";
 import {
   buildBirthPlaceInput,
@@ -96,6 +101,7 @@ import { GedcomInterchangeSection } from "../components/GedcomInterchangeSection
 import { ImmichImportWorkspace } from "../components/ImmichImportWorkspace";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
 import { ResearchWorkspace } from "../components/ResearchWorkspace";
+import { DuplicateReviewWorkspace } from "../components/DuplicateReviewWorkspace";
 import { CreatePersonDialog } from "../components/CreatePersonDialog";
 import { MapPlacesPanel } from "../components/MapPlacesPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
@@ -109,7 +115,15 @@ const CONTEXT_OPEN_STORAGE_KEY = "treemich.contextOpen";
 const GRAPH_UI_STATE_STORAGE_KEY = "treemich.graph.uiState";
 const MAP_UI_STATE_STORAGE_KEY = "treemich.map.uiState";
 
-type WorkspaceId = "tree" | "research" | "evidence" | "interchange" | "places" | "reports" | "settings";
+type WorkspaceId =
+  | "tree"
+  | "duplicates"
+  | "research"
+  | "evidence"
+  | "interchange"
+  | "places"
+  | "reports"
+  | "settings";
 
 type WorkspaceItem = {
   id: WorkspaceId;
@@ -120,6 +134,7 @@ type WorkspaceItem = {
 
 const WORKSPACE_ITEMS: WorkspaceItem[] = [
   { id: "tree", label: "Tree", iconLabel: "TR" },
+  { id: "duplicates", label: "Duplicates", iconLabel: "DQ" },
   { id: "research", label: "Research", iconLabel: "RS" },
   { id: "evidence", label: "Evidence", iconLabel: "EV" },
   { id: "interchange", label: "Interchange", iconLabel: "GX" },
@@ -465,6 +480,8 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [allResearchTasksLoading, setAllResearchTasksLoading] = useState(false);
   const [validationFindings, setValidationFindings] = useState<ValidationFindingRecord[]>([]);
   const [validationFindingsLoading, setValidationFindingsLoading] = useState(false);
+  const [duplicateCandidates, setDuplicateCandidates] = useState<PersonDuplicateCandidateRecord[]>([]);
+  const [duplicateCandidatesLoading, setDuplicateCandidatesLoading] = useState(false);
   const [familiesByPersonId, setFamiliesByPersonId] = useState<Record<string, FamilyRecord[] | undefined>>(
     {}
   );
@@ -1780,6 +1797,16 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     }
   }, []);
 
+  const refreshDuplicateCandidates = useCallback(async () => {
+    setDuplicateCandidatesLoading(true);
+    try {
+      const candidates = await getDuplicateCandidates({ status: "PENDING", limit: 100 });
+      setDuplicateCandidates(candidates);
+    } finally {
+      setDuplicateCandidatesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeWorkspace !== "research") {
       return;
@@ -1791,6 +1818,15 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       setStatus(`Could not load validation findings: ${getErrorMessage(err)}`);
     });
   }, [activeWorkspace, refreshAllResearchTasks, refreshValidationFindings]);
+
+  useEffect(() => {
+    if (activeWorkspace !== "duplicates") {
+      return;
+    }
+    void refreshDuplicateCandidates().catch((err: unknown) => {
+      setStatus(`Could not load duplicate candidates: ${getErrorMessage(err)}`);
+    });
+  }, [activeWorkspace, refreshDuplicateCandidates]);
 
   const handleResearchTaskCreate = useCallback(
     async (body: CreateResearchTaskBody) => {
@@ -1848,6 +1884,38 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       await refreshValidationFindings();
     },
     [refreshValidationFindings]
+  );
+
+  const handleDuplicateRecompute = useCallback(async () => {
+    const result = await recomputeDuplicateCandidates();
+    setDuplicateCandidates(result.candidates);
+    setStatus(
+      `Duplicate scan complete: ${result.summary.pending} pending candidate(s), ${result.summary.created} new`
+    );
+  }, []);
+
+  const handleDuplicateDismiss = useCallback(
+    async (candidateId: string) => {
+      await updateDuplicateCandidate(candidateId, { status: "DISMISSED" });
+      await refreshDuplicateCandidates();
+    },
+    [refreshDuplicateCandidates]
+  );
+
+  const handleDuplicateMerge = useCallback(
+    async (candidateId: string, canonicalPersonId: string, duplicatePersonId: string) => {
+      const result = await mergeDuplicateCandidate(candidateId, {
+        canonicalPersonId,
+        duplicatePersonId,
+        confirm: true
+      });
+      await refreshGraphData({ bypassSaveGuard: true });
+      await refreshDuplicateCandidates();
+      setSelectedPersonId(result.canonicalPersonId);
+      setGraphCameraFocusPersonId(result.canonicalPersonId);
+      setStatus(`Merged duplicate person into ${result.canonicalPersonId}`);
+    },
+    [refreshDuplicateCandidates, refreshGraphData]
   );
 
   const openPersonFromResearch = useCallback((personId: string) => {
@@ -2236,6 +2304,20 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onTaskUpdate={handleResearchTaskUpdate}
           onTaskDelete={handleResearchTaskDelete}
           onFindingStatusChange={handleValidationFindingStatusChange}
+          onOpenPerson={openPersonFromResearch}
+        />
+      );
+    }
+
+    if (activeWorkspace === "duplicates") {
+      return (
+        <DuplicateReviewWorkspace
+          candidates={duplicateCandidates}
+          loading={duplicateCandidatesLoading}
+          onRefresh={refreshDuplicateCandidates}
+          onRecompute={handleDuplicateRecompute}
+          onDismiss={handleDuplicateDismiss}
+          onMerge={handleDuplicateMerge}
           onOpenPerson={openPersonFromResearch}
         />
       );

@@ -11,6 +11,7 @@ import {
   deleteFamilyLifeEvent,
   getFamiliesForPerson,
   getFamilyLifeEvents,
+  getDuplicateCandidates,
   getPlacesMap,
   getPersonTimeline,
   getResearchTasks,
@@ -31,9 +32,12 @@ import {
   listEvidenceSources,
   login,
   logout,
+  mergeDuplicateCandidate,
   mergeEvidenceSources,
   patchFamily,
+  recomputeDuplicateCandidates,
   recomputeValidationFindings,
+  updateDuplicateCandidate,
   updateValidationFinding,
   updateFamilyLifeEvent
 } from "./api";
@@ -1080,5 +1084,76 @@ describe("people API helpers", () => {
     );
 
     await expect(deletePerson("missing")).rejects.toBeInstanceOf(ApiHttpError);
+  });
+
+  it("loads duplicate candidates with filters", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ candidates: [{ id: "dup-1", status: "PENDING" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const candidates = await getDuplicateCandidates({ status: "PENDING", limit: 25 });
+
+    expect(candidates).toEqual([{ id: "dup-1", status: "PENDING" }]);
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toContain(
+      "/api/people/duplicates?status=PENDING&limit=25"
+    );
+  });
+
+  it("posts duplicate recompute, status update, and merge requests", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            candidates: [],
+            summary: { created: 1, updated: 0, preservedDismissed: 0, pending: 1 }
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "dup-1", status: "DISMISSED" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ auditId: "audit-1", canonicalPersonId: "p1", duplicatePersonId: "p2" }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        )
+      );
+
+    await recomputeDuplicateCandidates();
+    await updateDuplicateCandidate("dup-1", { status: "DISMISSED" });
+    await mergeDuplicateCandidate("dup-1", {
+      canonicalPersonId: "p1",
+      duplicatePersonId: "p2",
+      confirm: true
+    });
+
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/people/duplicates/recompute",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/people/duplicates/dup-1",
+      expect.objectContaining({ method: "PATCH", credentials: "include" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/people/duplicates/dup-1/merge",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
   });
 });

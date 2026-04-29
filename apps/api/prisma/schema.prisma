@@ -104,6 +104,12 @@ enum ValidationFindingSeverity {
   WARNING
 }
 
+enum PersonDuplicateCandidateStatus {
+  PENDING
+  DISMISSED
+  MERGED
+}
+
 /// GEDCOM-style pedigree for a child within a family union (FAM / CHIL).
 enum FamilyChildPedigree {
   BIOLOGICAL
@@ -126,13 +132,13 @@ enum PersonThumbnailSource {
 }
 
 model TreemichUser {
-  id                       String                   @id @default(cuid())
+  id                       String                     @id @default(cuid())
   email                    String?
   name                     String?
   passwordHash             String?
-  preferences              Json                     @default("{}")
-  createdAt                DateTime                 @default(now())
-  updatedAt                DateTime                 @updatedAt
+  preferences              Json                       @default("{}")
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
   linkedAccount            LinkedImmichAccount?
   sessions                 TreemichSession[]
   profiles                 PersonProfile[]
@@ -152,6 +158,8 @@ model TreemichUser {
   mediaObjects             MediaObject[]
   mediaLinks               MediaLink[]
   validationFindings       ValidationFinding[]
+  duplicateCandidates      PersonDuplicateCandidate[]
+  personMergeAudits        PersonMergeAudit[]
   families                 Family[]
   gedcomImportJobs         GedcomImportJob[]
   gedcomExportJobs         GedcomExportJob[]
@@ -190,32 +198,35 @@ model TreemichSession {
 }
 
 model PersonProfile {
-  id                        String                   @id @default(cuid())
+  id                        String                     @id @default(cuid())
   userId                    String
-  gender                    Gender                   @default(UNKNOWN)
+  gender                    Gender                     @default(UNKNOWN)
   displayNameOverride       String?
   givenName                 String?
   surname                   String?
   nicknames                 String?
   /// Optional map for interchange (e.g. `{ "gedcomXref": "I42" }`). Not used by core UI yet.
-  externalIds               Json                     @default("{}")
-  createdAt                 DateTime                 @default(now())
-  updatedAt                 DateTime                 @updatedAt
-  user                      TreemichUser             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  externalIds               Json                       @default("{}")
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  user                      TreemichUser               @relation(fields: [userId], references: [id], onDelete: Cascade)
   externalIdentities        PersonExternalIdentity[]
   thumbnails                PersonThumbnail[]
-  fromRelationships         Relationship[]           @relation("FromPerson")
-  toRelationships           Relationship[]           @relation("ToPerson")
+  fromRelationships         Relationship[]             @relation("FromPerson")
+  toRelationships           Relationship[]             @relation("ToPerson")
   lifeEvents                LifeEvent[]
   personNames               PersonName[]
   researchTasks             ResearchTask[]
-  familiesAsParent1         Family[]                 @relation("FamilyParent1")
-  familiesAsParent2         Family[]                 @relation("FamilyParent2")
-  familiesAsChild           FamilyChild[]            @relation("FamilyChild")
-  cooccurrenceAsA           CooccurrenceEdge[]       @relation("CooccurrencePersonA")
-  cooccurrenceAsB           CooccurrenceEdge[]       @relation("CooccurrencePersonB")
-  validationFindings        ValidationFinding[]      @relation("ValidationFindingPerson")
-  relatedValidationFindings ValidationFinding[]      @relation("ValidationFindingRelatedPerson")
+  familiesAsParent1         Family[]                   @relation("FamilyParent1")
+  familiesAsParent2         Family[]                   @relation("FamilyParent2")
+  familiesAsChild           FamilyChild[]              @relation("FamilyChild")
+  cooccurrenceAsA           CooccurrenceEdge[]         @relation("CooccurrencePersonA")
+  cooccurrenceAsB           CooccurrenceEdge[]         @relation("CooccurrencePersonB")
+  validationFindings        ValidationFinding[]        @relation("ValidationFindingPerson")
+  relatedValidationFindings ValidationFinding[]        @relation("ValidationFindingRelatedPerson")
+  duplicateCandidateAsA     PersonDuplicateCandidate[] @relation("DuplicateCandidatePersonA")
+  duplicateCandidateAsB     PersonDuplicateCandidate[] @relation("DuplicateCandidatePersonB")
+  canonicalMergeAudits      PersonMergeAudit[]         @relation("PersonMergeAuditCanonical")
 
   @@index([userId])
   @@index([userId, givenName])
@@ -537,6 +548,49 @@ model ValidationFinding {
   @@index([userId, personId])
   @@index([userId, relationshipId])
   @@index([userId, familyId])
+}
+
+model PersonDuplicateCandidate {
+  id          String                         @id @default(cuid())
+  userId      String
+  personAId   String
+  personBId   String
+  score       Int
+  reasons     Json                           @default("[]")
+  status      PersonDuplicateCandidateStatus @default(PENDING)
+  dismissedAt DateTime?
+  mergedAt    DateTime?
+  createdAt   DateTime                       @default(now())
+  updatedAt   DateTime                       @updatedAt
+  user        TreemichUser                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personA     PersonProfile                  @relation("DuplicateCandidatePersonA", fields: [personAId], references: [id], onDelete: Cascade)
+  personB     PersonProfile                  @relation("DuplicateCandidatePersonB", fields: [personBId], references: [id], onDelete: Cascade)
+  mergeAudits PersonMergeAudit[]
+
+  @@unique([userId, personAId, personBId])
+  @@index([userId, status, score])
+  @@index([personAId])
+  @@index([personBId])
+}
+
+model PersonMergeAudit {
+  id                     String                    @id @default(cuid())
+  userId                 String
+  candidateId            String?
+  canonicalPersonId      String
+  duplicatePersonId      String
+  changedCounts          Json                      @default("{}")
+  warnings               Json                      @default("[]")
+  externalIdentityPolicy String
+  metadata               Json                      @default("{}")
+  createdAt              DateTime                  @default(now())
+  user                   TreemichUser              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidate              PersonDuplicateCandidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+  canonicalPerson        PersonProfile             @relation("PersonMergeAuditCanonical", fields: [canonicalPersonId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([candidateId])
+  @@index([canonicalPersonId])
 }
 
 model CooccurrenceSchedule {

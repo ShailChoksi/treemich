@@ -15,6 +15,7 @@ import { TreemichAuthError } from "./auth/service.js";
 import { CooccurrenceService } from "./cooccurrence/service.js";
 import { ImmichClientFactory } from "./integrations/immich/factory.js";
 import { LifeEventService } from "./lifeEvents/service.js";
+import { PersonDuplicateService } from "./personDuplicates/service.js";
 import { PersonNameService } from "./personNames/service.js";
 import { EvidenceService } from "./evidence/service.js";
 import { FamilyService } from "./families/service.js";
@@ -30,6 +31,7 @@ export type AppServices = {
   immichClientFactory: ImmichClientFactory;
   relationshipService: RelationshipService;
   personService: PersonService;
+  personDuplicateService?: PersonDuplicateService;
   familyService: FamilyService;
   lifeEventService: LifeEventService;
   personNameService: PersonNameService;
@@ -48,6 +50,7 @@ export const buildServices = (): AppServices => {
     cooccurrenceService: new CooccurrenceService(),
     immichClientFactory: new ImmichClientFactory(),
     personService,
+    personDuplicateService: new PersonDuplicateService(),
     relationshipService,
     familyService: new FamilyService(relationshipService, personService),
     lifeEventService,
