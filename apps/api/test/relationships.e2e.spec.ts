@@ -215,7 +215,12 @@ describe("Treemich API routes", () => {
     name: string;
     gender?: string;
     externalDisplayName?: string | null;
-    alternateNames?: Array<{ givenName?: string | null; surname?: string | null; prefix?: string | null; suffix?: string | null }>;
+    alternateNames?: Array<{
+      givenName?: string | null;
+      surname?: string | null;
+      prefix?: string | null;
+      suffix?: string | null;
+    }>;
   }) => {
     const [givenName, ...surnameParts] = person.name.split(/\s+/);
     return {

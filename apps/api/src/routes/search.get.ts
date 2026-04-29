@@ -161,7 +161,8 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
       select: { preferences: true }
     });
     const includeAlternateNames =
-      withUserPreferenceDefaults(parseUserPreferences(userRow.preferences)).searchIncludeAlternateNames === true;
+      withUserPreferenceDefaults(parseUserPreferences(userRow.preferences)).searchIncludeAlternateNames ===
+      true;
     const normalizedSourceName = interpreted.parsed.sourceName.trim().toLowerCase();
     const searchablePeople = await loadSearchPeople(auth.user.id);
     const sourceCandidates = searchablePeople

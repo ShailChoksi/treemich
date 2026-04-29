@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../config/env.js", () => ({
   env: { TREEMICH_GEDCOM_JOB_STALE_AFTER_MS: 60_000 },
   maxGedcomImportLines: () => 250_000,
+  maxGedcomImportLineLogEntries: () => 2000,
   maxGedcomMediaFileBytes: () => 50_000_000
 }));
 

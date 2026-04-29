@@ -5,16 +5,12 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";
-import {
-  isGedcomImportEnabled,
-  maxGedcomImportBytes,
-  maxGedcomImportLineLogEntries,
-  maxGedcomMediaArchiveBytes
-} from "../config/env.js";
+import { isGedcomImportEnabled, maxGedcomImportBytes, maxGedcomMediaArchiveBytes } from "../config/env.js";
 import { prisma } from "../db/client.js";
 import { parseGedcomArchive, stageGedcomArchiveMediaFiles } from "../gedcom/archiveImport.js";
 import {
   buildGedcomImportPreview,
+  capGedcomLineLog,
   mergeIndiMatches,
   scheduleGedcomImportJob,
   validateFamMatches
@@ -129,7 +125,7 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
         unmatchedIndis: unmatched,
         unmatchedIndiPolicy: "MATCH_ONLY",
         famMatchError: famError,
-        lineLog: preview.lineLog.slice(0, maxGedcomImportLineLogEntries()),
+        lineLog: capGedcomLineLog(preview.lineLog),
         userId: auth.user.id
       };
     }
@@ -163,7 +159,7 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
         unmatchedIndis: unmatched,
         unmatchedIndiPolicy: "MATCH_ONLY",
         famMatchError: famError,
-        lineLog: [...archive.lineLog, ...preview.lineLog].slice(0, maxGedcomImportLineLogEntries()),
+        lineLog: capGedcomLineLog([...archive.lineLog, ...preview.lineLog]),
         userId: auth.user.id
       };
     }
@@ -195,7 +191,7 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
           gedcomUtf8: body.gedcomUtf8,
           indiMatches: body.indiMatches as object,
           importOptions: (body.importOptions ?? {}) as object,
-          lineLog: preview.lineLog.slice(0, maxGedcomImportLineLogEntries())
+          lineLog: capGedcomLineLog(preview.lineLog)
         }
       });
       scheduleGedcomImportJob(job.id, app.services, app.log);
@@ -243,7 +239,7 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
           gedcomUtf8: archive.gedcomUtf8,
           indiMatches: indiMatches as object,
           importOptions: importOptions as object,
-          lineLog: [...archive.lineLog, ...preview.lineLog].slice(0, maxGedcomImportLineLogEntries())
+          lineLog: capGedcomLineLog([...archive.lineLog, ...preview.lineLog])
         }
       });
       try {
@@ -265,11 +261,11 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
             status: "FAILED",
             completedAt: new Date(),
             errorMessage: message,
-            lineLog: [
+            lineLog: capGedcomLineLog([
               ...archive.lineLog,
               ...preview.lineLog,
               { severity: "error", lineNo: 0, message }
-            ].slice(0, maxGedcomImportLineLogEntries())
+            ])
           }
         });
         throw e;
@@ -304,7 +300,7 @@ export const registerImportGedcomRoutes = (app: FastifyInstance) => {
       errorMessage: job.errorMessage,
       summary: job.summary,
       lineLog: Array.isArray(job.lineLog)
-        ? (job.lineLog as unknown[]).slice(0, maxGedcomImportLineLogEntries())
+        ? capGedcomLineLog(job.lineLog as Parameters<typeof capGedcomLineLog>[0])
         : []
     };
   });

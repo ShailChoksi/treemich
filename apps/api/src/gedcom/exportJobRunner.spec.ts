@@ -86,4 +86,38 @@ describe("processGedcomExportJob", () => {
     expect(mocks.loadGedcomExportInput).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
   });
+
+  it("allows stale RUNNING export jobs to be reclaimed by the in-process worker", async () => {
+    const { processGedcomExportJob } = await import("./exportJobRunner.js");
+    mocks.updateMany.mockResolvedValueOnce({ count: 1 });
+    mocks.findUnique.mockResolvedValue({
+      id: "job-stale",
+      userId: "user-1",
+      redactLiving: false,
+      includeTreemichCustomTags: true
+    });
+    mocks.loadGedcomExportInput.mockResolvedValue({ personProfiles: [] });
+    mocks.buildGedcomDocument.mockReturnValue({ gedcomUtf8: "0 HEAD\n0 TRLR\n" });
+
+    await processGedcomExportJob("job-stale");
+
+    expect(mocks.updateMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            expect.objectContaining({
+              status: "RUNNING",
+              startedAt: { lt: expect.any(Date) }
+            })
+          ])
+        })
+      })
+    );
+    expect(mocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "COMPLETED" })
+      })
+    );
+  });
 });

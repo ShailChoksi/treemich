@@ -85,4 +85,50 @@ describe("GEDCOM export → import preview (Phase 5 round-trip sanity)", () => {
     ]);
     expect(validateFamMatches(preview, merged)).toBeNull();
   });
+
+  it("checked-in Phase B rich fixture covers family pedigree, names, events, sources, and URL media", () => {
+    const ged = readFileSync(join(__dirname, "fixtures", "phase-b-family-rich.ged"), "utf8");
+    const preview = buildGedcomImportPreview(ged);
+    const merged = mergeIndiMatches({}, preview.records);
+
+    expect(preview.indis.map((row) => row.personHint).sort()).toEqual([
+      "immich-jamie",
+      "immich-lee",
+      "immich-robin"
+    ]);
+    expect(preview.fams).toEqual([
+      {
+        xref: "@F1@",
+        husbXref: "@I2@",
+        wifeXref: "@I1@",
+        childXrefs: ["@I3@"]
+      }
+    ]);
+    expect(preview.media).toEqual([
+      {
+        xref: "@O1@",
+        file: "https://media.example.test/reunion.jpg",
+        form: "image/jpeg",
+        title: "Reunion photo"
+      }
+    ]);
+    expect(ged).toContain("2 PEDI adopted");
+    expect(ged).toContain("2 TYPE DNA Match");
+    expect(ged).toContain("2 DATE MAR 2010");
+    expect(validateFamMatches(preview, merged)).toBeNull();
+  });
+
+  it("checked-in unknown-charset fixture currently parses as UTF-8 text without rejecting", () => {
+    const ged = readFileSync(join(__dirname, "fixtures", "phase-b-unknown-charset.ged"), "utf8");
+    const preview = buildGedcomImportPreview(ged);
+
+    expect(preview.lineLog.filter((entry) => entry.severity === "error")).toHaveLength(0);
+    expect(preview.indis).toEqual([
+      {
+        xref: "@I1@",
+        displayName: "Plain Charset",
+        personHint: null
+      }
+    ]);
+  });
 });

@@ -249,6 +249,18 @@ describe("PeoplePage + life events (integration)", () => {
         });
       }
 
+      if (method === "POST" && url.endsWith("/import/gedcom/preview")) {
+        return jsonResponse({
+          indis: [],
+          fams: [],
+          media: [],
+          archiveMediaFiles: [],
+          unmatchedIndis: [],
+          famMatchError: null,
+          lineLog: []
+        });
+      }
+
       return jsonResponse({ error: `unmocked ${method} ${url}` }, 404);
     }) as typeof fetch;
   });
@@ -668,8 +680,50 @@ describe("PeoplePage + life events (integration)", () => {
 
     expect(container.textContent).toContain("Search settings");
     expect(container.textContent).toContain("Match alternate Treemich names in relationship search");
-    const checkbox = container.querySelector('.settings-toggle input[type="checkbox"]') as HTMLInputElement | null;
+    const checkbox = container.querySelector(
+      '.settings-toggle input[type="checkbox"]'
+    ) as HTMLInputElement | null;
     expect(checkbox?.checked).toBe(true);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("renders the Interchange workspace and probes GEDCOM import availability", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    const interchangeNav = container.querySelector(
+      '[data-workspace="interchange"]'
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      interchangeNav!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    for (let i = 0; i < 20; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const fetchMock = vi.mocked(globalThis.fetch);
+      if (fetchMock.mock.calls.some((call) => String(call[0]).endsWith("/import/gedcom/preview"))) {
+        break;
+      }
+    }
+
+    expect(container.textContent).toContain("Interchange workspace");
+    expect(container.textContent).toContain("GEDCOM import / export");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).endsWith("/import/gedcom/preview"))).toBe(
+      true
+    );
 
     act(() => {
       root.unmount();
@@ -724,12 +778,14 @@ describe("PeoplePage + life events (integration)", () => {
       await Promise.resolve();
     });
 
-    const preferencePatch = vi.mocked(globalThis.fetch).mock.calls.find(
-      (call) =>
-        String(call[0]).endsWith("/user/preferences") &&
-        call[1]?.method === "PATCH" &&
-        String(call[1]?.body).includes("searchIncludeAlternateNames")
-    );
+    const preferencePatch = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.find(
+        (call) =>
+          String(call[0]).endsWith("/user/preferences") &&
+          call[1]?.method === "PATCH" &&
+          String(call[1]?.body).includes("searchIncludeAlternateNames")
+      );
     expect(preferencePatch?.[1]?.body).toBe(JSON.stringify({ searchIncludeAlternateNames: false }));
     expect(container.textContent).toContain("Alternate-name relationship search disabled.");
 

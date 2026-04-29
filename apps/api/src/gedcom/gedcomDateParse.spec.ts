@@ -22,4 +22,27 @@ describe("parseGedcomDate", () => {
     expect(p?.year).toBe(1900);
     expect(p?.endYear).toBe(1910);
   });
+
+  it("parses partial month-year dates", () => {
+    const p = parseGedcomDate("MAR 2010");
+    expect(p).toMatchObject({
+      dateQualifier: "EXACT",
+      year: 2010,
+      month: 3,
+      day: null
+    });
+  });
+
+  it("parses before and after qualified dates", () => {
+    expect(parseGedcomDate("BEF 1980")).toMatchObject({
+      dateQualifier: "BEFORE",
+      year: 1980
+    });
+    expect(parseGedcomDate("AFT 31 DEC 1999")).toMatchObject({
+      dateQualifier: "AFTER",
+      year: 1999,
+      month: 12,
+      day: 31
+    });
+  });
 });

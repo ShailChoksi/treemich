@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildGedcomImportPreview, mergeIndiMatches, validateFamMatches } from "./importRunner.js";
+import {
+  buildGedcomImportPreview,
+  capGedcomLineLog,
+  mergeIndiMatches,
+  validateFamMatches
+} from "./importRunner.js";
 
 describe("buildGedcomImportPreview", () => {
   it("lists indis and fams and merges _TREEMICH hint into matches", () => {
@@ -44,6 +49,26 @@ describe("buildGedcomImportPreview", () => {
         file: "media/photo.jpg",
         form: "image/jpeg",
         title: "Portrait"
+      }
+    ]);
+  });
+
+  it("caps lineLog with an explicit truncation warning", () => {
+    const capped = capGedcomLineLog(
+      [
+        { severity: "warn", lineNo: 1, message: "first" },
+        { severity: "warn", lineNo: 2, message: "second" },
+        { severity: "error", lineNo: 3, message: "third" }
+      ],
+      2
+    );
+
+    expect(capped).toEqual([
+      { severity: "warn", lineNo: 1, message: "first" },
+      {
+        severity: "warn",
+        lineNo: 0,
+        message: "GEDCOM import diagnostics truncated; 2 additional entries were omitted."
       }
     ]);
   });

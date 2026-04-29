@@ -1090,7 +1090,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       void updateUserPreferences({ searchIncludeAlternateNames: next })
         .then((nextPrefs) => {
           setSavedPreferences(nextPrefs);
-          setStatus(next ? "Alternate-name relationship search enabled." : "Alternate-name relationship search disabled.");
+          setStatus(
+            next
+              ? "Alternate-name relationship search enabled."
+              : "Alternate-name relationship search disabled."
+          );
         })
         .catch((err: unknown) => {
           setSavedPreferences(previous);
@@ -2060,7 +2064,9 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         <section className="workspace-main-stack workspace-main-stack--secondary">
           <section className="card stack workspace-intro-card">
             <h2>Research workspace</h2>
-            <p className="hint">Planned for Phase C. Research tasks remain available in the tree inspector.</p>
+            <p className="hint">
+              Planned for Phase C. Research tasks remain available in the tree inspector.
+            </p>
           </section>
         </section>
       );
@@ -2071,7 +2077,9 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
         <section className="workspace-main-stack workspace-main-stack--secondary">
           <section className="card stack workspace-intro-card">
             <h2>Reports workspace</h2>
-            <p className="hint">Planned for Phase E. Printable charts, PDFs, and family sheets are not active yet.</p>
+            <p className="hint">
+              Planned for Phase E. Printable charts, PDFs, and family sheets are not active yet.
+            </p>
           </section>
         </section>
       );
