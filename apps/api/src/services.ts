@@ -15,10 +15,15 @@ import { TreemichAuthError } from "./auth/service.js";
 import { CooccurrenceService } from "./cooccurrence/service.js";
 import { ImmichClientFactory } from "./integrations/immich/factory.js";
 import { LifeEventService } from "./lifeEvents/service.js";
+import { PersonDuplicateService } from "./personDuplicates/service.js";
 import { PersonNameService } from "./personNames/service.js";
 import { EvidenceService } from "./evidence/service.js";
+import { FamilyService } from "./families/service.js";
+import { PersonService } from "./people/service.js";
+import { ReportDataService } from "./reports/reportDataService.js";
 import { ResearchTaskService } from "./researchTasks/service.js";
 import { RelationshipService } from "./relationships/service.js";
+import { ValidationFindingService } from "./validation/validationFindingService.js";
 
 /** Service container attached to each Fastify instance (`app.services`). */
 export type AppServices = {
@@ -26,24 +31,36 @@ export type AppServices = {
   cooccurrenceService: CooccurrenceService;
   immichClientFactory: ImmichClientFactory;
   relationshipService: RelationshipService;
+  personService: PersonService;
+  personDuplicateService?: PersonDuplicateService;
+  familyService: FamilyService;
   lifeEventService: LifeEventService;
   personNameService: PersonNameService;
   researchTaskService: ResearchTaskService;
   evidenceService: EvidenceService;
+  validationFindingService?: ValidationFindingService;
+  reportService?: ReportDataService;
 };
 
 /** Constructs default service instances (shared `LifeEventService` wired into `RelationshipService`). */
 export const buildServices = (): AppServices => {
   const lifeEventService = new LifeEventService();
+  const personService = new PersonService();
+  const relationshipService = new RelationshipService(lifeEventService);
   return {
     authService: new AuthService(),
     cooccurrenceService: new CooccurrenceService(),
     immichClientFactory: new ImmichClientFactory(),
-    relationshipService: new RelationshipService(lifeEventService),
+    personService,
+    personDuplicateService: new PersonDuplicateService(),
+    relationshipService,
+    familyService: new FamilyService(relationshipService, personService),
     lifeEventService,
     personNameService: new PersonNameService(),
-    researchTaskService: new ResearchTaskService(),
-    evidenceService: new EvidenceService()
+    researchTaskService: new ResearchTaskService(personService),
+    evidenceService: new EvidenceService(),
+    validationFindingService: new ValidationFindingService(),
+    reportService: new ReportDataService()
   };
 };
 

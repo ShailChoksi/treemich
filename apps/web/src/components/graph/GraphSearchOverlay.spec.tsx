@@ -28,8 +28,8 @@ const renderOverlay = (onCenterView = vi.fn()): RenderResult => {
         searchFeedback={null}
         treeValidationIssueCount={null}
         treeValidationEngineDisabled={false}
-        searchIncludeAlternateNames={false}
-        onSearchIncludeAlternateNamesChange={() => undefined}
+        providerFilter="all"
+        onProviderFilterChange={() => undefined}
       />
     );
   });
@@ -95,13 +95,100 @@ describe("GraphSearchOverlay", () => {
           searchFeedback={null}
           treeValidationIssueCount={null}
           treeValidationEngineDisabled={false}
-          searchIncludeAlternateNames={false}
-          onSearchIncludeAlternateNamesChange={() => undefined}
+          providerFilter="all"
+          onProviderFilterChange={() => undefined}
         />
       );
     });
 
     expect(container.querySelectorAll("datalist option").length).toBeLessThanOrEqual(80);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("includes standalone Treemich people in search suggestions", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <GraphSearchOverlay
+          searchTerm="stand"
+          onSearchTermChange={() => undefined}
+          onSearchSubmit={(event) => event.preventDefault()}
+          onClearSearch={() => undefined}
+          onCenterView={() => undefined}
+          people={[
+            { id: "standalone-1", name: "Standalone Person" },
+            { id: "immich-1", name: "Immich Person" }
+          ]}
+          searchFeedback={null}
+          treeValidationIssueCount={null}
+          treeValidationEngineDisabled={false}
+          providerFilter="all"
+          onProviderFilterChange={() => undefined}
+        />
+      );
+    });
+
+    const options = [...container.querySelectorAll<HTMLOptionElement>("datalist option")].map(
+      (option) => option.value
+    );
+    expect(options).toContain("Standalone Person");
+    expect(options).not.toContain("Immich Person");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("notifies when linked status filter changes", () => {
+    const onProviderFilterChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <GraphSearchOverlay
+          searchTerm=""
+          onSearchTermChange={() => undefined}
+          onSearchSubmit={(event) => event.preventDefault()}
+          onClearSearch={() => undefined}
+          onCenterView={() => undefined}
+          people={[{ id: "person-1", name: "Alex" }]}
+          searchFeedback={null}
+          treeValidationIssueCount={null}
+          treeValidationEngineDisabled={false}
+          providerFilter="all"
+          onProviderFilterChange={onProviderFilterChange}
+        />
+      );
+    });
+
+    const select = container.querySelector(".graph-search-provider-filter select") as HTMLSelectElement;
+    act(() => {
+      select.value = "unlinked";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(onProviderFilterChange).toHaveBeenCalledWith("unlinked");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("does not render the alternate-name preference checkbox", () => {
+    const { container, root } = renderOverlay();
+
+    expect(container.textContent).not.toContain("Match alternate Treemich names");
+    expect(container.querySelector(".graph-search-alt-names")).toBeNull();
 
     act(() => {
       root.unmount();

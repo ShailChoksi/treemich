@@ -1,4 +1,11 @@
-import { Gender, RelationshipType, type PersonProfile, type Relationship } from "@prisma/client";
+import {
+  FamilyChildPedigree,
+  Gender,
+  Prisma,
+  RelationshipType,
+  type PersonProfile,
+  type Relationship
+} from "@prisma/client";
 import { inverseRelationshipType, type RelationshipType as SharedRelationshipType } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import type { ImmichClient } from "../integrations/immich/client.js";
@@ -10,6 +17,9 @@ import {
   type PhotoCooccurrenceResult,
   type PhotoCooccurrenceStats
 } from "./cooccurrence.js";
+
+type DbClient = Prisma.TransactionClient | typeof prisma;
+const personIdChunkSize = 500;
 
 export class RelationshipService {
   constructor(private readonly lifeEventService: LifeEventService) {}
@@ -47,34 +57,44 @@ export class RelationshipService {
 
   async upsertProfile(
     userId: string,
-    immichPersonId: string,
+    personId: string,
     profile: {
       gender?: Gender;
       givenName?: string | null;
       surname?: string | null;
       nicknames?: string | null;
-    }
+    },
+    db: DbClient = prisma
   ): Promise<PersonProfile> {
-    return prisma.personProfile.upsert({
-      where: {
-        userId_immichPersonId: {
-          userId,
-          immichPersonId
+    const existing =
+      (await db.personProfile.findFirst({ where: { id: personId, userId } })) ??
+      (
+        await db.personExternalIdentity.findFirst({
+          where: { userId, providerPersonId: personId },
+          include: { person: true }
+        })
+      )?.person ??
+      null;
+
+    if (existing) {
+      return db.personProfile.update({
+        where: { id: existing.id },
+        data: {
+          ...(profile.gender !== undefined ? { gender: profile.gender } : {}),
+          ...(profile.givenName !== undefined ? { givenName: profile.givenName } : {}),
+          ...(profile.surname !== undefined ? { surname: profile.surname } : {}),
+          ...(profile.nicknames !== undefined ? { nicknames: profile.nicknames } : {})
         }
-      },
-      update: {
+      });
+    }
+
+    return db.personProfile.create({
+      data: {
+        userId,
         ...(profile.gender !== undefined ? { gender: profile.gender } : {}),
         ...(profile.givenName !== undefined ? { givenName: profile.givenName } : {}),
         ...(profile.surname !== undefined ? { surname: profile.surname } : {}),
         ...(profile.nicknames !== undefined ? { nicknames: profile.nicknames } : {})
-      },
-      create: {
-        userId,
-        immichPersonId,
-        gender: profile.gender ?? Gender.UNKNOWN,
-        givenName: profile.givenName ?? null,
-        surname: profile.surname ?? null,
-        nicknames: profile.nicknames ?? null
       }
     });
   }
@@ -83,71 +103,73 @@ export class RelationshipService {
     userId: string,
     fromPersonId: string,
     toPersonId: string,
-    relationshipType: RelationshipType
+    relationshipType: RelationshipType,
+    options?: { familyId?: string | null; db?: DbClient }
   ): Promise<{ direct: Relationship; inverse: Relationship }> {
     const inverseType = inverseRelationshipType(
       relationshipType as SharedRelationshipType
     ) as RelationshipType;
-    return prisma.$transaction(async (tx) => {
-      await tx.personProfile.upsert({
-        where: {
-          userId_immichPersonId: {
-            userId,
-            immichPersonId: fromPersonId
-          }
-        },
-        update: {},
-        create: { userId, immichPersonId: fromPersonId, gender: Gender.UNKNOWN }
-      });
-      await tx.personProfile.upsert({
-        where: {
-          userId_immichPersonId: {
-            userId,
-            immichPersonId: toPersonId
-          }
-        },
-        update: {},
-        create: { userId, immichPersonId: toPersonId, gender: Gender.UNKNOWN }
-      });
+    const isParentChildEdge = relationshipType === "PARENT_OF" || relationshipType === "CHILD_OF";
+    const storedFamilyId = isParentChildEdge ? (options?.familyId ?? null) : null;
+    const shouldWriteFamilyIdColumn =
+      isParentChildEdge && options != null && Object.prototype.hasOwnProperty.call(options, "familyId");
+
+    const run = async (tx: DbClient) => {
+      const fromProfile = await this.upsertProfile(userId, fromPersonId, {}, tx);
+      const toProfile = await this.upsertProfile(userId, toPersonId, {}, tx);
+      const canonicalFromPersonId = fromProfile.id;
+      const canonicalToPersonId = toProfile.id;
+
+      const directUpdate = shouldWriteFamilyIdColumn ? { familyId: storedFamilyId } : {};
 
       const direct = await tx.relationship.upsert({
         where: {
           userId_fromPersonId_toPersonId_type: {
             userId,
-            fromPersonId,
-            toPersonId,
+            fromPersonId: canonicalFromPersonId,
+            toPersonId: canonicalToPersonId,
             type: relationshipType
           }
         },
-        update: {},
+        update: directUpdate,
         create: {
           userId,
-          fromPersonId,
-          toPersonId,
-          type: relationshipType
+          fromPersonId: canonicalFromPersonId,
+          toPersonId: canonicalToPersonId,
+          type: relationshipType,
+          ...(shouldWriteFamilyIdColumn ? { familyId: storedFamilyId } : {})
         }
       });
+
+      const inverseUpdate = shouldWriteFamilyIdColumn ? { familyId: storedFamilyId } : {};
 
       const inverse = await tx.relationship.upsert({
         where: {
           userId_fromPersonId_toPersonId_type: {
             userId,
-            fromPersonId: toPersonId,
-            toPersonId: fromPersonId,
+            fromPersonId: canonicalToPersonId,
+            toPersonId: canonicalFromPersonId,
             type: inverseType
           }
         },
-        update: {},
+        update: inverseUpdate,
         create: {
           userId,
-          fromPersonId: toPersonId,
-          toPersonId: fromPersonId,
-          type: inverseType
+          fromPersonId: canonicalToPersonId,
+          toPersonId: canonicalFromPersonId,
+          type: inverseType,
+          ...(shouldWriteFamilyIdColumn ? { familyId: storedFamilyId } : {})
         }
       });
 
       return { direct, inverse };
-    });
+    };
+
+    if (options?.db) {
+      return run(options.db);
+    }
+
+    return prisma.$transaction(async (tx) => run(tx));
   }
 
   async hasSpouseRelationship(userId: string, fromPersonId: string, toPersonId: string): Promise<boolean> {
@@ -200,29 +222,36 @@ export class RelationshipService {
     const profiles = await prisma.personProfile.findMany({
       where: {
         userId,
-        immichPersonId: { in: personIds }
+        id: { in: personIds }
       }
     });
 
-    return new Map(profiles.map((profile) => [profile.immichPersonId, profile]));
+    return new Map(profiles.map((profile) => [profile.id, profile]));
   }
 
   async getConnectedPersonIds(userId: string, personIds: string[]) {
-    const relationships = await prisma.relationship.findMany({
-      where: {
-        userId,
-        OR: [{ fromPersonId: { in: personIds } }, { toPersonId: { in: personIds } }]
-      },
-      select: {
-        fromPersonId: true,
-        toPersonId: true
-      }
-    });
-
     const connectedIds = new Set<string>();
-    for (const relationship of relationships) {
-      connectedIds.add(relationship.fromPersonId);
-      connectedIds.add(relationship.toPersonId);
+    if (personIds.length === 0) {
+      return connectedIds;
+    }
+
+    for (let offset = 0; offset < personIds.length; offset += personIdChunkSize) {
+      const chunk = personIds.slice(offset, offset + personIdChunkSize);
+      const relationships = await prisma.relationship.findMany({
+        where: {
+          userId,
+          OR: [{ fromPersonId: { in: chunk } }, { toPersonId: { in: chunk } }]
+        },
+        select: {
+          fromPersonId: true,
+          toPersonId: true
+        }
+      });
+
+      for (const relationship of relationships) {
+        connectedIds.add(relationship.fromPersonId);
+        connectedIds.add(relationship.toPersonId);
+      }
     }
 
     return connectedIds;
@@ -246,13 +275,44 @@ export class RelationshipService {
         id: true,
         fromPersonId: true,
         toPersonId: true,
-        type: true
+        type: true,
+        familyId: true
       }
     });
 
     const hasMore = relationships.length > limit;
     const pageItems = hasMore ? relationships.slice(0, limit) : relationships;
     const lastItem = pageItems[pageItems.length - 1];
+
+    const parentEdges = pageItems.filter((row) => row.type === "PARENT_OF" && row.familyId != null);
+    const childPedigreeByRelationshipId = new Map<string, FamilyChildPedigree>();
+    if (parentEdges.length > 0) {
+      const pairKey = (familyId: string, childId: string) => `${familyId}:${childId}`;
+      const rows = await prisma.familyChild.findMany({
+        where: {
+          OR: parentEdges.map((edge) => ({
+            familyId: edge.familyId as string,
+            childPersonId: edge.toPersonId
+          }))
+        },
+        select: {
+          familyId: true,
+          childPersonId: true,
+          pedigree: true
+        }
+      });
+      const pedigreeByPair = new Map(
+        rows
+          .filter((row) => row.childPersonId != null)
+          .map((row) => [pairKey(row.familyId, row.childPersonId!), row.pedigree])
+      );
+      for (const edge of parentEdges) {
+        const pedigree = pedigreeByPair.get(pairKey(edge.familyId as string, edge.toPersonId));
+        if (pedigree) {
+          childPedigreeByRelationshipId.set(edge.id, pedigree);
+        }
+      }
+    }
 
     const spousePairs = pageItems
       .filter((item) => item.type === "SPOUSE_OF")
@@ -272,7 +332,11 @@ export class RelationshipService {
           id: item.id,
           fromPersonId: item.fromPersonId,
           toPersonId: item.toPersonId,
-          type: item.type
+          type: item.type,
+          familyId: item.familyId,
+          ...(item.type === "PARENT_OF" && childPedigreeByRelationshipId.has(item.id)
+            ? { childEdgePedigree: childPedigreeByRelationshipId.get(item.id) }
+            : {})
         };
         if (item.type !== "SPOUSE_OF") {
           return base;
@@ -303,6 +367,7 @@ export class RelationshipService {
       return prisma.relationship.deleteMany({
         where: {
           userId,
+          familyId: null,
           OR: [
             {
               fromPersonId,
@@ -323,6 +388,7 @@ export class RelationshipService {
     return prisma.relationship.deleteMany({
       where: {
         userId,
+        familyId: null,
         OR: [
           {
             fromPersonId,

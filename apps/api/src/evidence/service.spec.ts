@@ -16,8 +16,12 @@ const mediaObjectCreateMock = vi.fn();
 const mediaObjectUpdateMock = vi.fn();
 const mediaObjectDeleteManyMock = vi.fn();
 const mediaLinkFindManyMock = vi.fn();
+const mediaLinkFindFirstMock = vi.fn();
 const mediaLinkCreateMock = vi.fn();
 const mediaLinkDeleteManyMock = vi.fn();
+const personProfileFindFirstMock = vi.fn();
+const lifeEventFindFirstMock = vi.fn();
+const familyFindFirstMock = vi.fn();
 const citationUpdateManyMock = vi.fn();
 const prismaTransactionMock = vi.fn();
 
@@ -46,9 +50,13 @@ vi.mock("../db/client.js", () => ({
     },
     mediaLink: {
       findMany: mediaLinkFindManyMock,
+      findFirst: mediaLinkFindFirstMock,
       create: mediaLinkCreateMock,
       deleteMany: mediaLinkDeleteManyMock
     },
+    personProfile: { findFirst: personProfileFindFirstMock },
+    lifeEvent: { findFirst: lifeEventFindFirstMock },
+    family: { findFirst: familyFindFirstMock },
     citation: {
       updateMany: citationUpdateManyMock
     },
@@ -265,6 +273,8 @@ describe("EvidenceService", () => {
       createdAt,
       updatedAt: createdAt
     });
+    sourceFindFirstMock.mockResolvedValueOnce({ id: "s9", userId: "u1" });
+    mediaLinkFindFirstMock.mockResolvedValueOnce(null);
     mediaLinkCreateMock.mockResolvedValueOnce({
       id: "lnk1",
       userId: "u1",
@@ -301,5 +311,51 @@ describe("EvidenceService", () => {
         notes: null
       }
     });
+  });
+
+  it("creates FAMILY media links only for owned families", async () => {
+    const createdAt = new Date("2024-04-02T00:00:00.000Z");
+    mediaObjectFindFirstMock.mockResolvedValueOnce({ id: "m1", userId: "u1" });
+    familyFindFirstMock.mockResolvedValueOnce({ id: "fam1", userId: "u1" });
+    mediaLinkFindFirstMock.mockResolvedValueOnce(null);
+    mediaLinkCreateMock.mockResolvedValueOnce({
+      id: "lnk-family",
+      userId: "u1",
+      mediaObjectId: "m1",
+      targetType: "FAMILY",
+      targetId: "fam1",
+      notes: null,
+      createdAt
+    });
+
+    const { EvidenceService } = await import("./service.js");
+    const svc = new EvidenceService();
+    const link = await svc.createMediaLink("u1", "m1", {
+      targetType: "FAMILY",
+      targetId: "fam1",
+      notes: null
+    });
+
+    expect(link.targetType).toBe("FAMILY");
+    expect(familyFindFirstMock).toHaveBeenCalledWith({
+      where: { id: "fam1", userId: "u1" },
+      select: { id: true }
+    });
+  });
+
+  it("rejects media links to missing targets", async () => {
+    mediaObjectFindFirstMock.mockResolvedValueOnce({ id: "m1", userId: "u1" });
+    familyFindFirstMock.mockResolvedValueOnce(null);
+
+    const { EvidenceService } = await import("./service.js");
+    const svc = new EvidenceService();
+    await expect(
+      svc.createMediaLink("u1", "m1", {
+        targetType: "FAMILY",
+        targetId: "foreign-family",
+        notes: null
+      })
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(mediaLinkCreateMock).not.toHaveBeenCalled();
   });
 });

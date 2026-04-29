@@ -11,15 +11,22 @@ import {
   patchMediaObjectBodySchema,
   patchRepositoryBodySchema,
   patchSourceBodySchema,
-  sourceListQuerySchema
+  sourceListQuerySchema,
+  targetMediaLinkQuerySchema
 } from "@treemich/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { getRequiredAuth } from "../auth/request.js";
+import {
+  mediaDownloadUrlForKey,
+  openStoredMediaReadStream,
+  assertSafeStorageKey
+} from "../evidence/mediaStorage.js";
 
 const idParams = z.object({ id: z.string().min(1) });
 const mediaIdParams = z.object({ mediaId: z.string().min(1) });
 const linkIdParams = z.object({ linkId: z.string().min(1) });
+const storageKeyParams = z.object({ storageKey: z.string().min(1) });
 
 export const registerEvidenceRoutes = (app: FastifyInstance) => {
   app.get("/evidence/repositories", async (request) => {
@@ -90,6 +97,24 @@ export const registerEvidenceRoutes = (app: FastifyInstance) => {
     return { mediaObjects: rows };
   });
 
+  app.get("/evidence/media/file/:storageKey", async (request, reply) => {
+    const auth = getRequiredAuth(request);
+    const { storageKey } = storageKeyParams.parse(request.params);
+    const safeKey = assertSafeStorageKey(storageKey);
+    const media = await app.services.evidenceService.getMediaObjectByStorageUrl(
+      auth.user.id,
+      mediaDownloadUrlForKey(safeKey)
+    );
+    if (!media) {
+      return reply.code(404).send({ statusCode: 404, error: "Media file not found" });
+    }
+    const { stream, byteSize } = await openStoredMediaReadStream(safeKey);
+    return reply
+      .header("Content-Type", media.mimeType ?? "application/octet-stream")
+      .header("Content-Length", String(byteSize))
+      .send(stream);
+  });
+
   app.post("/evidence/media", async (request, reply) => {
     const auth = getRequiredAuth(request);
     const body = createMediaObjectBodySchema.parse(request.body);
@@ -115,6 +140,17 @@ export const registerEvidenceRoutes = (app: FastifyInstance) => {
     const auth = getRequiredAuth(request);
     const { mediaId } = mediaIdParams.parse(request.params);
     const links = await app.services.evidenceService.listMediaLinksForObject(auth.user.id, mediaId);
+    return { links };
+  });
+
+  app.get("/evidence/media-links", async (request) => {
+    const auth = getRequiredAuth(request);
+    const query = targetMediaLinkQuerySchema.parse(request.query);
+    const links = await app.services.evidenceService.listMediaLinksForTarget(
+      auth.user.id,
+      query.targetType,
+      query.targetId
+    );
     return { links };
   });
 

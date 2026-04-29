@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ImmichPerson } from "../../lib/api";
+import type { Person } from "../../lib/api";
 import { type NodePosition } from "./layout";
 import {
   getCameraNudgeForDirection,
@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe("useGraphSearch helpers", () => {
   it("resolves focus request by person id", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "mike-id", name: "Mike", hasRelationship: false },
       { id: "anna-id", name: "Anna", hasRelationship: false }
     ];
@@ -32,7 +32,7 @@ describe("useGraphSearch helpers", () => {
   });
 
   it("finds matching person by search term", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "mike-id", name: "Mike Jordan", hasRelationship: false },
       { id: "anna-id", name: "Anna", hasRelationship: false }
     ];
@@ -64,7 +64,7 @@ describe("useGraphKeyboardNavigation helpers", () => {
   });
 
   it("cycles through side candidates on repeated key presses", () => {
-    const peopleById = new Map<string, ImmichPerson>([
+    const peopleById = new Map<string, Person>([
       ["self", { id: "self", name: "Self", hasRelationship: false }],
       ["leftA", { id: "leftA", name: "Alice", hasRelationship: false }],
       ["leftB", { id: "leftB", name: "Bob", hasRelationship: false }],
@@ -114,7 +114,7 @@ describe("useGraphKeyboardNavigation helpers", () => {
   });
 
   it("resets cycle when direction changes", () => {
-    const peopleById = new Map<string, ImmichPerson>([
+    const peopleById = new Map<string, Person>([
       ["self", { id: "self", name: "Self", hasRelationship: false }],
       ["topA", { id: "topA", name: "Alpha Parent", hasRelationship: false }],
       ["topB", { id: "topB", name: "Beta Parent", hasRelationship: false }]
@@ -161,7 +161,7 @@ describe("useGraphKeyboardNavigation helpers", () => {
   });
 
   it("resets cycle when candidate set changes", () => {
-    const peopleById = new Map<string, ImmichPerson>([
+    const peopleById = new Map<string, Person>([
       ["self", { id: "self", name: "Self", hasRelationship: false }],
       ["sideA", { id: "sideA", name: "Alpha", hasRelationship: false }],
       ["sideB", { id: "sideB", name: "Bravo", hasRelationship: false }]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildGraphLayoutRevision, type GraphLayoutRequest } from "@treemich/shared";
-import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
+import type { Person, RelationshipRecord } from "../../lib/api";
 import {
   buildDirectionalNeighborBuckets,
   buildParentChildIndex,
@@ -10,7 +10,7 @@ import {
 } from "./layout";
 
 const getPositionById = (
-  people: ImmichPerson[],
+  people: Person[],
   relationships: RelationshipRecord[],
   options?: Parameters<typeof positionPeople>[2]
 ) => {
@@ -58,7 +58,7 @@ describe("layout utilities", () => {
 
 describe("deterministic family layout invariants", () => {
   it("keeps deterministic positions through worker-style serialization", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "p1", name: "Parent One" },
       { id: "p2", name: "Parent Two" },
       { id: "c1", name: "Child One" },
@@ -82,7 +82,7 @@ describe("deterministic family layout invariants", () => {
         const person = peopleById.get(entry.personId);
         return person ? { person, position: entry.position } : null;
       })
-      .filter((entry): entry is { person: ImmichPerson; position: [number, number, number] } => !!entry);
+      .filter((entry): entry is { person: Person; position: [number, number, number] } => !!entry);
 
     expect(new Map(reconstructed.map((item) => [item.person.id, item.position]))).toEqual(
       new Map(syncPositions.map((item) => [item.person.id, item.position]))
@@ -90,7 +90,7 @@ describe("deterministic family layout invariants", () => {
   });
 
   it("places parents above children", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "p1", name: "Parent One" },
       { id: "p2", name: "Parent Two" },
       { id: "c1", name: "Child One" }
@@ -105,7 +105,7 @@ describe("deterministic family layout invariants", () => {
   });
 
   it("keeps couple members at fixed gap", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "a", name: "Alex A" },
       { id: "b", name: "Blair B" },
       { id: "c", name: "Casey C" }
@@ -126,7 +126,7 @@ describe("deterministic family layout invariants", () => {
   });
 
   it("keeps non-spouse same-generation nodes separated", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "g1", name: "Grand 1" },
       { id: "g2", name: "Grand 2" },
       { id: "a1", name: "Adult 1" },
@@ -169,7 +169,7 @@ describe("deterministic family layout invariants", () => {
   });
 
   it("centers children under their family unit", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "a", name: "Parent A" },
       { id: "b", name: "Parent B" },
       { id: "c1", name: "Child 1" },
@@ -194,7 +194,7 @@ describe("deterministic family layout invariants", () => {
   });
 
   it("keeps dense generation rows separated", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "pa", name: "Parent A" },
       { id: "pb", name: "Parent B" }
     ];
@@ -224,7 +224,7 @@ describe("deterministic family layout invariants", () => {
   });
 
   it("reassigns branch when primary unit override changes", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "g1", name: "Grand A1" },
       { id: "g2", name: "Grand A2" },
       { id: "g3", name: "Grand B1" },
@@ -265,7 +265,7 @@ describe("deterministic family layout invariants", () => {
     // Bug was: G had no parents → depth 0, so the couple (D+G) computed unit depth
     // via Math.min(D=1, G=0) = 0, placing D and G on the grandparent row. Meanwhile
     // their child H was correctly at child depth, breaking the hierarchy visually.
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "A", name: "A Parent" },
       { id: "B", name: "B Parent" },
       { id: "C", name: "C Child" },
@@ -316,7 +316,7 @@ describe("deterministic family layout invariants", () => {
   it("rotates the smaller spouse family perpendicular into the Z axis", () => {
     // Big side: A has parents (pa1, pa2), grandparents (gpa1..gpa4), and a sibling.
     // Small side: B has a single parent (pb1).
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "A", name: "A Main" },
       { id: "B", name: "B Spouse" },
       { id: "pa1", name: "Parent A1" },
@@ -360,7 +360,7 @@ describe("deterministic family layout invariants", () => {
     // (small family: 1 sister + 2 parents). The couple also shares two kids
     // (c1, c2). Before the fix, kids showed up in both sides' BFS and the
     // overlap check aborted the rotation.
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "A", name: "A Main" },
       { id: "B", name: "B Spouse" },
       { id: "broA", name: "Brother A" },
@@ -418,7 +418,7 @@ describe("deterministic family layout invariants", () => {
   });
 
   it("leaves symmetric spouse families on the main Z plane", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "A", name: "A Main" },
       { id: "B", name: "B Spouse" },
       { id: "pa1", name: "Parent A1" },
@@ -444,7 +444,7 @@ describe("deterministic family layout invariants", () => {
   });
 
   it("keeps children below both parents in multi-sister spouse branches", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "gp1", name: "Grand Parent 1" },
       { id: "gp2", name: "Grand Parent 2" },
       { id: "s1", name: "Sister 1" },
@@ -496,7 +496,7 @@ describe("deterministic family layout invariants", () => {
     // profiler hotspot on graphs with many small disconnected families. This
     // test builds a forest of such families and asserts that the whole layout
     // completes well under a second.
-    const people: ImmichPerson[] = [];
+    const people: Person[] = [];
     const relationships: RelationshipRecord[] = [];
     const familyCount = 60;
     const childrenPerFamily = 3;
@@ -528,7 +528,7 @@ describe("deterministic family layout invariants", () => {
     // Synthetic 6-generation family with siblings, spouses-with-their-own-parents,
     // and grandchildren. Exercises the perpendicular minor-spouse pass at scale
     // so we catch any future O(P·V) regression.
-    const people: ImmichPerson[] = [];
+    const people: Person[] = [];
     const relationships: RelationshipRecord[] = [];
     const generations: string[][] = [];
     const siblingsPerCouple = 3;
@@ -601,7 +601,7 @@ describe("deterministic family layout invariants", () => {
 
 describe("layout edge cases", () => {
   it("does not complete layout for a two-node parent-child cycle (Buchheim recursion)", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "a", name: "A" },
       { id: "b", name: "B" }
     ];
@@ -613,7 +613,7 @@ describe("layout edge cases", () => {
   });
 
   it("does not change family positions when only non-topology edges differ", () => {
-    const people: ImmichPerson[] = [
+    const people: Person[] = [
       { id: "p1", name: "Pat One" },
       { id: "p2", name: "Pat Two" }
     ];

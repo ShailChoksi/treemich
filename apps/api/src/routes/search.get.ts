@@ -4,18 +4,36 @@
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { Gender, LifeEvent } from "@prisma/client";
-import type { AgeFilter } from "@treemich/shared/search/interpreter";
+import type {
+  Gender,
+  LifeEvent,
+  PersonExternalIdentity,
+  PersonProfile,
+  PersonThumbnail
+} from "@prisma/client";
+import type { PersonRecord } from "@treemich/shared";
+import type { AgeFilter, InterpreterIntent } from "@treemich/shared/search/interpreter";
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";
 import { partialDateToComparableDate } from "../lifeEvents/dateValue.js";
-import { parseUserPreferences } from "../preferences.js";
+import { parseUserPreferences, withUserPreferenceDefaults } from "../preferences.js";
 import { RuleBasedInterpreter } from "../search/interpreter/ruleBasedInterpreter.js";
-import { getImmichClientForRequest } from "../services.js";
+import { personToJson } from "../people/service.js";
 
 const querySchema = z.object({
   q: z.string().min(1)
 });
+
+type SearchPersonRow = PersonProfile & {
+  externalIdentities: PersonExternalIdentity[];
+  personNames: Array<{
+    prefix: string | null;
+    givenName: string | null;
+    surname: string | null;
+    suffix: string | null;
+  }>;
+  thumbnails: PersonThumbnail[];
+};
 
 function resolveBirthDate(
   birthEvent?: Pick<LifeEvent, "year" | "month" | "day"> | null,
@@ -48,6 +66,12 @@ function computeAge(birthDate: Date, now: Date): number {
   return age;
 }
 
+const adoptedSearchIntents = new Set<InterpreterIntent>([
+  "FIND_ADOPTED_CHILDREN",
+  "FIND_ADOPTED_SONS",
+  "FIND_ADOPTED_DAUGHTERS"
+]);
+
 function matchesAgeFilter(birthDate: Date, filter: AgeFilter, now: Date): boolean {
   switch (filter.kind) {
     case "minAge":
@@ -67,6 +91,59 @@ function matchesAgeFilter(birthDate: Date, filter: AgeFilter, now: Date): boolea
   }
 }
 
+const compactLower = (values: Array<string | null | undefined>) =>
+  values.map((value) => value?.trim().toLowerCase()).filter((value): value is string => Boolean(value));
+
+const formatNameParts = (parts: Array<string | null | undefined>) => parts.filter(Boolean).join(" ").trim();
+
+const alternateNameText = (name: SearchPersonRow["personNames"][number]) =>
+  formatNameParts([name.prefix, name.givenName, name.surname, name.suffix]);
+
+const searchTextsForPerson = (
+  row: SearchPersonRow,
+  person: PersonRecord,
+  options: { includeAlternateNames: boolean }
+) => {
+  const texts = compactLower([
+    person.name,
+    person.displayName,
+    row.displayNameOverride,
+    row.givenName,
+    row.surname,
+    row.nicknames,
+    formatNameParts([row.givenName, row.surname]),
+    ...row.externalIdentities.map((identity) => identity.displayName)
+  ]);
+  if (options.includeAlternateNames) {
+    texts.push(...compactLower(row.personNames.map(alternateNameText)));
+  }
+  return texts;
+};
+
+const loadSearchPeople = async (userId: string) => {
+  const rows = (await prisma.personProfile.findMany({
+    where: { userId },
+    include: {
+      externalIdentities: true,
+      personNames: {
+        select: {
+          prefix: true,
+          givenName: true,
+          surname: true,
+          suffix: true
+        }
+      },
+      thumbnails: { orderBy: { updatedAt: "desc" }, take: 1 }
+    },
+    orderBy: [{ surname: "asc" }, { givenName: "asc" }, { createdAt: "asc" }]
+  })) as SearchPersonRow[];
+
+  return rows.map((row) => ({
+    row,
+    person: personToJson(row)
+  }));
+};
+
 export const registerSearchGetRoute = (app: FastifyInstance) => {
   const interpreter = new RuleBasedInterpreter();
 
@@ -79,28 +156,22 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
       return reply.code(400).send(interpreted);
     }
 
-    const allPeople = await (await getImmichClientForRequest(request)).listPeople();
     const userRow = await prisma.treemichUser.findUniqueOrThrow({
       where: { id: auth.user.id },
       select: { preferences: true }
     });
     const includeAlternateNames =
-      parseUserPreferences(userRow.preferences).searchIncludeAlternateNames === true;
-    const alternateNameTextsByPerson = includeAlternateNames
-      ? await app.services.personNameService.getAllFormattedForUser(auth.user.id)
-      : new Map<string, string[]>();
+      withUserPreferenceDefaults(parseUserPreferences(userRow.preferences)).searchIncludeAlternateNames ===
+      true;
     const normalizedSourceName = interpreted.parsed.sourceName.trim().toLowerCase();
-    const sourceNameMatches = (nameLower: string) => nameLower.includes(normalizedSourceName);
-    const sourceCandidates = allPeople.filter((person) => {
-      if (sourceNameMatches(person.name.toLowerCase())) {
-        return true;
-      }
-      if (!includeAlternateNames) {
-        return false;
-      }
-      const alts = alternateNameTextsByPerson.get(person.id);
-      return alts != null && alts.some((t) => sourceNameMatches(t));
-    });
+    const searchablePeople = await loadSearchPeople(auth.user.id);
+    const sourceCandidates = searchablePeople
+      .filter(({ row, person }) =>
+        searchTextsForPerson(row, person, { includeAlternateNames }).some((text) =>
+          text.includes(normalizedSourceName)
+        )
+      )
+      .map(({ person }) => person);
     if (sourceCandidates.length === 0) {
       return {
         parsed: interpreted.parsed,
@@ -111,11 +182,13 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
     }
 
     const sourceIds = sourceCandidates.map((person) => person.id);
-    const targetIds = await app.services.relationshipService.traverseRelationshipChain(
-      auth.user.id,
-      sourceIds,
-      interpreted.parsed.hops
-    );
+    const targetIds = adoptedSearchIntents.has(interpreted.parsed.intent)
+      ? await app.services.familyService.findAdoptedChildPersonIds(auth.user.id, sourceIds)
+      : await app.services.relationshipService.traverseRelationshipChain(
+          auth.user.id,
+          sourceIds,
+          interpreted.parsed.hops
+        );
 
     const profilesById = (await app.services.relationshipService.getProfilesForPersonIds(
       auth.user.id,
@@ -134,7 +207,7 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
       auth.user.id,
       profileInternalIds
     );
-    const peopleById = new Map(allPeople.map((person) => [person.id, person]));
+    const peopleById = new Map(searchablePeople.map(({ person }) => [person.id, person]));
     const now = new Date();
 
     const matches = targetIds

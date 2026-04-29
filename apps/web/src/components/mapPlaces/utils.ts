@@ -78,14 +78,14 @@ export const clusterPlaces = (places: PlacesMapPoint[], cellDegrees: number): Pl
 };
 
 /** Uses each place's `samplePersonIds` from the map feed (capped server-side). */
-export const placeClusterIncludesImmichPerson = (
+export const placeClusterIncludesPerson = (
   cluster: PlaceCluster,
-  immichPersonId: string | null | undefined
+  personId: string | null | undefined
 ): boolean => {
-  if (!immichPersonId) {
+  if (!personId) {
     return false;
   }
-  return cluster.points.some((p) => p.samplePersonIds.includes(immichPersonId));
+  return cluster.points.some((p) => p.samplePersonIds.includes(personId));
 };
 
 export const getAdaptiveClusterCellDegrees = (baseCellDegrees: number, zoom: number): number => {

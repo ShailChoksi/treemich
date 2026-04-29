@@ -83,5 +83,12 @@ describe("evidence Zod schemas", () => {
         notes: null
       })
     ).toEqual({ targetType: "SOURCE", targetId: "src-1", notes: null });
+    expect(
+      createMediaLinkBodySchema.parse({
+        targetType: "FAMILY",
+        targetId: "fam-1",
+        notes: null
+      })
+    ).toEqual({ targetType: "FAMILY", targetId: "fam-1", notes: null });
   });
 });

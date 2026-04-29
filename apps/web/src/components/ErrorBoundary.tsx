@@ -7,6 +7,8 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 type Props = {
   fallback: ReactNode;
   children: ReactNode;
+  /** Logged with the error in `componentDidCatch` (e.g. `"App shell"` vs `"Graph"`). */
+  errorContext?: string;
 };
 
 type State = {
@@ -21,7 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Graph rendering failed", error, errorInfo);
+    console.error(this.props.errorContext ?? "React subtree", error, errorInfo);
   }
 
   override render() {

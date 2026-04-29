@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { ImmichPerson, RelationshipRecord } from "../../lib/api";
+import type { Person, RelationshipRecord } from "../../lib/api";
 import { computeSuggestions, getSuggestionRelationshipLabel } from "./relationshipSuggestions";
 
-const person = (id: string, name: string): ImmichPerson => ({
+const person = (id: string, name: string): Person => ({
   id,
   name,
   hasRelationship: false
 });
 
-const people: ImmichPerson[] = [
+const people: Person[] = [
   person("alex", "Alex"),
   person("blair", "Blair"),
   person("casey", "Casey"),

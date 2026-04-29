@@ -27,7 +27,8 @@ export const withUserPreferenceDefaults = (
     ...parsed,
     showSingleFamilyTree: parsed.showSingleFamilyTree ?? defaultShowSingleFamilyTree,
     primaryFamilyUnitByPersonId: parsed.primaryFamilyUnitByPersonId ?? {},
-    cooccurrence: getCooccurrencePreferences(parsed)
+    cooccurrence: getCooccurrencePreferences(parsed),
+    searchIncludeAlternateNames: parsed.searchIncludeAlternateNames ?? true
   };
 };
 

@@ -2,7 +2,7 @@
  * @file Create/edit rich life event with partial dates, place, and citations.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   createLifeEventBodySchema,
   dateQualifierValues,
@@ -34,6 +34,7 @@ type Props = {
 };
 
 type CitationFormRow = {
+  id: string;
   citationMode: "inline" | "existing";
   sourceId: string;
   title: string;
@@ -43,6 +44,8 @@ type CitationFormRow = {
   notes: string;
   citedAt: string;
 };
+
+type ValidationField = "customLabel" | "placeName" | "placeLat" | "placeLng" | `citation-${string}-source`;
 
 const defaultCreateType = (allowed: LifeEventTypeValue[] | undefined): LifeEventTypeValue => {
   const list = allowed?.length ? allowed : [...lifeEventTypeValues];
@@ -61,6 +64,13 @@ export const LifeEventRichForm = ({
   disabled = false
 }: Props) => {
   const [error, setError] = useState<string | null>(null);
+  const [invalidField, setInvalidField] = useState<ValidationField | null>(null);
+  const errorId = useId();
+  const citationIdRef = useRef(0);
+  const nextCitationRowId = useCallback(() => {
+    citationIdRef.current += 1;
+    return `citation-${initialEvent?.id ?? variant}-${citationIdRef.current}`;
+  }, [initialEvent?.id, variant]);
 
   const [eventType, setEventType] = useState<LifeEventTypeValue>(
     fixedEventType ?? initialEvent?.eventType ?? defaultCreateType(allowedCreateTypes)
@@ -98,8 +108,11 @@ export const LifeEventRichForm = ({
   const [citationRows, setCitationRows] = useState<CitationFormRow[]>(() =>
     (initialEvent?.citations ?? []).map((c) => {
       const sid = c.sourceId?.trim() || c.source?.id;
+      const stableId =
+        "id" in c && typeof c.id === "string" ? c.id : `citation-initial-${citationIdRef.current++}`;
       if (sid) {
         return {
+          id: stableId,
           citationMode: "existing",
           sourceId: sid,
           title: c.title ?? "",
@@ -111,6 +124,7 @@ export const LifeEventRichForm = ({
         };
       }
       return {
+        id: stableId,
         citationMode: "inline",
         sourceId: "",
         title: c.title ?? "",
@@ -149,6 +163,25 @@ export const LifeEventRichForm = ({
     }
     return [...lifeEventTypeValues];
   }, [allowedCreateTypes, fixedEventType]);
+
+  const setFormError = useCallback((message: string, field: ValidationField | null = null) => {
+    setError(message);
+    setInvalidField(field);
+  }, []);
+
+  const clearFormError = useCallback(() => {
+    setError(null);
+    setInvalidField(null);
+  }, []);
+
+  const fieldErrorProps = useCallback(
+    (field: ValidationField) => ({
+      "aria-invalid": invalidField === field ? true : undefined,
+      "aria-describedby": invalidField === field ? errorId : undefined,
+      className: invalidField === field ? "input-error" : undefined
+    }),
+    [errorId, invalidField]
+  );
 
   const buildPlacePayload = (
     lat: number | null,
@@ -246,8 +279,8 @@ export const LifeEventRichForm = ({
       );
   };
 
-  const handleSubmit = async () => {
-    setError(null);
+  const handleSubmit = useCallback(async () => {
+    clearFormError();
     const y = optionalInt(year);
     const m = optionalInt(month);
     const d = optionalInt(day);
@@ -259,24 +292,24 @@ export const LifeEventRichForm = ({
     const lat = optionalFloat(placeLat);
     const lng = optionalFloat(placeLng);
     if (latRaw && lat == null) {
-      setError("Latitude must be a valid number (e.g. 40.7128).");
+      setFormError("Latitude must be a valid number (e.g. 40.7128).", "placeLat");
       return;
     }
     if (lngRaw && lng == null) {
-      setError("Longitude must be a valid number (e.g. -74.0060).");
+      setFormError("Longitude must be a valid number (e.g. -74.0060).", "placeLng");
       return;
     }
     if (lat != null && (lat < -90 || lat > 90)) {
-      setError("Latitude must be between -90 and 90.");
+      setFormError("Latitude must be between -90 and 90.", "placeLat");
       return;
     }
     if (lng != null && (lng < -180 || lng > 180)) {
-      setError("Longitude must be between -180 and 180.");
+      setFormError("Longitude must be between -180 and 180.", "placeLng");
       return;
     }
     const placeResult = buildPlacePayload(lat, lng);
     if (placeResult.error) {
-      setError(placeResult.error);
+      setFormError(placeResult.error, "placeName");
       return;
     }
     const place = placeResult.value;
@@ -284,7 +317,10 @@ export const LifeEventRichForm = ({
     for (let i = 0; i < citationRows.length; i += 1) {
       const row = citationRows[i]!;
       if (row.citationMode === "existing" && !row.sourceId.trim()) {
-        setError(`Citation ${i + 1}: choose a source or switch to inline entry.`);
+        setFormError(
+          `Citation ${i + 1}: choose a source or switch to inline entry.`,
+          `citation-${row.id}-source`
+        );
         return;
       }
     }
@@ -292,7 +328,7 @@ export const LifeEventRichForm = ({
     const effectiveType =
       variant === "create" ? (fixedEventType ?? eventType) : (initialEvent?.eventType ?? eventType);
     if (effectiveType === "CUSTOM" && !nullIfEmpty(customLabel)) {
-      setError("Custom events need a short display label.");
+      setFormError("Custom events need a short display label.", "customLabel");
       return;
     }
 
@@ -314,7 +350,7 @@ export const LifeEventRichForm = ({
       };
       const parsed = createLifeEventBodySchema.safeParse(body);
       if (!parsed.success) {
-        setError(parsed.error.issues[0]?.message ?? "Invalid life event");
+        setFormError(parsed.error.issues[0]?.message ?? "Invalid life event");
         return;
       }
       await onSubmitCreate(parsed.data);
@@ -343,24 +379,49 @@ export const LifeEventRichForm = ({
     };
     const parsed = patchLifeEventBodySchema.safeParse(patch);
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Invalid life event");
+      setFormError(parsed.error.issues[0]?.message ?? "Invalid life event");
       return;
     }
     await onSubmitPatch(initialEvent.id, parsed.data);
-  };
+  }, [
+    buildPlacePayload,
+    buildCitationsPayloadForCreate,
+    buildCitationsPayloadForPatch,
+    citationRows,
+    clearFormError,
+    customLabel,
+    dateQualifier,
+    day,
+    endDay,
+    endMonth,
+    endYear,
+    eventType,
+    fixedEventType,
+    initialEvent,
+    month,
+    notes,
+    onSubmitCreate,
+    onSubmitPatch,
+    placeLat,
+    placeLng,
+    setFormError,
+    variant,
+    year
+  ]);
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!initialEvent || !onDelete) {
       return;
     }
-    setError(null);
+    clearFormError();
     await onDelete(initialEvent.id);
-  };
+  }, [clearFormError, initialEvent, onDelete]);
 
-  const addCitationRow = () => {
+  const addCitationRow = useCallback(() => {
     setCitationRows((rows) => [
       ...rows,
       {
+        id: nextCitationRowId(),
         citationMode: "inline",
         sourceId: "",
         title: "",
@@ -371,13 +432,13 @@ export const LifeEventRichForm = ({
         citedAt: ""
       }
     ]);
-  };
+  }, [nextCitationRowId]);
 
-  const updateCitation = (index: number, key: keyof CitationFormRow, value: string) => {
+  const updateCitation = useCallback((index: number, key: keyof CitationFormRow, value: string) => {
     setCitationRows((rows) => rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
-  };
+  }, []);
 
-  const setCitationMode = (index: number, mode: "inline" | "existing") => {
+  const setCitationMode = useCallback((index: number, mode: "inline" | "existing") => {
     setCitationRows((rows) =>
       rows.map((row, i) =>
         i === index
@@ -389,16 +450,16 @@ export const LifeEventRichForm = ({
           : row
       )
     );
-  };
+  }, []);
 
-  const removeCitation = (index: number) => {
+  const removeCitation = useCallback((index: number) => {
     setCitationRows((rows) => rows.filter((_, i) => i !== index));
-  };
+  }, []);
 
   return (
     <div className="life-event-rich-form stack">
       {error ? (
-        <p className="hint" style={{ color: "var(--danger, #c62828)" }}>
+        <p id={errorId} className="hint hint--danger" aria-live="polite">
           {error}
         </p>
       ) : null}
@@ -449,6 +510,7 @@ export const LifeEventRichForm = ({
               placeholder="e.g. Military discharge"
               maxLength={200}
               disabled={disabled}
+              {...fieldErrorProps("customLabel")}
             />
           </label>
         ) : null}
@@ -509,7 +571,7 @@ export const LifeEventRichForm = ({
             </label>
           </>
         ) : null}
-        <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+        <label className="field-group field-group--full">
           <span className="field-label">Notes</span>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} disabled={disabled} rows={3} />
         </label>
@@ -519,7 +581,12 @@ export const LifeEventRichForm = ({
         <div className="person-detail-form-grid">
           <label className="field-group">
             <span className="field-label">Name</span>
-            <input value={placeName} onChange={(e) => setPlaceName(e.target.value)} disabled={disabled} />
+            <input
+              value={placeName}
+              onChange={(e) => setPlaceName(e.target.value)}
+              disabled={disabled}
+              {...fieldErrorProps("placeName")}
+            />
           </label>
           <label className="field-group">
             <span className="field-label">Locality</span>
@@ -564,13 +631,23 @@ export const LifeEventRichForm = ({
           </label>
           <label className="field-group">
             <span className="field-label">Latitude</span>
-            <input value={placeLat} onChange={(e) => setPlaceLat(e.target.value)} disabled={disabled} />
+            <input
+              value={placeLat}
+              onChange={(e) => setPlaceLat(e.target.value)}
+              disabled={disabled}
+              {...fieldErrorProps("placeLat")}
+            />
           </label>
           <label className="field-group">
             <span className="field-label">Longitude</span>
-            <input value={placeLng} onChange={(e) => setPlaceLng(e.target.value)} disabled={disabled} />
+            <input
+              value={placeLng}
+              onChange={(e) => setPlaceLng(e.target.value)}
+              disabled={disabled}
+              {...fieldErrorProps("placeLng")}
+            />
           </label>
-          <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+          <label className="field-group field-group--full">
             <span className="field-label">Place notes</span>
             <textarea
               value={placeNotes}
@@ -584,11 +661,7 @@ export const LifeEventRichForm = ({
       <div className="life-event-citations stack">
         <span className="field-label">Citations</span>
         {citationRows.map((row, index) => (
-          <div
-            key={index}
-            className="person-detail-form-grid"
-            style={{ borderBottom: "1px solid rgba(0,0,0,0.08)", paddingBottom: "0.5rem" }}
-          >
+          <div key={row.id} className="person-detail-form-grid citation-row">
             <label className="field-group">
               <span className="field-label">Entry mode</span>
               <select
@@ -601,12 +674,13 @@ export const LifeEventRichForm = ({
               </select>
             </label>
             {row.citationMode === "existing" ? (
-              <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+              <label className="field-group field-group--full">
                 <span className="field-label">Source</span>
                 <select
                   value={row.sourceId}
                   onChange={(e) => updateCitation(index, "sourceId", e.target.value)}
                   disabled={disabled}
+                  {...fieldErrorProps(`citation-${row.id}-source`)}
                 >
                   <option value="">Select…</option>
                   {sourceCatalog.map((s) => (
@@ -662,7 +736,7 @@ export const LifeEventRichForm = ({
                 disabled={disabled}
               />
             </label>
-            <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+            <label className="field-group field-group--full">
               <span className="field-label">Citation notes</span>
               <textarea
                 value={row.notes}

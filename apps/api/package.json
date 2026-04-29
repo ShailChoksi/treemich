@@ -14,10 +14,13 @@
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate:dev": "prisma migrate dev --schema prisma/schema.prisma",
     "phase0:backfill": "tsx scripts/phase0-backfill-legacy-columns.ts",
-    "geocode:missing-places": "tsx scripts/geocode-missing-places.ts"
+    "geocode:missing-places": "tsx scripts/geocode-missing-places.ts",
+    "phase4:backfill-families": "tsx scripts/phase4-backfill-families.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/multipart": "^10.0.0",
     "@fastify/rate-limit": "^10.3.0",
     "@prisma/client": "^6.19.3",
     "@treemich/shared": "0.1.0",
@@ -31,6 +34,7 @@
   "devDependencies": {
     "@types/adm-zip": "^0.5.5",
     "@types/node": "^22.14.0",
+    "@vitest/coverage-v8": "^4.1.4",
     "nodemon": "^3.1.10",
     "prisma": "^6.19.3",
     "tsx": "^4.19.3",

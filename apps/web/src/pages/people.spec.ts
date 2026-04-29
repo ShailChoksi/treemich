@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ImmichPerson, RelationshipRecord } from "../lib/api";
+import type { Person, RelationshipRecord } from "../lib/api";
 import { buildBirthPlaceInput, parseDateInputToParts } from "../lib/lifeEventUi";
 import { findBestPersonMatchByName, resolvePeopleSelection } from "./people";
 
-const people: ImmichPerson[] = [
+const people: Person[] = [
   { id: "p-1", name: "Alex", hasRelationship: false },
   { id: "p-2", name: "Alex Johnson", hasRelationship: false },
   { id: "p-3", name: "Jordan", hasRelationship: false }
@@ -20,7 +20,7 @@ describe("findBestPersonMatchByName", () => {
   });
 
   it("falls back to contains match and picks alphabetical first", () => {
-    const candidates: ImmichPerson[] = [
+    const candidates: Person[] = [
       { id: "p-a", name: "Sam Carter", hasRelationship: false },
       { id: "p-b", name: "A Sam", hasRelationship: false }
     ];

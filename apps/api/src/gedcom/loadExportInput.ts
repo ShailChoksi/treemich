@@ -1,0 +1,194 @@
+/**
+ * @packageDocumentation
+ * Loads Treemich user graph data for GEDCOM 5.5.1 export (`buildGedcomDocument`). Shared by synchronous export and async export jobs.
+ */
+
+import { prisma } from "../db/client.js";
+import { env } from "../config/env.js";
+import { lifeEventQueryInclude } from "../lifeEvents/service.js";
+import type { GedcomExportInput } from "./writer.js";
+
+const mapPlace = (
+  p:
+    | {
+        id: string;
+        name: string;
+        addressLine1: string | null;
+        locality: string | null;
+        adminArea: string | null;
+        postalCode: string | null;
+        countryCode: string | null;
+        latitude: unknown;
+        longitude: unknown;
+        notes: string | null;
+      }
+    | null
+    | undefined
+): GedcomExportInput["lifeEvents"][number]["place"] => {
+  if (!p) {
+    return null;
+  }
+  return {
+    id: p.id,
+    name: p.name,
+    addressLine1: p.addressLine1,
+    locality: p.locality,
+    adminArea: p.adminArea,
+    postalCode: p.postalCode,
+    countryCode: p.countryCode,
+    latitude: p.latitude != null ? Number(p.latitude) : null,
+    longitude: p.longitude != null ? Number(p.longitude) : null,
+    notes: p.notes
+  };
+};
+
+export const loadGedcomExportInput = async (userId: string): Promise<GedcomExportInput> => {
+  const exportRowCount = (
+    await Promise.all([
+      prisma.personProfile.count({ where: { userId } }),
+      prisma.relationship.count({ where: { userId } }),
+      prisma.family.count({ where: { userId } }),
+      prisma.lifeEvent.count({ where: { userId } }),
+      prisma.personName.count({ where: { userId } }),
+      prisma.repository.count({ where: { userId } }),
+      prisma.source.count({ where: { userId } }),
+      prisma.mediaObject.count({ where: { userId } }),
+      prisma.mediaLink.count({ where: { userId } })
+    ])
+  ).reduce((total, count) => total + count, 0);
+  if (exportRowCount > env.TREEMICH_EXPORT_MAX_ROWS) {
+    throw new Error(
+      `GEDCOM export contains ${exportRowCount} rows, exceeding TREEMICH_EXPORT_MAX_ROWS=${env.TREEMICH_EXPORT_MAX_ROWS}. Use a filtered export or raise the limit.`
+    );
+  }
+
+  const [
+    personProfiles,
+    relationships,
+    familyRows,
+    lifeEvents,
+    personNames,
+    repositories,
+    sources,
+    mediaObjects,
+    mediaLinks
+  ] = await Promise.all([
+    prisma.personProfile.findMany({
+      where: { userId },
+      include: {
+        externalIdentities: {
+          where: { provider: "IMMICH" },
+          orderBy: { updatedAt: "desc" },
+          take: 1
+        }
+      }
+    }),
+    prisma.relationship.findMany({ where: { userId } }),
+    prisma.family.findMany({
+      where: { userId },
+      include: { children: true },
+      orderBy: { id: "asc" }
+    }),
+    prisma.lifeEvent.findMany({
+      where: { userId },
+      include: lifeEventQueryInclude
+    }),
+    prisma.personName.findMany({ where: { userId } }),
+    prisma.repository.findMany({ where: { userId } }),
+    prisma.source.findMany({ where: { userId } }),
+    prisma.mediaObject.findMany({ where: { userId } }),
+    prisma.mediaLink.findMany({ where: { userId } })
+  ]);
+
+  const mappedProfiles = personProfiles.map((p) => ({
+    id: p.id,
+    gender: p.gender,
+    givenName: p.givenName,
+    surname: p.surname,
+    displayNameOverride: p.displayNameOverride,
+    externalIds:
+      p.externalIds != null && typeof p.externalIds === "object" && !Array.isArray(p.externalIds)
+        ? (p.externalIds as Record<string, unknown>)
+        : {},
+    immichProviderPersonId: p.externalIdentities[0]?.providerPersonId ?? null
+  }));
+
+  return {
+    personProfiles: mappedProfiles,
+    relationships: relationships.map((r) => ({
+      id: r.id,
+      fromPersonId: r.fromPersonId,
+      toPersonId: r.toPersonId,
+      type: r.type,
+      familyId: r.familyId
+    })),
+    families: familyRows.map((f) => ({
+      id: f.id,
+      parent1PersonId: f.parent1PersonId,
+      parent2PersonId: f.parent2PersonId,
+      notes: f.notes,
+      externalIds:
+        f.externalIds != null && typeof f.externalIds === "object" && !Array.isArray(f.externalIds)
+          ? (f.externalIds as Record<string, unknown>)
+          : {},
+      children: f.children.map((c) => ({
+        childPersonId: c.childPersonId,
+        pedigree: c.pedigree
+      }))
+    })),
+    lifeEvents: lifeEvents.map((e) => ({
+      id: e.id,
+      eventType: e.eventType,
+      customLabel: e.customLabel,
+      dateQualifier: e.dateQualifier,
+      year: e.year,
+      month: e.month,
+      day: e.day,
+      endYear: e.endYear,
+      endMonth: e.endMonth,
+      endDay: e.endDay,
+      personId: e.personProfileId,
+      relationshipId: e.relationshipId,
+      familyId: e.familyId,
+      notes: e.notes,
+      place: mapPlace(e.place),
+      citations: e.citations.map((c) => ({
+        id: c.id,
+        sourceId: c.sourceId,
+        page: c.page,
+        notes: c.notes
+      }))
+    })),
+    personNames: personNames.map((n) => ({
+      personId: n.personProfileId,
+      type: n.type,
+      givenName: n.givenName,
+      surname: n.surname,
+      prefix: n.prefix,
+      suffix: n.suffix,
+      isPrimary: n.isPrimary,
+      notes: n.notes
+    })),
+    repositories,
+    sources: sources.map((s) => ({
+      id: s.id,
+      repositoryId: s.repositoryId,
+      title: s.title,
+      author: s.author,
+      publication: s.publication,
+      url: s.url,
+      notes: s.notes
+    })),
+    mediaObjects: mediaObjects.map((m) => ({
+      id: m.id,
+      storageUrl: m.storageUrl,
+      mimeType: m.mimeType,
+      title: m.title
+    })),
+    mediaLinks: mediaLinks.map((l) => ({
+      mediaObjectId: l.mediaObjectId,
+      targetType: l.targetType,
+      targetId: l.targetId
+    }))
+  };
+};

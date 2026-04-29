@@ -1,0 +1,40 @@
+0 HEAD
+1 SOUR Gramps
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+0 @R1@ REPO
+1 NAME County Archive
+1 ADDR 1 Main Street
+1 WWW https://archive.example.test
+0 @S1@ SOUR
+1 TITL County Birth and Marriage Records
+1 AUTH County Clerk
+1 REPO @R1@
+0 @O1@ OBJE
+1 FILE https://example.test/evidence/birth-record.jpg
+1 FORM image/jpeg
+1 TITL Birth record scan
+0 @I1@ INDI
+1 NAME José /Nuñez/
+1 SEX M
+1 _TREEMICH_IMMICH_PERSON_ID immich-jose
+1 BIRT
+2 DATE 1 JAN 1900
+2 PLAC Springfield, Illinois, United States
+2 SOUR @S1@
+3 PAGE Book A, p. 12
+2 OBJE @O1@
+0 @I2@ INDI
+1 NAME Ana /Nuñez/
+1 SEX F
+1 _TREEMICH_IMMICH_PERSON_ID immich-ana
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE ABT 1920
+2 PLAC Springfield, Illinois, United States
+2 SOUR @S1@
+0 TRLR

@@ -116,6 +116,7 @@ describe("cooccurrence routes", () => {
       immichClientFactory: {
         getClient: getClientMock
       } as unknown as AppServices["immichClientFactory"],
+      personService: {} as unknown as AppServices["personService"],
       relationshipService: {
         getPhotoCooccurrence: getPhotoCooccurrenceMock,
         getProfilesForPersonIds: vi.fn().mockResolvedValue(new Map()),
@@ -141,10 +142,14 @@ describe("cooccurrence routes", () => {
         listRelationshipLifeEvents: vi.fn(),
         createRelationshipLifeEvent: vi.fn(),
         updateRelationshipLifeEvent: vi.fn(),
-        deleteRelationshipLifeEvent: vi.fn()
+        deleteRelationshipLifeEvent: vi.fn(),
+        listFamilyLifeEvents: vi.fn().mockResolvedValue([]),
+        createFamilyLifeEvent: vi.fn(),
+        updateFamilyLifeEvent: vi.fn(),
+        deleteFamilyLifeEvent: vi.fn()
       } as unknown as AppServices["lifeEventService"],
       personNameService: {
-        listByImmichPersonId: vi.fn().mockResolvedValue([]),
+        listByPersonId: vi.fn().mockResolvedValue([]),
         getPrimaryMapForProfileIds: vi.fn().mockResolvedValue(new Map()),
         getAllFormattedForUser: vi.fn().mockResolvedValue(new Map()),
         create: vi.fn(),
@@ -167,6 +172,7 @@ describe("cooccurrence routes", () => {
         createSource: vi.fn(),
         updateSource: vi.fn(),
         deleteSource: vi.fn(),
+        mergeSources: vi.fn(),
         listMediaObjects: vi.fn().mockResolvedValue([]),
         createMediaObject: vi.fn(),
         updateMediaObject: vi.fn(),
@@ -174,7 +180,16 @@ describe("cooccurrence routes", () => {
         listMediaLinksForObject: vi.fn().mockResolvedValue([]),
         createMediaLink: vi.fn(),
         deleteMediaLink: vi.fn()
-      } as unknown as AppServices["evidenceService"]
+      } as unknown as AppServices["evidenceService"],
+      familyService: {
+        listFamilies: vi.fn().mockResolvedValue([]),
+        getFamily: vi.fn(),
+        listFamiliesForPerson: vi.fn().mockResolvedValue([]),
+        createFamily: vi.fn(),
+        patchFamily: vi.fn(),
+        deleteFamily: vi.fn(),
+        findAdoptedChildPersonIds: vi.fn().mockResolvedValue([])
+      } as unknown as AppServices["familyService"]
     };
 
     const { buildApp } = await import("../app.js");
@@ -294,14 +309,8 @@ describe("cooccurrence routes", () => {
     expect(getPhotoCooccurrenceMock).toHaveBeenCalledTimes(0);
   });
 
-  it("falls back to the live cooccurrence computation when nothing is persisted yet", async () => {
+  it("returns an empty persisted snapshot when no cooccurrence job has completed yet", async () => {
     getPersistedPhotoCooccurrenceMock.mockResolvedValue(null);
-    getPhotoCooccurrenceMock.mockResolvedValue({
-      clusters: [],
-      edges: [],
-      computedAt: "2026-01-01T00:00:00.000Z",
-      sourcePhotoCount: 0
-    });
 
     const response = await app.inject({
       method: "GET",
@@ -309,14 +318,13 @@ describe("cooccurrence routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(getPhotoCooccurrenceMock).toHaveBeenCalledWith(
-      "user-1",
-      expect.any(Object),
-      expect.objectContaining({
-        minSharedPhotos: 2,
-        minScore: 0
-      })
-    );
+    expect(getPhotoCooccurrenceMock).toHaveBeenCalledTimes(0);
+    expect(response.json()).toEqual({
+      clusters: [],
+      edges: [],
+      computedAt: "1970-01-01T00:00:00.000Z",
+      sourcePhotoCount: 0
+    });
   });
 
   it("syncs cooccurrence schedule settings when preferences are updated", async () => {

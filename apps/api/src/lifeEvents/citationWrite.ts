@@ -18,17 +18,61 @@ export async function replaceLifeEventCitations(
     return;
   }
   await tx.citation.deleteMany({ where: { lifeEventId } });
+  const sourceIds = [
+    ...new Set(
+      citations
+        .map((citation) => citation.sourceId?.trim() ?? "")
+        .filter((sourceId): sourceId is string => sourceId.length > 0)
+    )
+  ];
+  const existingSources =
+    sourceIds.length > 0
+      ? await tx.source.findMany({
+          where: {
+            userId,
+            id: { in: sourceIds }
+          },
+          select: { id: true }
+        })
+      : [];
+  const existingSourceIds = new Set(existingSources.map((source) => source.id));
+  for (const sourceId of sourceIds) {
+    if (!existingSourceIds.has(sourceId)) {
+      throw new HttpValidationError(`Unknown source id: ${sourceId}`);
+    }
+  }
+
+  const repositoryNames = [
+    ...new Set(
+      citations
+        .map((citation) => citation.repository?.trim() ?? "")
+        .filter((repositoryName): repositoryName is string => repositoryName.length > 0)
+    )
+  ];
+  const existingRepositories =
+    repositoryNames.length > 0
+      ? await tx.repository.findMany({
+          where: {
+            userId,
+            name: { in: repositoryNames }
+          },
+          select: {
+            id: true,
+            name: true
+          }
+        })
+      : [];
+  const repositoryIdByName = new Map(
+    existingRepositories.map((repository) => [repository.name, repository.id])
+  );
+
   for (const c of citations) {
     const sid = c.sourceId?.trim();
     if (sid) {
-      const src = await tx.source.findFirst({ where: { id: sid, userId } });
-      if (!src) {
-        throw new HttpValidationError(`Unknown source id: ${sid}`);
-      }
       await tx.citation.create({
         data: {
           userId,
-          sourceId: src.id,
+          sourceId: sid,
           lifeEventId,
           page: c.page?.trim() ? c.page.trim() : null,
           notes: c.notes?.trim() ? c.notes.trim() : null,
@@ -40,15 +84,15 @@ export async function replaceLifeEventCitations(
     const repoName = c.repository?.trim();
     let repositoryId: string | null = null;
     if (repoName) {
-      const existingRepo = await tx.repository.findFirst({
-        where: { userId, name: repoName }
-      });
-      const repo =
-        existingRepo ??
-        (await tx.repository.create({
+      let mappedRepositoryId = repositoryIdByName.get(repoName);
+      if (!mappedRepositoryId) {
+        const created = await tx.repository.create({
           data: { userId, name: repoName }
-        }));
-      repositoryId = repo.id;
+        });
+        mappedRepositoryId = created.id;
+        repositoryIdByName.set(repoName, created.id);
+      }
+      repositoryId = mappedRepositoryId;
     }
     const title = c.title?.trim() || "Citation";
     const source = await tx.source.create({

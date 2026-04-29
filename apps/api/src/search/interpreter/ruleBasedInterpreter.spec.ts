@@ -42,6 +42,31 @@ describe("RuleBasedInterpreter", () => {
     expect(result.parsed.requiredGender).toBeUndefined();
   });
 
+  it("parses adopted children query", () => {
+    const result = interpreter.interpret("adopted children of Maria");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_ADOPTED_CHILDREN");
+    expect(result.parsed.sourceName).toBe("Maria");
+    expect(result.parsed.hops).toEqual(["CHILD_OF"]);
+  });
+
+  it("parses adopted son query", () => {
+    const result = interpreter.interpret("adopted son of Mike");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_ADOPTED_SONS");
+    expect(result.parsed.requiredGender).toBe("MALE");
+  });
+
+  it("parses adopted daughter query", () => {
+    const result = interpreter.interpret("adopted daughter of Sue");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parsed.intent).toBe("FIND_ADOPTED_DAUGHTERS");
+    expect(result.parsed.requiredGender).toBe("FEMALE");
+  });
+
   // --- single-hop: parents ---
 
   it("parses parents query", () => {

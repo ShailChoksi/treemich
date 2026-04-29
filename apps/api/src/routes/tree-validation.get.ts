@@ -19,11 +19,17 @@ const querySchema = z.object({
 export const registerTreeValidationGetRoute = (app: FastifyInstance) => {
   app.get("/tree/validation", async (request) => {
     const auth = getRequiredAuth(request);
-    querySchema.parse(request.query);
+    const query = querySchema.parse(request.query);
+    if (query.persist === "true") {
+      throw {
+        statusCode: 400,
+        message: "GET /tree/validation is read-only; use POST /validation/recompute to persist findings"
+      };
+    }
     if (!isTreeValidationEngineEnabled()) {
       return { findings: [], engineDisabled: true as const, persist: false as const };
     }
-    const findings = await computeTreeValidationForUser(auth.user.id, app.services.lifeEventService);
+    const findings = await computeTreeValidationForUser(auth.user.id);
     return { findings, engineDisabled: false as const, persist: false as const };
   });
 };

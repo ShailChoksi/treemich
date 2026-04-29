@@ -4,36 +4,46 @@
  */
 
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyReply } from "fastify";
 import { ZodError } from "zod";
 import { ImmichAuthenticationError } from "./integrations/immich/client.js";
 import { readCookie } from "./auth/request.js";
 import { TreemichAuthError } from "./auth/service.js";
-import { env } from "./config/env.js";
+import { env, maxGedcomMediaArchiveBytes } from "./config/env.js";
 import { prisma } from "./db/client.js";
+import { registerAuthImmichLinkRoutes } from "./routes/auth.immich-link.js";
 import { registerAuthLinkStatusRoute } from "./routes/auth.link-status.js";
 import { registerAuthLoginRoute } from "./routes/auth.login.js";
 import { registerAuthLogoutRoute } from "./routes/auth.logout.js";
 import { registerAuthMeRoute } from "./routes/auth.me.js";
 import { registerExportAccountGetRoute } from "./routes/export-account.get.js";
+import { registerExportGedcomGetRoute } from "./routes/export-gedcom.get.js";
+import { registerExportGedcomJobRoutes } from "./routes/export-gedcom-jobs.js";
+import { registerImportGedcomRoutes } from "./routes/import-gedcom.js";
+import { registerFamiliesLifeEventsRoutes } from "./routes/families-life-events.js";
+import { registerFamilyRoutes } from "./routes/families.js";
 import { registerCooccurrenceComputePostRoute } from "./routes/cooccurrence-compute.post.js";
 import { registerCooccurrenceEdgesGetRoute } from "./routes/cooccurrence-edges.get.js";
 import { registerCooccurrencePairGetRoute } from "./routes/cooccurrence-pair.get.js";
 import { registerCooccurrenceStatusGetRoute } from "./routes/cooccurrence-status.get.js";
 import { registerGraphLayoutPostRoute } from "./routes/graph-layout.post.js";
+import { registerImmichProviderRoutes } from "./routes/immich-provider.js";
 import { registerPeopleGetRoute } from "./routes/people.get.js";
 import { registerPeopleCooccurrenceGetRoute } from "./routes/people-cooccurrence.get.js";
+import { registerPersonDuplicateRoutes } from "./routes/person-duplicates.js";
 import { registerPeopleRelationshipsDeleteRoute } from "./routes/people-relationships.delete.js";
 import { registerPeopleRelationshipsPatchRoute } from "./routes/people-relationships.patch.js";
 import { registerPeopleLifeEventsRoutes } from "./routes/people-life-events.js";
 import { registerPeoplePersonNamesRoutes } from "./routes/people-person-names.js";
 import { registerPeopleTimelineGetRoute } from "./routes/people-timeline.get.js";
-import { registerPeoplePatchRoute } from "./routes/people.patch.js";
 import { registerPlacesMapGetRoute } from "./routes/places-map.get.js";
 import { registerPeopleRelationshipsPostRoute } from "./routes/people-relationships.post.js";
 import { registerPeopleThumbnailGetRoute } from "./routes/people-thumbnail.get.js";
 import { registerEvidenceRoutes } from "./routes/evidence.js";
+import { registerReportRoutes } from "./routes/reports.js";
 import { registerResearchTaskRoutes } from "./routes/research-tasks.js";
 import { registerRelationshipsGetRoute } from "./routes/relationships.get.js";
 import { registerRelationshipsLifeEventsRoutes } from "./routes/relationships-life-events.js";
@@ -41,6 +51,7 @@ import { registerSearchGetRoute } from "./routes/search.get.js";
 import { registerTreeValidationGetRoute } from "./routes/tree-validation.get.js";
 import { registerUserPreferencesGetRoute } from "./routes/user-preferences.get.js";
 import { registerUserPreferencesPatchRoute } from "./routes/user-preferences.patch.js";
+import { registerValidationFindingRoutes } from "./routes/validation-findings.js";
 import { buildServices, registerServices, type AppServices } from "./services.js";
 
 type BuildAppOptions = {
@@ -83,14 +94,14 @@ const sendAuthError = (reply: FastifyReply, error: TreemichAuthError | ImmichAut
   });
 
 export const buildApp = (options: BuildAppOptions = {}) => {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, trustProxy: env.TREEMICH_TRUST_PROXY });
   const services = options.services ?? buildServices();
 
   registerServices(app, services);
   app.decorateRequest("auth", null);
 
   app.register(cors, {
-    origin: env.NODE_ENV === "production" ? (env.WEB_ORIGIN ?? false) : true,
+    origin: env.NODE_ENV === "production" ? env.WEB_ORIGIN : true,
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   });
@@ -98,11 +109,29 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     max: env.RATE_LIMIT_MAX,
     timeWindow: env.RATE_LIMIT_TIME_WINDOW_MS
   });
+  app.register(helmet, {
+    global: true,
+    contentSecurityPolicy: false
+  });
+  app.register(multipart, {
+    limits: {
+      fileSize: maxGedcomMediaArchiveBytes(),
+      files: 1,
+      fields: 8
+    }
+  });
+
+  if (env.NODE_ENV === "production" && !env.TREEMICH_TRUST_PROXY) {
+    app.log.warn(
+      "TREEMICH_TRUST_PROXY=false in production; verify reverse-proxy configuration for correct client IP and secure-cookie behavior"
+    );
+  }
 
   app.addHook("preHandler", async (request, reply) => {
     const routePath = request.routeOptions.url;
     if (
       routePath === "/health" ||
+      routePath === "/ready" ||
       routePath === "/auth/login" ||
       routePath === "/auth/me" ||
       routePath === "/auth/logout" ||
@@ -121,8 +150,12 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     }
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
+      app.log.warn(
+        { path: request.url, method: request.method, issues: error.issues },
+        "Request body validation failed"
+      );
       return reply.code(400).send({
         statusCode: 400,
         error: "Validation Error",
@@ -143,7 +176,6 @@ export const buildApp = (options: BuildAppOptions = {}) => {
       return reply.code(statusCode).send({
         statusCode,
         error: "Database Error",
-        code: error.code,
         message: "Database operation failed"
       });
     }
@@ -166,12 +198,16 @@ export const buildApp = (options: BuildAppOptions = {}) => {
     });
   });
 
-  app.get("/health", async (_request, reply) => {
+  app.get("/health", async () => {
+    return { ok: true };
+  });
+
+  app.get("/ready", async (_request, reply) => {
     try {
       await prisma.$queryRaw`SELECT 1`;
       return { ok: true };
     } catch (error) {
-      app.log.error(error, "Health check database probe failed");
+      app.log.error(error, "Readiness database probe failed");
       return reply.code(503).send({
         ok: false,
         error: "Database unavailable"
@@ -181,16 +217,21 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerAuthLoginRoute);
   app.register(registerAuthLogoutRoute);
   app.register(registerAuthMeRoute);
+  app.register(registerAuthImmichLinkRoutes);
   app.register(registerAuthLinkStatusRoute);
   app.register(registerCooccurrenceComputePostRoute);
   app.register(registerCooccurrenceEdgesGetRoute);
   app.register(registerCooccurrencePairGetRoute);
   app.register(registerCooccurrenceStatusGetRoute);
   app.register(registerGraphLayoutPostRoute);
+  app.register(registerImmichProviderRoutes);
   app.register(registerPeopleGetRoute);
+  app.register(registerPersonDuplicateRoutes);
   app.register(registerPeopleCooccurrenceGetRoute);
   app.register(registerPeopleThumbnailGetRoute);
   app.register(registerPeopleRelationshipsPostRoute);
+  app.register(registerFamilyRoutes);
+  app.register(registerFamiliesLifeEventsRoutes);
   app.register(registerPeopleRelationshipsDeleteRoute);
   app.register(registerPeopleRelationshipsPatchRoute);
   app.register(registerRelationshipsGetRoute);
@@ -201,12 +242,16 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerPlacesMapGetRoute);
   app.register(registerResearchTaskRoutes);
   app.register(registerEvidenceRoutes);
-  app.register(registerPeoplePatchRoute);
+  app.register(registerReportRoutes);
   app.register(registerSearchGetRoute);
   app.register(registerTreeValidationGetRoute);
+  app.register(registerValidationFindingRoutes);
   app.register(registerUserPreferencesGetRoute);
   app.register(registerUserPreferencesPatchRoute);
   app.register(registerExportAccountGetRoute);
+  app.register(registerExportGedcomGetRoute);
+  app.register(registerExportGedcomJobRoutes);
+  app.register(registerImportGedcomRoutes);
 
   return app;
 };

@@ -4,10 +4,10 @@ export type LifeEventValidationFinding = {
   code: string;
   severity: "error" | "warning";
   message: string;
-  /** Person this finding applies to (life-event scope). */
-  immichPersonId?: string;
+  /** Treemich PersonProfile.id this finding applies to (life-event scope). */
+  personId?: string;
   relationshipId?: string;
-  relatedImmichPersonId?: string;
+  relatedPersonId?: string;
 };
 
 type EventDateParts = {
@@ -23,7 +23,7 @@ type EventDateParts = {
  */
 export function computePersonLifeEventFindings(
   events: EventDateParts[],
-  context?: { immichPersonId: string }
+  context?: { personId: string }
 ): LifeEventValidationFinding[] {
   const findings: LifeEventValidationFinding[] = [];
   const birth = events.find((e) => e.eventType === "BIRTH");
@@ -41,7 +41,7 @@ export function computePersonLifeEventFindings(
       code: "birth_after_death",
       severity: "error",
       message: "BIRTH is dated after DEATH for this person.",
-      immichPersonId: context?.immichPersonId
+      personId: context?.personId
     });
   }
   return findings;

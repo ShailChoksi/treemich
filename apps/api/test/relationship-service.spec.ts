@@ -1,12 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const personProfileFindFirstMock = vi.fn().mockResolvedValue(null);
 const personProfileUpsertMock = vi.fn();
+const personProfileUpdateMock = vi.fn();
+const personExternalIdentityFindFirstMock = vi.fn().mockResolvedValue(null);
 const relationshipUpsertMock = vi.fn();
 const relationshipDeleteManyMock = vi.fn();
 const relationshipFindManyMock = vi.fn();
+const personProfileCreateMock = vi.fn().mockResolvedValue({ id: "created-id" });
 const prismaTransactionMock = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
   callback({
-    personProfile: { upsert: personProfileUpsertMock },
+    personProfile: {
+      findFirst: personProfileFindFirstMock,
+      upsert: personProfileUpsertMock,
+      update: personProfileUpdateMock,
+      create: personProfileCreateMock
+    },
+    personExternalIdentity: { findFirst: personExternalIdentityFindFirstMock },
     relationship: { upsert: relationshipUpsertMock }
   })
 );
@@ -15,8 +25,11 @@ vi.mock("../src/db/client.js", () => ({
   prisma: {
     $transaction: prismaTransactionMock,
     personProfile: {
-      upsert: personProfileUpsertMock
+      findFirst: personProfileFindFirstMock,
+      upsert: personProfileUpsertMock,
+      update: personProfileUpdateMock
     },
+    personExternalIdentity: { findFirst: personExternalIdentityFindFirstMock },
     relationship: {
       upsert: relationshipUpsertMock,
       deleteMany: relationshipDeleteManyMock,
@@ -33,6 +46,15 @@ describe("RelationshipService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLifeEventService.getSpouseMarriageDivorceIsoForPairs.mockResolvedValue(new Map());
+    // Default: resolve canonical PersonProfile by id so upsertProfile returns existing records.
+    personProfileFindFirstMock.mockImplementation(async ({ where }: { where: { id?: string } }) => {
+      if (where.id) return { id: where.id, userId: "user-1" };
+      return null;
+    });
+    personProfileUpdateMock.mockImplementation(async ({ where }: { where: { id: string } }) => ({
+      id: where.id,
+      userId: "user-1"
+    }));
   });
 
   it("creates direct and inverse relationship records", async () => {
@@ -45,22 +67,14 @@ describe("RelationshipService", () => {
     const result = await service.upsertRelationship("user-1", "p1", "p2", "CHILD_OF");
 
     expect(prismaTransactionMock).toHaveBeenCalledTimes(1);
-    expect(personProfileUpsertMock).toHaveBeenCalledTimes(2);
-    expect(personProfileUpsertMock).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        where: {
-          userId_immichPersonId: {
-            userId: "user-1",
-            immichPersonId: "p1"
-          }
-        },
-        create: expect.objectContaining({
-          userId: "user-1",
-          immichPersonId: "p1"
-        })
-      })
+    // upsertProfile now uses findFirst to require canonical Treemich person ids rather than upsert.
+    expect(personProfileFindFirstMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "p1", userId: "user-1" } })
     );
+    expect(personProfileFindFirstMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "p2", userId: "user-1" } })
+    );
+    expect(personProfileUpsertMock).not.toHaveBeenCalled();
     expect(relationshipUpsertMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
