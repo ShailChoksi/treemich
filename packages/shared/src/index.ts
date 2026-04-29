@@ -169,6 +169,7 @@ export * from "./lifeEvents.js";
 export * from "./personNames.js";
 export * from "./researchTasks.js";
 export * from "./evidence.js";
+export * from "./validationFindings.js";
 
 /** Weighted edge between two people derived from shared photo appearances. */
 export type PhotoCooccurrenceEdge = {

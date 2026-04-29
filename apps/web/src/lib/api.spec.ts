@@ -20,14 +20,21 @@ import {
   getPersonLifeEvents,
   immichPersonUrl,
   createEvidenceMediaObject,
+  createEvidenceMediaLink,
   createEvidenceRepository,
+  deleteEvidenceMediaLink,
+  getMediaLinksForTarget,
+  getValidationFindings,
   listEvidenceMediaObjects,
+  listEvidenceMediaLinks,
   listEvidenceRepositories,
   listEvidenceSources,
   login,
   logout,
   mergeEvidenceSources,
   patchFamily,
+  recomputeValidationFindings,
+  updateValidationFinding,
   updateFamilyLifeEvent
 } from "./api";
 
@@ -566,6 +573,139 @@ describe("evidence API helpers", () => {
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "/api/evidence/media",
       expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("loads target media links for families", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          links: [
+            {
+              id: "link-1",
+              mediaObjectId: "m1",
+              targetType: "FAMILY",
+              targetId: "fam-1",
+              notes: null,
+              createdAt: "2026-01-01T00:00:00.000Z",
+              mediaObject: {
+                id: "m1",
+                storageUrl: "family.jpg",
+                mimeType: "image/jpeg",
+                checksum: null,
+                immichAssetId: null,
+                title: "Family",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z"
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    const links = await getMediaLinksForTarget("FAMILY", "fam-1");
+    expect(links[0]?.mediaObject.title).toBe("Family");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/evidence/media-links?targetType=FAMILY&targetId=fam-1",
+      expect.objectContaining({ cache: "no-store" })
+    );
+  });
+
+  it("creates, lists, and deletes media links with session credentials", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "link-1", targetType: "FAMILY" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ links: [{ id: "link-1", targetType: "FAMILY" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await createEvidenceMediaLink("m1", { targetType: "FAMILY", targetId: "fam-1", notes: null });
+    await listEvidenceMediaLinks("m1");
+    await deleteEvidenceMediaLink("link-1");
+
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/evidence/media/m1/links",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/evidence/media/m1/links",
+      expect.objectContaining({ cache: "no-store" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/evidence/media-links/link-1",
+      expect.objectContaining({ method: "DELETE", credentials: "include" })
+    );
+  });
+});
+
+describe("validation findings API helpers", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("loads validation findings with repeated status filters", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ findings: [{ id: "vf1", status: "OPEN" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const findings = await getValidationFindings({ status: ["OPEN", "IN_PROGRESS"] });
+    expect(findings).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/validation/findings?status=OPEN&status=IN_PROGRESS",
+      expect.objectContaining({ cache: "no-store" })
+    );
+  });
+
+  it("recomputes and updates validation finding status via mutating routes", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ findings: [], summary: { current: 0 }, engineDisabled: false }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "vf1", status: "IN_PROGRESS" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      );
+
+    await recomputeValidationFindings();
+    await updateValidationFinding("vf1", "IN_PROGRESS");
+
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/validation/recompute",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/validation/findings/vf1",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ status: "IN_PROGRESS" }) })
     );
   });
 });

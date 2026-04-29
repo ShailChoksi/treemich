@@ -10,6 +10,7 @@ import type {
   CreateFamilyBody,
   CreateFamilyLifeEventBody,
   CreateLifeEventBody,
+  CreateMediaLinkBody,
   CreateMediaObjectBody,
   CreatePersonNameBody,
   CreatePersonBody,
@@ -28,7 +29,9 @@ import type {
   LifeEventListResponse,
   LifeEventRecord,
   LinkStatus,
+  MediaLinkRecord,
   MediaObjectRecord,
+  MediaLinkTargetType,
   MergeSourcesBody,
   PatchFamilyBody,
   PatchLifeEventBody,
@@ -46,8 +49,12 @@ import type {
   SearchRelationshipsResponse,
   ResearchTaskRecord,
   SourceRecord,
+  TargetMediaLinkRecord,
   TreemichPersonProfile,
-  UserPreferences
+  UserPreferences,
+  ValidationFindingRecord,
+  ValidationFindingStatus,
+  ValidationRecomputeSummary
 } from "@treemich/shared";
 
 /** Re-exported `@treemich/shared` types for modules that depend only on the web API layer. */
@@ -57,6 +64,7 @@ export type {
   CreateFamilyBody,
   CreateFamilyLifeEventBody,
   CreateLifeEventBody,
+  CreateMediaLinkBody,
   CreateMediaObjectBody,
   CreatePersonBody,
   CreatePersonExternalIdentityBody,
@@ -74,6 +82,8 @@ export type {
   ImmichThumbnailImportResponse,
   LinkStatus,
   LifeEventRecord,
+  MediaLinkRecord,
+  MediaLinkTargetType,
   MediaObjectRecord,
   MergeSourcesBody,
   PatchFamilyBody,
@@ -92,8 +102,12 @@ export type {
   ResearchTaskRecord,
   SearchRelationshipsResponse,
   SourceRecord,
+  TargetMediaLinkRecord,
   TreemichPersonProfile,
-  UserPreferences
+  UserPreferences,
+  ValidationFindingRecord,
+  ValidationFindingStatus,
+  ValidationRecomputeSummary
 };
 
 const treemichApi = import.meta.env.VITE_TREEMICH_API_URL ?? "/api";
@@ -1116,6 +1130,84 @@ export const deleteResearchTask = async (taskId: string): Promise<void> => {
   await ensureOk(response, "Failed to delete research task");
 };
 
+export type ValidationFindingFilters = {
+  status?: ValidationFindingStatus[];
+  severity?: "error" | "warning";
+  code?: string;
+  personId?: string;
+  familyId?: string;
+};
+
+const validationFindingQuery = (filters?: ValidationFindingFilters) => {
+  const params = new URLSearchParams();
+  for (const status of filters?.status ?? []) {
+    params.append("status", status);
+  }
+  if (filters?.severity) {
+    params.set("severity", filters.severity);
+  }
+  if (filters?.code?.trim()) {
+    params.set("code", filters.code.trim());
+  }
+  if (filters?.personId) {
+    params.set("personId", filters.personId);
+  }
+  if (filters?.familyId) {
+    params.set("familyId", filters.familyId);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+};
+
+export const getValidationFindings = async (
+  filters?: ValidationFindingFilters,
+  options?: RequestOptions
+): Promise<ValidationFindingRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/validation/findings${validationFindingQuery(filters)}`,
+    {
+      cache: "no-store",
+      signal: options?.signal
+    }
+  );
+  await ensureOk(response, "Failed to load validation findings");
+  const body = (await response.json()) as { findings: ValidationFindingRecord[] };
+  return body.findings ?? [];
+};
+
+export const recomputeValidationFindings = async (): Promise<{
+  findings: ValidationFindingRecord[];
+  summary: ValidationRecomputeSummary;
+  engineDisabled: boolean;
+}> => {
+  const response = await fetch(
+    `${treemichApi}/validation/recompute`,
+    withSession({ method: "POST", headers: { "Content-Type": "application/json" } })
+  );
+  await ensureOk(response, "Failed to recompute validation findings");
+  return (await response.json()) as {
+    findings: ValidationFindingRecord[];
+    summary: ValidationRecomputeSummary;
+    engineDisabled: boolean;
+  };
+};
+
+export const updateValidationFinding = async (
+  findingId: string,
+  status: "OPEN" | "IN_PROGRESS" | "DISMISSED"
+): Promise<ValidationFindingRecord> => {
+  const response = await fetch(
+    `${treemichApi}/validation/findings/${encodeURIComponent(findingId)}`,
+    withSession({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status })
+    })
+  );
+  await ensureOk(response, "Failed to update validation finding");
+  return (await response.json()) as ValidationFindingRecord;
+};
+
 /** `GET /evidence/repositories` — archives / libraries for grouping sources. */
 export const listEvidenceRepositories = async (): Promise<RepositoryRecord[]> => {
   const response = await fetchWithRetry(`${treemichApi}/evidence/repositories`, { cache: "no-store" });
@@ -1194,6 +1286,58 @@ export const createEvidenceMediaObject = async (body: CreateMediaObjectBody): Pr
   );
   await ensureOk(response, "Failed to create media object");
   return (await response.json()) as MediaObjectRecord;
+};
+
+export const getMediaLinksForTarget = async (
+  targetType: MediaLinkTargetType,
+  targetId: string,
+  options?: RequestOptions
+): Promise<TargetMediaLinkRecord[]> => {
+  const query = new URLSearchParams({ targetType, targetId });
+  const response = await fetchWithRetry(`${treemichApi}/evidence/media-links?${query.toString()}`, {
+    cache: "no-store",
+    signal: options?.signal
+  });
+  await ensureOk(response, "Failed to load media links");
+  const body = (await response.json()) as { links: TargetMediaLinkRecord[] };
+  return body.links ?? [];
+};
+
+export const listEvidenceMediaLinks = async (
+  mediaObjectId: string,
+  options?: RequestOptions
+): Promise<MediaLinkRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/evidence/media/${encodeURIComponent(mediaObjectId)}/links`,
+    { cache: "no-store", signal: options?.signal }
+  );
+  await ensureOk(response, "Failed to load media object links");
+  const body = (await response.json()) as { links: MediaLinkRecord[] };
+  return body.links ?? [];
+};
+
+export const createEvidenceMediaLink = async (
+  mediaObjectId: string,
+  body: CreateMediaLinkBody
+): Promise<MediaLinkRecord> => {
+  const response = await fetch(
+    `${treemichApi}/evidence/media/${encodeURIComponent(mediaObjectId)}/links`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create media link");
+  return (await response.json()) as MediaLinkRecord;
+};
+
+export const deleteEvidenceMediaLink = async (linkId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/evidence/media-links/${encodeURIComponent(linkId)}`,
+    withSession({ method: "DELETE" })
+  );
+  await ensureOk(response, "Failed to delete media link");
 };
 
 /** `POST /import/gedcom/preview` — parse UTF-8 GEDCOM and list INDI/FAM for matching (Phase 5b). */

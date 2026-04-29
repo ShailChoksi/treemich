@@ -21,6 +21,7 @@ import { FamilyService } from "./families/service.js";
 import { PersonService } from "./people/service.js";
 import { ResearchTaskService } from "./researchTasks/service.js";
 import { RelationshipService } from "./relationships/service.js";
+import { ValidationFindingService } from "./validation/validationFindingService.js";
 
 /** Service container attached to each Fastify instance (`app.services`). */
 export type AppServices = {
@@ -34,6 +35,7 @@ export type AppServices = {
   personNameService: PersonNameService;
   researchTaskService: ResearchTaskService;
   evidenceService: EvidenceService;
+  validationFindingService?: ValidationFindingService;
 };
 
 /** Constructs default service instances (shared `LifeEventService` wired into `RelationshipService`). */
@@ -51,7 +53,8 @@ export const buildServices = (): AppServices => {
     lifeEventService,
     personNameService: new PersonNameService(),
     researchTaskService: new ResearchTaskService(personService),
-    evidenceService: new EvidenceService()
+    evidenceService: new EvidenceService(),
+    validationFindingService: new ValidationFindingService()
   };
 };
 

@@ -22,12 +22,15 @@
 - GEDCOM import uses resilient per-entity apply, not one global transaction. A failed job may have already created or updated earlier records; review the route-visible `errorMessage`, `summary`, and capped `lineLog` before retrying.
 - GEDCOM `lineLog` is structured JSON capped by `TREEMICH_GEDCOM_IMPORT_MAX_LINE_LOG`; when entries are omitted the API includes a truncation warning. Do not treat line logs as raw GEDCOM archives: they may still contain names, ids, source titles, or file paths, so avoid forwarding them to third-party systems without PII review.
 - Co-occurrence refreshes should be owned by a single API/worker process in production deployments. If multiple replicas are used, prefer a dedicated worker or leader-election wrapper before increasing scheduled-job volume.
+- Validation findings are recomputed manually through `POST /validation/recompute`; no scheduler or external worker owns this in Phase C. `GET /tree/validation` remains read-only, and `GET /tree/validation?persist=true` is rejected.
+- When `TREEMICH_VALIDATION_ENGINE_ENABLED` is disabled, stored validation findings remain queryable for review, but recompute should be disabled in clients.
 
 ## Capacity Limits
 
 - `TREEMICH_EXPORT_MAX_ROWS` protects synchronous account and GEDCOM export paths from loading very large accounts into memory.
 - Graph layout requests are rejected above the server-side person/relationship caps.
 - Co-occurrence legacy graph responses are capped; clients should use cursor-based edge APIs for large datasets.
+- Full-tree validation scans are capped by `TREEMICH_TREE_VALIDATION_MAX_ROWS` before findings are returned or persisted.
 
 ## Rollback
 

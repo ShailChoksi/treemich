@@ -415,6 +415,22 @@ export function buildGedcomDocument(
     xrefs.obje[xref] = { mediaObjectId: m.id };
   });
 
+  const mediaForTarget = (targetType: string, targetId: string): string[] => {
+    const xrefsOut: string[] = [];
+    for (const link of input.mediaLinks) {
+      if (link.targetType !== targetType || link.targetId !== targetId) {
+        continue;
+      }
+      const ox = mediaIdToXref.get(link.mediaObjectId);
+      if (ox) {
+        xrefsOut.push(ox);
+      }
+    }
+    return [...new Set(xrefsOut)].sort();
+  };
+
+  const mediaForFamily = (familyId: string): string[] => mediaForTarget("FAMILY", familyId);
+
   /** family prisma id → FAM xref */
   const familyIdToXref = new Map<string, string>();
   const familiesSorted = [...input.families].sort((a, b) => a.id.localeCompare(b.id));
@@ -556,6 +572,9 @@ export function buildGedcomDocument(
     if (f.notes?.trim()) {
       lines.push(line(1, "NOTE", f.notes.trim()));
     }
+    for (const ox of mediaForFamily(f.id)) {
+      lines.push(line(1, "OBJE", `@${ox}@`));
+    }
   }
 
   for (const pairKey of syntheticPairs) {
@@ -625,47 +644,11 @@ export function buildGedcomDocument(
     }
   };
 
-  const mediaForLifeEvent = (lifeEventId: string): string[] => {
-    const xrefsOut: string[] = [];
-    for (const link of input.mediaLinks) {
-      if (link.targetType !== "LIFE_EVENT" || link.targetId !== lifeEventId) {
-        continue;
-      }
-      const ox = mediaIdToXref.get(link.mediaObjectId);
-      if (ox) {
-        xrefsOut.push(ox);
-      }
-    }
-    return [...new Set(xrefsOut)].sort();
-  };
+  const mediaForLifeEvent = (lifeEventId: string): string[] => mediaForTarget("LIFE_EVENT", lifeEventId);
 
-  const mediaForPersonProfile = (profileId: string): string[] => {
-    const xrefsOut: string[] = [];
-    for (const link of input.mediaLinks) {
-      if (link.targetType !== "PERSON_PROFILE" || link.targetId !== profileId) {
-        continue;
-      }
-      const ox = mediaIdToXref.get(link.mediaObjectId);
-      if (ox) {
-        xrefsOut.push(ox);
-      }
-    }
-    return [...new Set(xrefsOut)].sort();
-  };
+  const mediaForPersonProfile = (profileId: string): string[] => mediaForTarget("PERSON_PROFILE", profileId);
 
-  const mediaForSource = (sourceId: string): string[] => {
-    const xrefsOut: string[] = [];
-    for (const link of input.mediaLinks) {
-      if (link.targetType !== "SOURCE" || link.targetId !== sourceId) {
-        continue;
-      }
-      const ox = mediaIdToXref.get(link.mediaObjectId);
-      if (ox) {
-        xrefsOut.push(ox);
-      }
-    }
-    return [...new Set(xrefsOut)].sort();
-  };
+  const mediaForSource = (sourceId: string): string[] => mediaForTarget("SOURCE", sourceId);
 
   /** MARR / DIV and other events scoped to relationship */
   for (const e of input.lifeEvents) {

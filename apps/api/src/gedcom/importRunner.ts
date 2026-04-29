@@ -647,7 +647,7 @@ export async function processGedcomImportJob(jobId: string, services: AppService
 
   const linkObjePointers = async (
     pointers: string[],
-    targetType: "PERSON_PROFILE" | "LIFE_EVENT" | "SOURCE",
+    targetType: "PERSON_PROFILE" | "LIFE_EVENT" | "SOURCE" | "FAMILY",
     targetId: string,
     context: string
   ) => {
@@ -1081,11 +1081,20 @@ export async function processGedcomImportJob(jobId: string, services: AppService
         .filter((ch) => ch[0]?.tag === "OBJE")
         .flatMap((ch) => objePointersFromChunk(ch, 1));
       if (familyLevelObjePointers.length > 0) {
-        pushLog(lineLog, {
-          severity: "warn",
-          lineNo: block.startLineNo,
-          message: `FAM ${fam.xref}: family-level OBJE pointers are parsed but skipped; Phase 5 links media to person profiles, life events, and sources`
-        });
+        if (treemichFamilyId || dryRun) {
+          await linkObjePointers(
+            familyLevelObjePointers,
+            "FAMILY",
+            treemichFamilyId ?? `dry-run-fam-${fam.xref}`,
+            `FAM ${fam.xref}`
+          );
+        } else {
+          pushLog(lineLog, {
+            severity: "warn",
+            lineNo: block.startLineNo,
+            message: `FAM ${fam.xref}: family-level OBJE pointers could not be linked because no Treemich family was resolved`
+          });
+        }
       }
 
       for (const ch of chunkByLevel1(block.lines)) {

@@ -20,13 +20,16 @@ import type {
   GraphLayoutResponse,
   PersonRecord,
   LifeEventRecord,
+  MediaObjectRecord,
   PatchFamilyBody,
   PlacesMapPoint,
   ResearchTaskRecord,
   RelationshipRecord,
   TimelineEventRecord,
   RelationshipType,
-  UserPreferences
+  UserPreferences,
+  TargetMediaLinkRecord,
+  ValidationFindingRecord
 } from "../lib/api";
 import {
   createPerson,
@@ -35,13 +38,18 @@ import {
   createPersonLifeEvent,
   createRelationshipLifeEvent,
   createFamilyLifeEvent,
+  createEvidenceMediaLink,
   computeGraphLayout,
   createRelationship,
   deleteFamily,
   deleteFamilyLifeEvent,
+  deleteEvidenceMediaLink,
   deleteResearchTask,
   getFamiliesForPerson,
   getFamilyLifeEvents,
+  getMediaLinksForTarget,
+  getValidationFindings,
+  listEvidenceMediaObjects,
   deletePersonLifeEvent,
   deletePerson,
   deletePersonExternalIdentity,
@@ -64,7 +72,9 @@ import {
   updateResearchTask,
   updateRelationshipLifeEvent,
   updatePersonProfile,
-  updateUserPreferences
+  updateUserPreferences,
+  recomputeValidationFindings,
+  updateValidationFinding
 } from "../lib/api";
 import {
   buildBirthPlaceInput,
@@ -85,6 +95,7 @@ import { EvidenceMediaSection } from "../components/EvidenceMediaSection";
 import { GedcomInterchangeSection } from "../components/GedcomInterchangeSection";
 import { ImmichImportWorkspace } from "../components/ImmichImportWorkspace";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
+import { ResearchWorkspace } from "../components/ResearchWorkspace";
 import { CreatePersonDialog } from "../components/CreatePersonDialog";
 import { MapPlacesPanel } from "../components/MapPlacesPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
@@ -109,7 +120,7 @@ type WorkspaceItem = {
 
 const WORKSPACE_ITEMS: WorkspaceItem[] = [
   { id: "tree", label: "Tree", iconLabel: "TR" },
-  { id: "research", label: "Research", iconLabel: "RS", disabledReason: "Planned for Phase C" },
+  { id: "research", label: "Research", iconLabel: "RS" },
   { id: "evidence", label: "Evidence", iconLabel: "EV" },
   { id: "interchange", label: "Interchange", iconLabel: "GX" },
   { id: "places", label: "Places", iconLabel: "MP" },
@@ -450,10 +461,18 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
   const [researchTasksByPersonId, setResearchTasksByPersonId] = useState<
     Record<string, ResearchTaskRecord[]>
   >({});
+  const [allResearchTasks, setAllResearchTasks] = useState<ResearchTaskRecord[]>([]);
+  const [allResearchTasksLoading, setAllResearchTasksLoading] = useState(false);
+  const [validationFindings, setValidationFindings] = useState<ValidationFindingRecord[]>([]);
+  const [validationFindingsLoading, setValidationFindingsLoading] = useState(false);
   const [familiesByPersonId, setFamiliesByPersonId] = useState<Record<string, FamilyRecord[] | undefined>>(
     {}
   );
   const [savingFamilyId, setSavingFamilyId] = useState<string | null>(null);
+  const [familyMediaLinksById, setFamilyMediaLinksById] = useState<
+    Partial<Record<string, TargetMediaLinkRecord[]>>
+  >({});
+  const [evidenceMediaObjects, setEvidenceMediaObjects] = useState<MediaObjectRecord[]>([]);
   const [familyLifeEventsById, setFamilyLifeEventsById] = useState<
     Partial<Record<string, LifeEventRecord[]>>
   >({});
@@ -935,6 +954,67 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       controller.abort();
     };
   }, [familyLifeEventsById, familiesForSelected, selectedPerson]);
+
+  useEffect(() => {
+    const fams = familiesForSelected;
+    if (fams === undefined) {
+      return;
+    }
+    const toFetch = fams.map((f) => f.id).filter((id) => familyMediaLinksById[id] === undefined);
+    if (toFetch.length === 0) {
+      return;
+    }
+    const controller = new AbortController();
+    Promise.all(
+      toFetch.map((id) =>
+        getMediaLinksForTarget("FAMILY", id, { signal: controller.signal }).then(
+          (links) => [id, links] as const
+        )
+      )
+    )
+      .then((rows) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setFamilyMediaLinksById((current) => {
+          const next = { ...current };
+          for (const [id, links] of rows) {
+            next[id] = links;
+          }
+          return next;
+        });
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted || isAbortError(err)) {
+          return;
+        }
+        setStatus(`Could not load family media: ${getErrorMessage(err)}`);
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [familiesForSelected, familyMediaLinksById]);
+
+  useEffect(() => {
+    if (import.meta.env.VITE_EVIDENCE_MANAGEMENT_UI === "false") {
+      return;
+    }
+    let cancelled = false;
+    listEvidenceMediaObjects()
+      .then((items) => {
+        if (!cancelled) {
+          setEvidenceMediaObjects(items);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setStatus(`Could not load evidence media: ${getErrorMessage(err)}`);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedPersonId) {
@@ -1680,16 +1760,49 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
     }));
   }, [selectedPerson]);
 
+  const refreshAllResearchTasks = useCallback(async () => {
+    setAllResearchTasksLoading(true);
+    try {
+      const tasks = await getResearchTasks();
+      setAllResearchTasks(tasks);
+    } finally {
+      setAllResearchTasksLoading(false);
+    }
+  }, []);
+
+  const refreshValidationFindings = useCallback(async () => {
+    setValidationFindingsLoading(true);
+    try {
+      const findings = await getValidationFindings();
+      setValidationFindings(findings);
+    } finally {
+      setValidationFindingsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeWorkspace !== "research") {
+      return;
+    }
+    void refreshAllResearchTasks().catch((err: unknown) => {
+      setStatus(`Could not load all research tasks: ${getErrorMessage(err)}`);
+    });
+    void refreshValidationFindings().catch((err: unknown) => {
+      setStatus(`Could not load validation findings: ${getErrorMessage(err)}`);
+    });
+  }, [activeWorkspace, refreshAllResearchTasks, refreshValidationFindings]);
+
   const handleResearchTaskCreate = useCallback(
     async (body: CreateResearchTaskBody) => {
       try {
         await createResearchTask(body);
         await refreshResearchTasksForSelectedPerson();
+        await refreshAllResearchTasks();
       } catch (error: unknown) {
         setStatus(getErrorMessage(error));
       }
     },
-    [refreshResearchTasksForSelectedPerson]
+    [refreshAllResearchTasks, refreshResearchTasksForSelectedPerson]
   );
 
   const handleResearchTaskUpdate = useCallback(
@@ -1700,11 +1813,12 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       try {
         await updateResearchTask(taskId, patch);
         await refreshResearchTasksForSelectedPerson();
+        await refreshAllResearchTasks();
       } catch (error: unknown) {
         setStatus(getErrorMessage(error));
       }
     },
-    [refreshResearchTasksForSelectedPerson]
+    [refreshAllResearchTasks, refreshResearchTasksForSelectedPerson]
   );
 
   const handleResearchTaskDelete = useCallback(
@@ -1712,11 +1826,60 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
       try {
         await deleteResearchTask(taskId);
         await refreshResearchTasksForSelectedPerson();
+        await refreshAllResearchTasks();
       } catch (error: unknown) {
         setStatus(getErrorMessage(error));
       }
     },
-    [refreshResearchTasksForSelectedPerson]
+    [refreshAllResearchTasks, refreshResearchTasksForSelectedPerson]
+  );
+
+  const handleValidationRecompute = useCallback(async () => {
+    const result = await recomputeValidationFindings();
+    setValidationFindings(result.findings);
+    setTreeValidationIssueCount(result.findings.filter((finding) => finding.status !== "RESOLVED").length);
+    setTreeValidationEngineDisabled(result.engineDisabled);
+    setStatus(`Validation recomputed: ${result.summary.current} current issue(s)`);
+  }, []);
+
+  const handleValidationFindingStatusChange = useCallback(
+    async (findingId: string, nextStatus: "OPEN" | "IN_PROGRESS" | "DISMISSED") => {
+      await updateValidationFinding(findingId, nextStatus);
+      await refreshValidationFindings();
+    },
+    [refreshValidationFindings]
+  );
+
+  const openPersonFromResearch = useCallback((personId: string) => {
+    setSelectedPersonId(personId);
+    setGraphCameraFocusPersonId(personId);
+    setActiveWorkspace("tree");
+  }, []);
+
+  const refreshFamilyMediaLinks = useCallback(async (familyId: string) => {
+    const links = await getMediaLinksForTarget("FAMILY", familyId);
+    setFamilyMediaLinksById((current) => ({ ...current, [familyId]: links }));
+  }, []);
+
+  const handleFamilyMediaLinkCreate = useCallback(
+    async (familyId: string, mediaObjectId: string) => {
+      await createEvidenceMediaLink(mediaObjectId, { targetType: "FAMILY", targetId: familyId });
+      await refreshFamilyMediaLinks(familyId);
+    },
+    [refreshFamilyMediaLinks]
+  );
+
+  const handleFamilyMediaLinkDelete = useCallback(
+    async (linkId: string) => {
+      await deleteEvidenceMediaLink(linkId);
+      for (const [familyId, links] of Object.entries(familyMediaLinksById)) {
+        if (links?.some((link) => link.id === linkId)) {
+          await refreshFamilyMediaLinks(familyId);
+          break;
+        }
+      }
+    },
+    [familyMediaLinksById, refreshFamilyMediaLinks]
   );
 
   const handleRelationshipLifeEventCreate = useCallback(
@@ -2061,14 +2224,20 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
 
     if (activeWorkspace === "research") {
       return (
-        <section className="workspace-main-stack workspace-main-stack--secondary">
-          <section className="card stack workspace-intro-card">
-            <h2>Research workspace</h2>
-            <p className="hint">
-              Planned for Phase C. Research tasks remain available in the tree inspector.
-            </p>
-          </section>
-        </section>
+        <ResearchWorkspace
+          people={people}
+          tasks={allResearchTasks}
+          findings={validationFindings}
+          tasksLoading={allResearchTasksLoading}
+          findingsLoading={validationFindingsLoading}
+          validationEngineDisabled={treeValidationEngineDisabled}
+          onRefreshTasks={refreshAllResearchTasks}
+          onRecomputeFindings={handleValidationRecompute}
+          onTaskUpdate={handleResearchTaskUpdate}
+          onTaskDelete={handleResearchTaskDelete}
+          onFindingStatusChange={handleValidationFindingStatusChange}
+          onOpenPerson={openPersonFromResearch}
+        />
       );
     }
 
@@ -2303,6 +2472,11 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
           onFamilyPatch: handleFamilyPatch,
           onFamilyDelete: handleFamilyDelete,
           savingFamilyId,
+          familyMediaLinksById,
+          mediaObjects: evidenceMediaObjects,
+          mediaManagementEnabled: import.meta.env.VITE_EVIDENCE_MANAGEMENT_UI !== "false",
+          onFamilyMediaLinkCreate: handleFamilyMediaLinkCreate,
+          onFamilyMediaLinkDelete: handleFamilyMediaLinkDelete,
           familyLifeEventsById,
           onFamilyLifeEventCreate: handleFamilyLifeEventCreate,
           onFamilyLifeEventPatch: handleFamilyLifeEventPatch,

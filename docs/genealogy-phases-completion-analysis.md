@@ -35,7 +35,7 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 ### Remaining (explicit) — not all in table
 
 - **Broader GEDCOM event vocabulary** than current enum: medium–high (enum growth + migrations) or high (string GEDCOM tags + rules).
-- **Persisted** `ValidationFinding` + optional **nightly** job: medium (schema, invalidation, scheduler).
+- **Persisted** `ValidationFinding`: shipped in Phase C as manual `POST /validation/recompute`; optional scheduler remains future ops work.
 - Richer **event-type taxonomy / icons**: low–medium (UX).
 
 ---
@@ -55,7 +55,7 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 ### Remaining (explicit)
 
-- **Global** research-task hub page: medium (new UI surface).
+- **Global** research-task hub page: shipped in Phase C as the Research workspace, combining active tasks and persisted validation issues.
 - Formal **~500 pin** load test artifact: low–medium.
 - Stronger **living-person map redaction** policy: medium; **legal/product** as much as code.
 
@@ -71,7 +71,7 @@ This document records **why** the rolled-up plan marks some Phase 1–5 streams 
 
 ### Remaining (explicit)
 
-- **`MediaLinkTargetType` for `Family`** (or other subjects): medium — schema, UI, GEDCOM alignment (overlaps Phase 5).
+- **`MediaLinkTargetType` for `Family`**: shipped in Phase C with target validation, family UI attach/unlink, and GEDCOM FAM-root OBJE import/export alignment.
 - **Deduplication UX** beyond merge-sources API: medium.
 - **Signed URLs / object storage** hardening for large evidence files: medium–high (infra, security, cost).
 

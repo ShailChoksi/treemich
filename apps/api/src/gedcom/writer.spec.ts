@@ -268,6 +268,69 @@ describe("buildGedcomDocument", () => {
     expect(norm).toContain("1 OBJE @O0002@");
   });
 
+  it("emits family media as root FAM OBJE before family events", () => {
+    const { gedcomUtf8 } = buildGedcomDocument({
+      personProfiles: [
+        {
+          id: "pp-a",
+          gender: "MALE",
+          givenName: "A",
+          surname: "One",
+          displayNameOverride: null,
+          externalIds: {}
+        },
+        {
+          id: "pp-b",
+          gender: "FEMALE",
+          givenName: "B",
+          surname: "Two",
+          displayNameOverride: null,
+          externalIds: {}
+        }
+      ],
+      relationships: [],
+      families: [
+        {
+          id: "fam-1",
+          parent1PersonId: "pp-a",
+          parent2PersonId: "pp-b",
+          notes: "Family notes",
+          externalIds: {},
+          children: []
+        }
+      ],
+      lifeEvents: [
+        {
+          id: "fam-event",
+          eventType: "RESIDENCE",
+          customLabel: null,
+          dateQualifier: "EXACT",
+          year: 1901,
+          month: null,
+          day: null,
+          endYear: null,
+          endMonth: null,
+          endDay: null,
+          personId: null,
+          relationshipId: null,
+          familyId: "fam-1",
+          notes: null,
+          place: null,
+          citations: []
+        }
+      ],
+      personNames: [],
+      repositories: [],
+      sources: [],
+      mediaObjects: [{ id: "m-family", storageUrl: "family.jpg", mimeType: "image/jpeg", title: "Family" }],
+      mediaLinks: [{ mediaObjectId: "m-family", targetType: "FAMILY", targetId: "fam-1" }]
+    });
+
+    const norm = normalizeGedcomForTest(gedcomUtf8);
+    expect(norm).toContain("1 OBJE @O0001@");
+    expect(norm.indexOf("1 OBJE @O0001@")).toBeLessThan(norm.indexOf("1 RESI"));
+  });
+
   it("uses externalIds.gedcomFam as stable FAM xref when valid", () => {
     const { gedcomUtf8, xrefs } = buildGedcomDocument(
       {

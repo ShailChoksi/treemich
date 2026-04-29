@@ -49,6 +49,7 @@ import { registerSearchGetRoute } from "./routes/search.get.js";
 import { registerTreeValidationGetRoute } from "./routes/tree-validation.get.js";
 import { registerUserPreferencesGetRoute } from "./routes/user-preferences.get.js";
 import { registerUserPreferencesPatchRoute } from "./routes/user-preferences.patch.js";
+import { registerValidationFindingRoutes } from "./routes/validation-findings.js";
 import { buildServices, registerServices, type AppServices } from "./services.js";
 
 type BuildAppOptions = {
@@ -240,6 +241,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerEvidenceRoutes);
   app.register(registerSearchGetRoute);
   app.register(registerTreeValidationGetRoute);
+  app.register(registerValidationFindingRoutes);
   app.register(registerUserPreferencesGetRoute);
   app.register(registerUserPreferencesPatchRoute);
   app.register(registerExportAccountGetRoute);
