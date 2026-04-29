@@ -10,6 +10,7 @@ import type {
   CreateFamilyBody,
   CreateFamilyLifeEventBody,
   CreateLifeEventBody,
+  CreateMediaLinkBody,
   CreateMediaObjectBody,
   CreatePersonNameBody,
   CreatePersonBody,
@@ -28,26 +29,41 @@ import type {
   LifeEventListResponse,
   LifeEventRecord,
   LinkStatus,
+  MediaLinkRecord,
   MediaObjectRecord,
+  MediaLinkTargetType,
   MergeSourcesBody,
+  MergePeopleBody,
   PatchFamilyBody,
   PatchLifeEventBody,
+  PatchPersonDuplicateCandidateBody,
   PatchPersonNameBody,
   PatchResearchTaskBody,
   PersonNameTypeValue,
+  PersonDuplicateCandidateRecord,
+  PersonDuplicateRecomputeResponse,
+  PersonMergeResult,
   PersonExternalIdentityRecord,
   PersonThumbnailRecord,
   PersonRecord,
   PhotoCluster,
   PhotoCooccurrenceEdge,
+  PedigreeReportResponse,
+  DescendantReportResponse,
+  FamilyGroupSheetResponse,
+  RegisterReportResponse,
   RelationshipRecord,
   RelationshipType,
   RepositoryRecord,
   SearchRelationshipsResponse,
   ResearchTaskRecord,
   SourceRecord,
+  TargetMediaLinkRecord,
   TreemichPersonProfile,
-  UserPreferences
+  UserPreferences,
+  ValidationFindingRecord,
+  ValidationFindingStatus,
+  ValidationRecomputeSummary
 } from "@treemich/shared";
 
 /** Re-exported `@treemich/shared` types for modules that depend only on the web API layer. */
@@ -57,6 +73,7 @@ export type {
   CreateFamilyBody,
   CreateFamilyLifeEventBody,
   CreateLifeEventBody,
+  CreateMediaLinkBody,
   CreateMediaObjectBody,
   CreatePersonBody,
   CreatePersonExternalIdentityBody,
@@ -74,26 +91,41 @@ export type {
   ImmichThumbnailImportResponse,
   LinkStatus,
   LifeEventRecord,
+  MediaLinkRecord,
+  MediaLinkTargetType,
   MediaObjectRecord,
   MergeSourcesBody,
+  MergePeopleBody,
   PatchFamilyBody,
   PatchLifeEventBody,
+  PatchPersonDuplicateCandidateBody,
   PatchPersonNameBody,
   PatchResearchTaskBody,
   PersonNameTypeValue,
+  PersonDuplicateCandidateRecord,
+  PersonDuplicateRecomputeResponse,
+  PersonMergeResult,
   PersonExternalIdentityRecord,
   PersonThumbnailRecord,
   PersonRecord,
   PhotoCluster,
   PhotoCooccurrenceEdge,
+  PedigreeReportResponse,
+  DescendantReportResponse,
+  FamilyGroupSheetResponse,
+  RegisterReportResponse,
   RelationshipRecord,
   RelationshipType,
   RepositoryRecord,
   ResearchTaskRecord,
   SearchRelationshipsResponse,
   SourceRecord,
+  TargetMediaLinkRecord,
   TreemichPersonProfile,
-  UserPreferences
+  UserPreferences,
+  ValidationFindingRecord,
+  ValidationFindingStatus,
+  ValidationRecomputeSummary
 };
 
 const treemichApi = import.meta.env.VITE_TREEMICH_API_URL ?? "/api";
@@ -331,6 +363,84 @@ export const deletePerson = async (personId: string): Promise<void> => {
     })
   );
   await ensureOk(response, "Failed to delete person");
+};
+
+export type DuplicateCandidateFilters = {
+  status?: "PENDING" | "DISMISSED" | "MERGED";
+  limit?: number;
+  offset?: number;
+};
+
+const duplicateCandidateQuery = (filters?: DuplicateCandidateFilters) => {
+  const params = new URLSearchParams();
+  if (filters?.status) {
+    params.set("status", filters.status);
+  }
+  if (filters?.limit != null) {
+    params.set("limit", String(filters.limit));
+  }
+  if (filters?.offset != null) {
+    params.set("offset", String(filters.offset));
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+};
+
+export const getDuplicateCandidates = async (
+  filters?: DuplicateCandidateFilters,
+  options?: RequestOptions
+): Promise<PersonDuplicateCandidateRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/people/duplicates${duplicateCandidateQuery(filters)}`,
+    {
+      cache: "no-store",
+      signal: options?.signal
+    }
+  );
+  await ensureOk(response, "Failed to load duplicate candidates");
+  const body = (await response.json()) as { candidates?: PersonDuplicateCandidateRecord[] };
+  return body.candidates ?? [];
+};
+
+export const recomputeDuplicateCandidates = async (): Promise<PersonDuplicateRecomputeResponse> => {
+  const response = await fetch(
+    `${treemichApi}/people/duplicates/recompute`,
+    withSession({ method: "POST", headers: { "Content-Type": "application/json" } })
+  );
+  await ensureOk(response, "Failed to recompute duplicate candidates");
+  return (await response.json()) as PersonDuplicateRecomputeResponse;
+};
+
+export const updateDuplicateCandidate = async (
+  candidateId: string,
+  body: PatchPersonDuplicateCandidateBody
+): Promise<PersonDuplicateCandidateRecord> => {
+  const response = await fetch(
+    `${treemichApi}/people/duplicates/${encodeURIComponent(candidateId)}`,
+    withSession({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to update duplicate candidate");
+  return (await response.json()) as PersonDuplicateCandidateRecord;
+};
+
+export const mergeDuplicateCandidate = async (
+  candidateId: string,
+  body: MergePeopleBody
+): Promise<PersonMergeResult> => {
+  const response = await fetch(
+    `${treemichApi}/people/duplicates/${encodeURIComponent(candidateId)}/merge`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to merge people");
+  return (await response.json()) as PersonMergeResult;
 };
 
 /** `PATCH /people/:id` — Treemich profile fields (gender, names, etc.). */
@@ -968,6 +1078,91 @@ export const getFamiliesForPerson = async (
   return body.families ?? [];
 };
 
+/** `GET /families` — all family units for picker fallback. */
+export const getFamilies = async (options?: RequestOptions): Promise<FamilyRecord[]> => {
+  const response = await fetchWithRetry(`${treemichApi}/families`, {
+    cache: "no-store",
+    signal: options?.signal
+  });
+  await ensureOk(response, "Failed to load families");
+  const body = (await response.json()) as { families: FamilyRecord[] };
+  return body.families ?? [];
+};
+
+type ReportQueryOptions = {
+  redactLiving?: boolean;
+  depth?: number;
+} & RequestOptions;
+
+const reportDepthQuery = (rootPersonId: string, options?: ReportQueryOptions) => {
+  const params = new URLSearchParams({ rootPersonId });
+  if (options?.depth != null) {
+    params.set("depth", String(options.depth));
+  }
+  if (options?.redactLiving === true) {
+    params.set("redactLiving", "true");
+  }
+  return params.toString();
+};
+
+export const fetchPedigreeReport = async (
+  rootPersonId: string,
+  options?: ReportQueryOptions
+): Promise<PedigreeReportResponse> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/reports/pedigree?${reportDepthQuery(rootPersonId, options)}`,
+    {
+      cache: "no-store",
+      signal: options?.signal
+    }
+  );
+  await ensureOk(response, "Failed to load pedigree report");
+  return (await response.json()) as PedigreeReportResponse;
+};
+
+export const fetchDescendantReport = async (
+  rootPersonId: string,
+  options?: ReportQueryOptions
+): Promise<DescendantReportResponse> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/reports/descendants?${reportDepthQuery(rootPersonId, options)}`,
+    { cache: "no-store", signal: options?.signal }
+  );
+  await ensureOk(response, "Failed to load descendant report");
+  return (await response.json()) as DescendantReportResponse;
+};
+
+export const fetchRegisterReport = async (
+  rootPersonId: string,
+  options?: ReportQueryOptions
+): Promise<RegisterReportResponse> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/reports/register?${reportDepthQuery(rootPersonId, options)}`,
+    {
+      cache: "no-store",
+      signal: options?.signal
+    }
+  );
+  await ensureOk(response, "Failed to load register report");
+  return (await response.json()) as RegisterReportResponse;
+};
+
+export const fetchFamilyGroupSheetReport = async (
+  familyId: string,
+  options?: { redactLiving?: boolean } & RequestOptions
+): Promise<FamilyGroupSheetResponse> => {
+  const params = new URLSearchParams({ familyId });
+  if (options?.redactLiving === true) {
+    params.set("redactLiving", "true");
+  }
+  const response = await fetchWithRetry(`${treemichApi}/reports/family-group?${params.toString()}`, {
+    cache: "no-store",
+    signal: options?.signal
+  });
+  await ensureOk(response, "Failed to load family group sheet report");
+  return (await response.json()) as FamilyGroupSheetResponse;
+};
+
 /** `POST /families` — create a family union; server derives parent/child graph edges. */
 export const createFamily = async (body: CreateFamilyBody): Promise<FamilyRecord> => {
   const response = await fetch(`${treemichApi}/families`, {
@@ -1116,6 +1311,84 @@ export const deleteResearchTask = async (taskId: string): Promise<void> => {
   await ensureOk(response, "Failed to delete research task");
 };
 
+export type ValidationFindingFilters = {
+  status?: ValidationFindingStatus[];
+  severity?: "error" | "warning";
+  code?: string;
+  personId?: string;
+  familyId?: string;
+};
+
+const validationFindingQuery = (filters?: ValidationFindingFilters) => {
+  const params = new URLSearchParams();
+  for (const status of filters?.status ?? []) {
+    params.append("status", status);
+  }
+  if (filters?.severity) {
+    params.set("severity", filters.severity);
+  }
+  if (filters?.code?.trim()) {
+    params.set("code", filters.code.trim());
+  }
+  if (filters?.personId) {
+    params.set("personId", filters.personId);
+  }
+  if (filters?.familyId) {
+    params.set("familyId", filters.familyId);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+};
+
+export const getValidationFindings = async (
+  filters?: ValidationFindingFilters,
+  options?: RequestOptions
+): Promise<ValidationFindingRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/validation/findings${validationFindingQuery(filters)}`,
+    {
+      cache: "no-store",
+      signal: options?.signal
+    }
+  );
+  await ensureOk(response, "Failed to load validation findings");
+  const body = (await response.json()) as { findings: ValidationFindingRecord[] };
+  return body.findings ?? [];
+};
+
+export const recomputeValidationFindings = async (): Promise<{
+  findings: ValidationFindingRecord[];
+  summary: ValidationRecomputeSummary;
+  engineDisabled: boolean;
+}> => {
+  const response = await fetch(
+    `${treemichApi}/validation/recompute`,
+    withSession({ method: "POST", headers: { "Content-Type": "application/json" } })
+  );
+  await ensureOk(response, "Failed to recompute validation findings");
+  return (await response.json()) as {
+    findings: ValidationFindingRecord[];
+    summary: ValidationRecomputeSummary;
+    engineDisabled: boolean;
+  };
+};
+
+export const updateValidationFinding = async (
+  findingId: string,
+  status: "OPEN" | "IN_PROGRESS" | "DISMISSED"
+): Promise<ValidationFindingRecord> => {
+  const response = await fetch(
+    `${treemichApi}/validation/findings/${encodeURIComponent(findingId)}`,
+    withSession({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status })
+    })
+  );
+  await ensureOk(response, "Failed to update validation finding");
+  return (await response.json()) as ValidationFindingRecord;
+};
+
 /** `GET /evidence/repositories` — archives / libraries for grouping sources. */
 export const listEvidenceRepositories = async (): Promise<RepositoryRecord[]> => {
   const response = await fetchWithRetry(`${treemichApi}/evidence/repositories`, { cache: "no-store" });
@@ -1194,6 +1467,58 @@ export const createEvidenceMediaObject = async (body: CreateMediaObjectBody): Pr
   );
   await ensureOk(response, "Failed to create media object");
   return (await response.json()) as MediaObjectRecord;
+};
+
+export const getMediaLinksForTarget = async (
+  targetType: MediaLinkTargetType,
+  targetId: string,
+  options?: RequestOptions
+): Promise<TargetMediaLinkRecord[]> => {
+  const query = new URLSearchParams({ targetType, targetId });
+  const response = await fetchWithRetry(`${treemichApi}/evidence/media-links?${query.toString()}`, {
+    cache: "no-store",
+    signal: options?.signal
+  });
+  await ensureOk(response, "Failed to load media links");
+  const body = (await response.json()) as { links: TargetMediaLinkRecord[] };
+  return body.links ?? [];
+};
+
+export const listEvidenceMediaLinks = async (
+  mediaObjectId: string,
+  options?: RequestOptions
+): Promise<MediaLinkRecord[]> => {
+  const response = await fetchWithRetry(
+    `${treemichApi}/evidence/media/${encodeURIComponent(mediaObjectId)}/links`,
+    { cache: "no-store", signal: options?.signal }
+  );
+  await ensureOk(response, "Failed to load media object links");
+  const body = (await response.json()) as { links: MediaLinkRecord[] };
+  return body.links ?? [];
+};
+
+export const createEvidenceMediaLink = async (
+  mediaObjectId: string,
+  body: CreateMediaLinkBody
+): Promise<MediaLinkRecord> => {
+  const response = await fetch(
+    `${treemichApi}/evidence/media/${encodeURIComponent(mediaObjectId)}/links`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create media link");
+  return (await response.json()) as MediaLinkRecord;
+};
+
+export const deleteEvidenceMediaLink = async (linkId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/evidence/media-links/${encodeURIComponent(linkId)}`,
+    withSession({ method: "DELETE" })
+  );
+  await ensureOk(response, "Failed to delete media link");
 };
 
 /** `POST /import/gedcom/preview` — parse UTF-8 GEDCOM and list INDI/FAM for matching (Phase 5b). */

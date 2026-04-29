@@ -9,10 +9,12 @@ import type {
   Gender,
   Person,
   LifeEventRecord,
+  MediaObjectRecord,
   PatchFamilyBody,
   RelationshipRecord,
   RelationshipType,
   ResearchTaskRecord,
+  TargetMediaLinkRecord,
   TimelineEventRecord
 } from "../lib/api";
 import { immichPersonUrl, personThumbnailUrl } from "../lib/api";
@@ -122,6 +124,11 @@ type Props = {
   onFamilyPatch?: (familyId: string, body: PatchFamilyBody) => Promise<void>;
   onFamilyDelete?: (familyId: string) => Promise<void>;
   savingFamilyId?: string | null;
+  familyMediaLinksById?: Partial<Record<string, TargetMediaLinkRecord[]>>;
+  mediaObjects?: MediaObjectRecord[];
+  mediaManagementEnabled?: boolean;
+  onFamilyMediaLinkCreate?: (familyId: string, mediaObjectId: string) => Promise<void>;
+  onFamilyMediaLinkDelete?: (linkId: string) => Promise<void>;
   /** Cached family-scoped life events (residence/census/custom), keyed by family id */
   familyLifeEventsById?: Partial<Record<string, LifeEventRecord[]>>;
   onFamilyLifeEventCreate?: (familyId: string, body: CreateLifeEventBody) => Promise<void>;
@@ -212,6 +219,11 @@ const PersonDetailPanelComponent = ({
   onFamilyPatch,
   onFamilyDelete,
   savingFamilyId,
+  familyMediaLinksById,
+  mediaObjects,
+  mediaManagementEnabled,
+  onFamilyMediaLinkCreate,
+  onFamilyMediaLinkDelete,
   familyLifeEventsById,
   onFamilyLifeEventCreate,
   onFamilyLifeEventPatch,
@@ -844,6 +856,11 @@ const PersonDetailPanelComponent = ({
                 onPatchFamily={onFamilyPatch}
                 onDeleteFamily={onFamilyDelete}
                 savingFamilyId={savingFamilyId}
+                familyMediaLinksById={familyMediaLinksById}
+                mediaObjects={mediaObjects}
+                mediaManagementEnabled={mediaManagementEnabled}
+                onFamilyMediaLinkCreate={onFamilyMediaLinkCreate}
+                onFamilyMediaLinkDelete={onFamilyMediaLinkDelete}
                 familyLifeEventsById={familyLifeEventsById}
                 onFamilyLifeEventCreate={onFamilyLifeEventCreate}
                 onFamilyLifeEventPatch={onFamilyLifeEventPatch}

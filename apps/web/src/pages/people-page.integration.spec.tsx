@@ -654,7 +654,7 @@ describe("PeoplePage + life events (integration)", () => {
     container.remove();
   });
 
-  it("renders Settings search preferences and disables planned workspaces", async () => {
+  it("renders Settings search preferences and keeps Reports enabled", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -667,10 +667,10 @@ describe("PeoplePage + life events (integration)", () => {
     const reportsNav = container.querySelector('[data-workspace="reports"]') as HTMLButtonElement | null;
     const settingsNav = container.querySelector('[data-workspace="settings"]') as HTMLButtonElement | null;
 
-    expect(researchNav?.disabled).toBe(true);
-    expect(researchNav?.title).toBe("Planned for Phase C");
-    expect(reportsNav?.disabled).toBe(true);
-    expect(reportsNav?.title).toBe("Planned for Phase E");
+    expect(researchNav?.disabled).toBe(false);
+    expect(researchNav?.title).toBe("");
+    expect(reportsNav?.disabled).toBe(false);
+    expect(reportsNav?.title).toBe("");
     expect(settingsNav?.disabled).toBe(false);
 
     await act(async () => {

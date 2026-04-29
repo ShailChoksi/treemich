@@ -4,12 +4,14 @@ import type {
   CreateRepositoryBody,
   CreateSourceBody,
   MediaLinkRecord,
+  MediaLinkTargetType,
   MediaObjectRecord,
   PatchMediaObjectBody,
   PatchRepositoryBody,
   PatchSourceBody,
   RepositoryRecord,
-  SourceRecord
+  SourceRecord,
+  TargetMediaLinkRecord
 } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 
@@ -88,7 +90,7 @@ const toMediaObjectJson = (row: {
 const toMediaLinkJson = (row: {
   id: string;
   mediaObjectId: string;
-  targetType: "PERSON_PROFILE" | "LIFE_EVENT" | "SOURCE";
+  targetType: MediaLinkTargetType;
   targetId: string;
   notes: string | null;
   createdAt: Date;
@@ -101,7 +103,39 @@ const toMediaLinkJson = (row: {
   createdAt: row.createdAt.toISOString()
 });
 
+const toTargetMediaLinkJson = (
+  row: Parameters<typeof toMediaLinkJson>[0] & { mediaObject: Parameters<typeof toMediaObjectJson>[0] }
+): TargetMediaLinkRecord => ({
+  ...toMediaLinkJson(row),
+  mediaObject: toMediaObjectJson(row.mediaObject)
+});
+
+const notFound = (message: string) => {
+  const err = new Error(message);
+  (err as Error & { statusCode: number }).statusCode = 404;
+  return err;
+};
+
 export class EvidenceService {
+  private async assertTargetExists(
+    userId: string,
+    targetType: MediaLinkTargetType,
+    targetId: string
+  ): Promise<void> {
+    const where = { id: targetId, userId };
+    const exists =
+      targetType === "PERSON_PROFILE"
+        ? await prisma.personProfile.findFirst({ where, select: { id: true } })
+        : targetType === "LIFE_EVENT"
+          ? await prisma.lifeEvent.findFirst({ where, select: { id: true } })
+          : targetType === "SOURCE"
+            ? await prisma.source.findFirst({ where, select: { id: true } })
+            : await prisma.family.findFirst({ where, select: { id: true } });
+    if (!exists) {
+      throw notFound("Media link target not found");
+    }
+  }
+
   async listRepositories(userId: string): Promise<RepositoryRecord[]> {
     const rows = await prisma.repository.findMany({
       where: { userId },
@@ -360,6 +394,21 @@ export class EvidenceService {
     return rows.map(toMediaLinkJson);
   }
 
+  async listMediaLinksForTarget(
+    userId: string,
+    targetType: MediaLinkTargetType,
+    targetId: string
+  ): Promise<TargetMediaLinkRecord[]> {
+    const trimmedTargetId = targetId.trim();
+    await this.assertTargetExists(userId, targetType, trimmedTargetId);
+    const rows = await prisma.mediaLink.findMany({
+      where: { userId, targetType, targetId: trimmedTargetId },
+      include: { mediaObject: true },
+      orderBy: { createdAt: "desc" }
+    });
+    return rows.map(toTargetMediaLinkJson);
+  }
+
   async createMediaLink(
     userId: string,
     mediaObjectId: string,
@@ -367,16 +416,27 @@ export class EvidenceService {
   ): Promise<MediaLinkRecord> {
     const parent = await prisma.mediaObject.findFirst({ where: { id: mediaObjectId, userId } });
     if (!parent) {
-      const err = new Error("Media object not found");
-      (err as Error & { statusCode: number }).statusCode = 404;
-      throw err;
+      throw notFound("Media object not found");
+    }
+    const targetId = body.targetId.trim();
+    await this.assertTargetExists(userId, body.targetType, targetId);
+    const existing = await prisma.mediaLink.findFirst({
+      where: {
+        userId,
+        mediaObjectId,
+        targetType: body.targetType,
+        targetId
+      }
+    });
+    if (existing) {
+      return toMediaLinkJson(existing);
     }
     const created = await prisma.mediaLink.create({
       data: {
         userId,
         mediaObjectId,
         targetType: body.targetType,
-        targetId: body.targetId.trim(),
+        targetId,
         notes: body.notes?.trim() ? body.notes.trim() : null
       }
     });

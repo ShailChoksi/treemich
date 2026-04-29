@@ -10,7 +10,11 @@ import {
   deleteFamily,
   deleteFamilyLifeEvent,
   getFamiliesForPerson,
+  getFamilies,
+  fetchPedigreeReport,
+  fetchFamilyGroupSheetReport,
   getFamilyLifeEvents,
+  getDuplicateCandidates,
   getPlacesMap,
   getPersonTimeline,
   getResearchTasks,
@@ -20,14 +24,24 @@ import {
   getPersonLifeEvents,
   immichPersonUrl,
   createEvidenceMediaObject,
+  createEvidenceMediaLink,
   createEvidenceRepository,
+  deleteEvidenceMediaLink,
+  getMediaLinksForTarget,
+  getValidationFindings,
   listEvidenceMediaObjects,
+  listEvidenceMediaLinks,
   listEvidenceRepositories,
   listEvidenceSources,
   login,
   logout,
+  mergeDuplicateCandidate,
   mergeEvidenceSources,
   patchFamily,
+  recomputeDuplicateCandidates,
+  recomputeValidationFindings,
+  updateDuplicateCandidate,
+  updateValidationFinding,
   updateFamilyLifeEvent
 } from "./api";
 
@@ -568,6 +582,139 @@ describe("evidence API helpers", () => {
       expect.objectContaining({ method: "POST" })
     );
   });
+
+  it("loads target media links for families", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          links: [
+            {
+              id: "link-1",
+              mediaObjectId: "m1",
+              targetType: "FAMILY",
+              targetId: "fam-1",
+              notes: null,
+              createdAt: "2026-01-01T00:00:00.000Z",
+              mediaObject: {
+                id: "m1",
+                storageUrl: "family.jpg",
+                mimeType: "image/jpeg",
+                checksum: null,
+                immichAssetId: null,
+                title: "Family",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z"
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    const links = await getMediaLinksForTarget("FAMILY", "fam-1");
+    expect(links[0]?.mediaObject.title).toBe("Family");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/evidence/media-links?targetType=FAMILY&targetId=fam-1",
+      expect.objectContaining({ cache: "no-store" })
+    );
+  });
+
+  it("creates, lists, and deletes media links with session credentials", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "link-1", targetType: "FAMILY" }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ links: [{ id: "link-1", targetType: "FAMILY" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await createEvidenceMediaLink("m1", { targetType: "FAMILY", targetId: "fam-1", notes: null });
+    await listEvidenceMediaLinks("m1");
+    await deleteEvidenceMediaLink("link-1");
+
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/evidence/media/m1/links",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/evidence/media/m1/links",
+      expect.objectContaining({ cache: "no-store" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/evidence/media-links/link-1",
+      expect.objectContaining({ method: "DELETE", credentials: "include" })
+    );
+  });
+});
+
+describe("validation findings API helpers", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("loads validation findings with repeated status filters", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ findings: [{ id: "vf1", status: "OPEN" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const findings = await getValidationFindings({ status: ["OPEN", "IN_PROGRESS"] });
+    expect(findings).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/validation/findings?status=OPEN&status=IN_PROGRESS",
+      expect.objectContaining({ cache: "no-store" })
+    );
+  });
+
+  it("recomputes and updates validation finding status via mutating routes", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ findings: [], summary: { current: 0 }, engineDisabled: false }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "vf1", status: "IN_PROGRESS" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      );
+
+    await recomputeValidationFindings();
+    await updateValidationFinding("vf1", "IN_PROGRESS");
+
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/validation/recompute",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/validation/findings/vf1",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ status: "IN_PROGRESS" }) })
+    );
+  });
 });
 
 describe("family API helpers", () => {
@@ -625,6 +772,75 @@ describe("family API helpers", () => {
     expect(rows).toHaveLength(1);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "/api/people/person%252F1/families",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+
+  it("loads all families for report picker fallback", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ families: [{ id: "f1", children: [] }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const rows = await getFamilies();
+    expect(rows).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/families",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+  });
+
+  it("loads report JSON helpers with query parameters", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            type: "pedigree",
+            generatedAt: "2026-04-29T00:00:00.000Z",
+            parameters: { rootPersonId: "p1", depth: 5, redactLiving: true },
+            warnings: [],
+            root: {
+              id: "p1",
+              displayName: "Living person",
+              gender: "UNKNOWN",
+              primaryName: null,
+              alternateNames: [],
+              isLiving: true,
+              isRedacted: true,
+              events: []
+            },
+            generations: [],
+            edges: []
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            type: "family-group",
+            generatedAt: "2026-04-29T00:00:00.000Z",
+            parameters: { familyId: "fam1", redactLiving: true },
+            warnings: [],
+            family: { id: "fam1", notes: null, parents: [], children: [], events: [], citations: [] }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+
+    await fetchPedigreeReport("p1", { depth: 5, redactLiving: true });
+    await fetchFamilyGroupSheetReport("fam1", { redactLiving: true });
+
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/reports/pedigree?rootPersonId=p1&depth=5&redactLiving=true",
+      expect.objectContaining({ credentials: "include", cache: "no-store" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/reports/family-group?familyId=fam1&redactLiving=true",
       expect.objectContaining({ credentials: "include", cache: "no-store" })
     );
   });
@@ -940,5 +1156,76 @@ describe("people API helpers", () => {
     );
 
     await expect(deletePerson("missing")).rejects.toBeInstanceOf(ApiHttpError);
+  });
+
+  it("loads duplicate candidates with filters", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ candidates: [{ id: "dup-1", status: "PENDING" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const candidates = await getDuplicateCandidates({ status: "PENDING", limit: 25 });
+
+    expect(candidates).toEqual([{ id: "dup-1", status: "PENDING" }]);
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toContain(
+      "/api/people/duplicates?status=PENDING&limit=25"
+    );
+  });
+
+  it("posts duplicate recompute, status update, and merge requests", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            candidates: [],
+            summary: { created: 1, updated: 0, preservedDismissed: 0, pending: 1 }
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "dup-1", status: "DISMISSED" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ auditId: "audit-1", canonicalPersonId: "p1", duplicatePersonId: "p2" }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        )
+      );
+
+    await recomputeDuplicateCandidates();
+    await updateDuplicateCandidate("dup-1", { status: "DISMISSED" });
+    await mergeDuplicateCandidate("dup-1", {
+      canonicalPersonId: "p1",
+      duplicatePersonId: "p2",
+      confirm: true
+    });
+
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/people/duplicates/recompute",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/people/duplicates/dup-1",
+      expect.objectContaining({ method: "PATCH", credentials: "include" })
+    );
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/people/duplicates/dup-1/merge",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
   });
 });

@@ -3,13 +3,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createEvidenceMediaObject, listEvidenceMediaObjects } from "../lib/api";
-import type { MediaObjectRecord } from "../lib/api";
+import { createEvidenceMediaObject, listEvidenceMediaLinks, listEvidenceMediaObjects } from "../lib/api";
+import type { MediaLinkRecord, MediaObjectRecord } from "../lib/api";
 
 export const EvidenceMediaSection = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<MediaObjectRecord[]>([]);
+  const [linksByMediaId, setLinksByMediaId] = useState<Record<string, MediaLinkRecord[]>>({});
   const [storageUrl, setStorageUrl] = useState("");
   const [title, setTitle] = useState("");
   const [saving, setSaving] = useState(false);
@@ -21,6 +22,10 @@ export const EvidenceMediaSection = () => {
     try {
       const list = await listEvidenceMediaObjects();
       setItems(list);
+      const linkRows = await Promise.all(
+        list.map((item) => listEvidenceMediaLinks(item.id).then((links) => [item.id, links] as const))
+      );
+      setLinksByMediaId(Object.fromEntries(linkRows));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load media");
     } finally {
@@ -122,6 +127,9 @@ export const EvidenceMediaSection = () => {
                     <a href={m.storageUrl} target="_blank" rel="noreferrer">
                       open
                     </a>
+                    {linksByMediaId[m.id]?.some((link) => link.targetType === "FAMILY") ? (
+                      <span className="hint"> · linked to family</span>
+                    ) : null}
                   </li>
                 ))}
               </ul>

@@ -11,7 +11,8 @@ import {
   patchMediaObjectBodySchema,
   patchRepositoryBodySchema,
   patchSourceBodySchema,
-  sourceListQuerySchema
+  sourceListQuerySchema,
+  targetMediaLinkQuerySchema
 } from "@treemich/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
@@ -139,6 +140,17 @@ export const registerEvidenceRoutes = (app: FastifyInstance) => {
     const auth = getRequiredAuth(request);
     const { mediaId } = mediaIdParams.parse(request.params);
     const links = await app.services.evidenceService.listMediaLinksForObject(auth.user.id, mediaId);
+    return { links };
+  });
+
+  app.get("/evidence/media-links", async (request) => {
+    const auth = getRequiredAuth(request);
+    const query = targetMediaLinkQuerySchema.parse(request.query);
+    const links = await app.services.evidenceService.listMediaLinksForTarget(
+      auth.user.id,
+      query.targetType,
+      query.targetId
+    );
     return { links };
   });
 

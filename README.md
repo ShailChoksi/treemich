@@ -11,6 +11,8 @@ Optionally link an [Immich](https://immich.app/) account to import face thumbnai
 - **Per-person profiles** -- set gender, names, and Treemich **life events** (BIRTH/DEATH with optional places); quick-edit fields in the sidebar map to those events.
 - **3D graph visualization** -- interactive Three.js graph with multiple layout modes (generation tree, centered map, hybrid, cleaned 3D) plus layer toggles for Family/Friends/Pets.
 - **Natural-language search** -- query relationships in plain English with multi-hop graph traversal.
+- **Duplicate review and merge** -- recompute possible duplicate Treemich people, review scored reasons, dismiss candidates, and merge with explicit canonical-person confirmation.
+- **Printable reports** -- generate pedigree, descendant, family group sheet, and register/narrative reports, then print or save to PDF from the browser.
 - **Photo co-occurrence** -- discover which people appear together in photos.
 - **Per-user privacy** -- all relationship data is scoped to the authenticated Treemich user.
 
@@ -47,6 +49,19 @@ Interoperability export as **GEDCOM 5.5.1** UTF-8 (`LINEAGE-LINKED`), including 
 
 Disable the route in restrictive environments with **`TREEMICH_GEDCOM_EXPORT_ENABLED=false`** (default when unset: enabled).
 
+### Reports (Phase 6 / Phase E)
+
+The **Reports** workspace generates browser-printable genealogy reports from structured API data:
+
+- **`GET /api/reports/pedigree?rootPersonId=&depth=&redactLiving=`**
+- **`GET /api/reports/descendants?rootPersonId=&depth=&redactLiving=`**
+- **`GET /api/reports/family-group?familyId=&redactLiving=`**
+- **`GET /api/reports/register?rootPersonId=&depth=&redactLiving=`**
+
+Reports are session-authenticated and scoped to the current Treemich user. `redactLiving=true` keeps family structure but replaces people without a `DEATH` life event with `Living person` and suppresses dates, places, notes, alternate names, citations, and media details for those people.
+
+Depth defaults are pedigree `4`, descendants `3`, and register `3`. Operators can set **`TREEMICH_REPORT_MAX_DEPTH`** (default `6`, hard-capped at `10`) and **`TREEMICH_REPORT_MAX_PEOPLE`** (default `1000`). Requests above caps return validation errors instead of truncated reports. Server-side PDF jobs are intentionally not part of v1; use **Print / Save PDF** in the browser.
+
 ### GEDCOM import (Phase 5b)
 
 Imports **UTF-8 GEDCOM** into Treemich, either by matching INDI records to existing Treemich people or by automatically creating new Treemich people for unmatched records.
@@ -81,6 +96,17 @@ Immich is an optional provider. Unlinking Immich removes stored provider credent
 - Immich assets, faces, and photos remain unchanged in Immich.
 
 Relink Immich to refresh thumbnails or import new co-occurrence data.
+
+### Duplicate review and merge (Phase D)
+
+Treemich stores duplicate candidates separately from validation findings. Use the **Duplicates** workspace to review possible duplicate people before any data changes happen.
+
+- **`GET /api/people/duplicates?status=PENDING`** — list persisted duplicate candidates.
+- **`POST /api/people/duplicates/recompute`** — recompute candidate pairs from names, alternate names, birth/death dates, close family graph overlap, and supporting co-occurrence signals.
+- **`PATCH /api/people/duplicates/:id`** — set candidate status to `PENDING` or `DISMISSED`.
+- **`POST /api/people/duplicates/:id/merge`** — merge after user confirmation. Body: `{ "canonicalPersonId": "...", "duplicatePersonId": "...", "confirm": true }`.
+
+Merge operates only on Treemich-owned people for the signed-in user. It moves known Treemich person references to the canonical person in one DB transaction, preserves distinct external identities, writes a `PersonMergeAudit` row, and deletes the duplicate profile last. It does **not** merge Immich faces or people.
 
 ### Upgrading from releases before legacy column removal
 
@@ -361,6 +387,10 @@ This starts the API on `localhost:4000` and the web app on `localhost:5173` with
 | `GET`    | `/people/:id/thumbnail`           | Person thumbnail (Immich or SVG initials fallback)      |
 | `GET`    | `/people/:id/external-identities` | List external identities (e.g. Immich)                  |
 | `POST`   | `/people/:id/external-identities` | Add an external identity link                           |
+| `GET`    | `/people/duplicates`              | List duplicate person candidates                        |
+| `POST`   | `/people/duplicates/recompute`    | Recompute duplicate person candidates                   |
+| `PATCH`  | `/people/duplicates/:id`          | Dismiss or reopen a duplicate candidate                 |
+| `POST`   | `/people/duplicates/:id/merge`    | Merge a reviewed duplicate into canonical person        |
 | `POST`   | `/people/:id/relationships`       | Create a relationship                                   |
 | `DELETE` | `/people/:id/relationships`       | Delete a relationship                                   |
 | `GET`    | `/relationships`                  | List all relationships (paginated)                      |

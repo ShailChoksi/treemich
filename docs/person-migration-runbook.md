@@ -70,6 +70,8 @@ Run these checks after deploy.
 select count(*) as people from "PersonProfile";
 select "provider", count(*) from "PersonExternalIdentity" group by "provider" order by "provider";
 select count(*) as thumbnails from "PersonThumbnail";
+select count(*) as duplicate_candidates from "PersonDuplicateCandidate";
+select count(*) as merge_audits from "PersonMergeAudit";
 ```
 
 ```sql
@@ -113,6 +115,21 @@ left join "PersonProfile" b on b."id" = e."personBId" and b."userId" = e."userId
 where a."id" is null or b."id" is null;
 ```
 
+```sql
+select count(*) as broken_duplicate_candidate_refs
+from "PersonDuplicateCandidate" c
+left join "PersonProfile" a on a."id" = c."personAId" and a."userId" = c."userId"
+left join "PersonProfile" b on b."id" = c."personBId" and b."userId" = c."userId"
+where a."id" is null or b."id" is null;
+```
+
+```sql
+select count(*) as broken_merge_audit_canonical_refs
+from "PersonMergeAudit" a
+left join "PersonProfile" p on p."id" = a."canonicalPersonId" and p."userId" = a."userId"
+where p."id" is null;
+```
+
 Expected result for all `broken_*` checks is `0`.
 
 ## Smoke Tests
@@ -122,6 +139,7 @@ Verify these user-facing paths:
 - Sign in with Treemich email/password on a fresh or existing install.
 - Create a standalone person without linking Immich.
 - Create/edit a parent-child or spouse relationship.
+- Create two likely duplicate people, recompute duplicate candidates from the Duplicates workspace, dismiss/reopen a candidate, then merge into the intended canonical person and verify the duplicate profile disappears.
 - Export account data with `GET /api/export/account?format=zip` and confirm `account.json`, `manifest.json`, and any available `thumbnails/...` files exist.
 - Export GEDCOM and parse it with a GEDCOM reader or re-import preview.
 - If Immich is configured, link Immich, load provider preview, import one thumbnail, then unlink Immich. Imported thumbnail/co-occurrence data should remain visible, but refresh/import should stop until relinked.

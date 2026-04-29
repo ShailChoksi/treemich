@@ -33,6 +33,7 @@ import { registerGraphLayoutPostRoute } from "./routes/graph-layout.post.js";
 import { registerImmichProviderRoutes } from "./routes/immich-provider.js";
 import { registerPeopleGetRoute } from "./routes/people.get.js";
 import { registerPeopleCooccurrenceGetRoute } from "./routes/people-cooccurrence.get.js";
+import { registerPersonDuplicateRoutes } from "./routes/person-duplicates.js";
 import { registerPeopleRelationshipsDeleteRoute } from "./routes/people-relationships.delete.js";
 import { registerPeopleRelationshipsPatchRoute } from "./routes/people-relationships.patch.js";
 import { registerPeopleLifeEventsRoutes } from "./routes/people-life-events.js";
@@ -42,6 +43,7 @@ import { registerPlacesMapGetRoute } from "./routes/places-map.get.js";
 import { registerPeopleRelationshipsPostRoute } from "./routes/people-relationships.post.js";
 import { registerPeopleThumbnailGetRoute } from "./routes/people-thumbnail.get.js";
 import { registerEvidenceRoutes } from "./routes/evidence.js";
+import { registerReportRoutes } from "./routes/reports.js";
 import { registerResearchTaskRoutes } from "./routes/research-tasks.js";
 import { registerRelationshipsGetRoute } from "./routes/relationships.get.js";
 import { registerRelationshipsLifeEventsRoutes } from "./routes/relationships-life-events.js";
@@ -49,6 +51,7 @@ import { registerSearchGetRoute } from "./routes/search.get.js";
 import { registerTreeValidationGetRoute } from "./routes/tree-validation.get.js";
 import { registerUserPreferencesGetRoute } from "./routes/user-preferences.get.js";
 import { registerUserPreferencesPatchRoute } from "./routes/user-preferences.patch.js";
+import { registerValidationFindingRoutes } from "./routes/validation-findings.js";
 import { buildServices, registerServices, type AppServices } from "./services.js";
 
 type BuildAppOptions = {
@@ -223,6 +226,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerGraphLayoutPostRoute);
   app.register(registerImmichProviderRoutes);
   app.register(registerPeopleGetRoute);
+  app.register(registerPersonDuplicateRoutes);
   app.register(registerPeopleCooccurrenceGetRoute);
   app.register(registerPeopleThumbnailGetRoute);
   app.register(registerPeopleRelationshipsPostRoute);
@@ -238,8 +242,10 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerPlacesMapGetRoute);
   app.register(registerResearchTaskRoutes);
   app.register(registerEvidenceRoutes);
+  app.register(registerReportRoutes);
   app.register(registerSearchGetRoute);
   app.register(registerTreeValidationGetRoute);
+  app.register(registerValidationFindingRoutes);
   app.register(registerUserPreferencesGetRoute);
   app.register(registerUserPreferencesPatchRoute);
   app.register(registerExportAccountGetRoute);

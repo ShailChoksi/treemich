@@ -89,6 +89,25 @@ enum MediaLinkTargetType {
   PERSON_PROFILE
   LIFE_EVENT
   SOURCE
+  FAMILY
+}
+
+enum ValidationFindingStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  DISMISSED
+}
+
+enum ValidationFindingSeverity {
+  ERROR
+  WARNING
+}
+
+enum PersonDuplicateCandidateStatus {
+  PENDING
+  DISMISSED
+  MERGED
 }
 
 /// GEDCOM-style pedigree for a child within a family union (FAM / CHIL).
@@ -113,93 +132,101 @@ enum PersonThumbnailSource {
 }
 
 model TreemichUser {
-  id                  String                @id @default(cuid())
-  email               String?
-  name                String?
-  passwordHash        String?
-  preferences         Json                  @default("{}")
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  linkedAccount       LinkedImmichAccount?
-  sessions            TreemichSession[]
-  profiles            PersonProfile[]
+  id                       String                     @id @default(cuid())
+  email                    String?
+  name                     String?
+  passwordHash             String?
+  preferences              Json                       @default("{}")
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+  linkedAccount            LinkedImmichAccount?
+  sessions                 TreemichSession[]
+  profiles                 PersonProfile[]
   personExternalIdentities PersonExternalIdentity[]
-  personThumbnails    PersonThumbnail[]
-  relationships       Relationship[]
-  places              Place[]
-  lifeEvents          LifeEvent[]
-  cooccurrenceJobs    CooccurrenceJob[]
-  cooccurrenceEdges   CooccurrenceEdge[]
-  cooccurrenceSchedule CooccurrenceSchedule?
-  personNames         PersonName[]
-  researchTasks       ResearchTask[]
-  repositories        Repository[]
-  sources             Source[]
-  citations           Citation[]
-  mediaObjects        MediaObject[]
-  mediaLinks          MediaLink[]
-  families            Family[]
-  gedcomImportJobs    GedcomImportJob[]
-  gedcomExportJobs    GedcomExportJob[]
+  personThumbnails         PersonThumbnail[]
+  relationships            Relationship[]
+  places                   Place[]
+  lifeEvents               LifeEvent[]
+  cooccurrenceJobs         CooccurrenceJob[]
+  cooccurrenceEdges        CooccurrenceEdge[]
+  cooccurrenceSchedule     CooccurrenceSchedule?
+  personNames              PersonName[]
+  researchTasks            ResearchTask[]
+  repositories             Repository[]
+  sources                  Source[]
+  citations                Citation[]
+  mediaObjects             MediaObject[]
+  mediaLinks               MediaLink[]
+  validationFindings       ValidationFinding[]
+  duplicateCandidates      PersonDuplicateCandidate[]
+  personMergeAudits        PersonMergeAudit[]
+  families                 Family[]
+  gedcomImportJobs         GedcomImportJob[]
+  gedcomExportJobs         GedcomExportJob[]
 }
 
 model LinkedImmichAccount {
-  id                  String       @id @default(cuid())
-  userId              String       @unique
-  immichBaseUrl       String
-  immichUserId        String
-  immichEmail         String
-  immichName          String
+  id                   String       @id @default(cuid())
+  userId               String       @unique
+  immichBaseUrl        String
+  immichUserId         String
+  immichEmail          String
+  immichName           String
   encryptedAccessToken String
-  accessTokenIv       String
-  accessTokenTag      String
+  accessTokenIv        String
+  accessTokenTag       String
   accessTokenExpiresAt DateTime?
-  lastValidatedAt     DateTime?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
-  user                TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastValidatedAt      DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  user                 TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([immichBaseUrl, immichUserId])
 }
 
 model TreemichSession {
-  id         String       @id @default(cuid())
-  userId     String
-  tokenHash  String       @unique
-  expiresAt  DateTime
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  user       TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String       @id @default(cuid())
+  userId    String
+  tokenHash String       @unique
+  expiresAt DateTime
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  user      TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
 }
 
 model PersonProfile {
-  id                  String         @id @default(cuid())
-  userId              String
-  gender              Gender         @default(UNKNOWN)
-  displayNameOverride String?
-  givenName           String?
-  surname             String?
-  nicknames           String?
+  id                        String                     @id @default(cuid())
+  userId                    String
+  gender                    Gender                     @default(UNKNOWN)
+  displayNameOverride       String?
+  givenName                 String?
+  surname                   String?
+  nicknames                 String?
   /// Optional map for interchange (e.g. `{ "gedcomXref": "I42" }`). Not used by core UI yet.
-  externalIds         Json           @default("{}")
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  user                TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  externalIdentities  PersonExternalIdentity[]
-  thumbnails          PersonThumbnail[]
-  fromRelationships   Relationship[] @relation("FromPerson")
-  toRelationships     Relationship[] @relation("ToPerson")
-  lifeEvents          LifeEvent[]
-  personNames         PersonName[]
-  researchTasks       ResearchTask[]
-  familiesAsParent1   Family[]       @relation("FamilyParent1")
-  familiesAsParent2   Family[]       @relation("FamilyParent2")
-  familiesAsChild     FamilyChild[]  @relation("FamilyChild")
-  cooccurrenceAsA     CooccurrenceEdge[] @relation("CooccurrencePersonA")
-  cooccurrenceAsB     CooccurrenceEdge[] @relation("CooccurrencePersonB")
+  externalIds               Json                       @default("{}")
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  user                      TreemichUser               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  externalIdentities        PersonExternalIdentity[]
+  thumbnails                PersonThumbnail[]
+  fromRelationships         Relationship[]             @relation("FromPerson")
+  toRelationships           Relationship[]             @relation("ToPerson")
+  lifeEvents                LifeEvent[]
+  personNames               PersonName[]
+  researchTasks             ResearchTask[]
+  familiesAsParent1         Family[]                   @relation("FamilyParent1")
+  familiesAsParent2         Family[]                   @relation("FamilyParent2")
+  familiesAsChild           FamilyChild[]              @relation("FamilyChild")
+  cooccurrenceAsA           CooccurrenceEdge[]         @relation("CooccurrencePersonA")
+  cooccurrenceAsB           CooccurrenceEdge[]         @relation("CooccurrencePersonB")
+  validationFindings        ValidationFinding[]        @relation("ValidationFindingPerson")
+  relatedValidationFindings ValidationFinding[]        @relation("ValidationFindingRelatedPerson")
+  duplicateCandidateAsA     PersonDuplicateCandidate[] @relation("DuplicateCandidatePersonA")
+  duplicateCandidateAsB     PersonDuplicateCandidate[] @relation("DuplicateCandidatePersonB")
+  canonicalMergeAudits      PersonMergeAudit[]         @relation("PersonMergeAuditCanonical")
 
   @@index([userId])
   @@index([userId, givenName])
@@ -229,7 +256,7 @@ model PersonExternalIdentity {
 }
 
 model PersonThumbnail {
-  id                       String                    @id @default(cuid())
+  id                       String                  @id @default(cuid())
   userId                   String
   personId                 String
   source                   PersonThumbnailSource
@@ -238,11 +265,11 @@ model PersonThumbnail {
   checksum                 String?
   sourceExternalIdentityId String?
   importedAt               DateTime?
-  createdAt                DateTime                  @default(now())
-  updatedAt                DateTime                  @updatedAt
-  user                     TreemichUser              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  person                   PersonProfile             @relation(fields: [personId], references: [id], onDelete: Cascade)
-  sourceExternalIdentity   PersonExternalIdentity?   @relation(fields: [sourceExternalIdentityId], references: [id], onDelete: SetNull)
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  user                     TreemichUser            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person                   PersonProfile           @relation(fields: [personId], references: [id], onDelete: Cascade)
+  sourceExternalIdentity   PersonExternalIdentity? @relation(fields: [sourceExternalIdentityId], references: [id], onDelete: SetNull)
 
   @@index([userId, personId])
   @@index([sourceExternalIdentityId])
@@ -287,20 +314,21 @@ model ResearchTask {
 }
 
 model Relationship {
-  id         String           @id @default(cuid())
-  userId     String
-  fromPersonId String
-  toPersonId String
-  type       RelationshipType
+  id                 String              @id @default(cuid())
+  userId             String
+  fromPersonId       String
+  toPersonId         String
+  type               RelationshipType
   /// When set, this parent/child edge is derived from {@link Family} membership (not edited via DELETE /people/.../relationships).
-  familyId   String?
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
-  user       TreemichUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fromPerson PersonProfile    @relation("FromPerson", fields: [fromPersonId], references: [id], onDelete: Cascade)
-  toPerson   PersonProfile    @relation("ToPerson", fields: [toPersonId], references: [id], onDelete: Cascade)
-  family     Family?          @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  lifeEvents LifeEvent[]
+  familyId           String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  user               TreemichUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromPerson         PersonProfile       @relation("FromPerson", fields: [fromPersonId], references: [id], onDelete: Cascade)
+  toPerson           PersonProfile       @relation("ToPerson", fields: [toPersonId], references: [id], onDelete: Cascade)
+  family             Family?             @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  lifeEvents         LifeEvent[]
+  validationFindings ValidationFinding[]
 
   @@unique([userId, fromPersonId, toPersonId, type])
   @@index([userId, fromPersonId])
@@ -311,21 +339,22 @@ model Relationship {
 
 /// Union of up to two parents plus children (FAM-style). Canonical for children in this union; parent/child graph edges with {@link Relationship#familyId} are derived.
 model Family {
-  id              String         @id @default(cuid())
-  userId          String
-  parent1PersonId String?
-  parent2PersonId String?
-  notes           String?
+  id                   String              @id @default(cuid())
+  userId               String
+  parent1PersonId      String?
+  parent2PersonId      String?
+  notes                String?
   /// Optional map for interchange (e.g. `{ "gedcomFam": "F12" }` from GEDCOM import for idempotent FAM rows).
-  externalIds     Json           @default("{}")
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  user            TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent1         PersonProfile? @relation("FamilyParent1", fields: [parent1PersonId], references: [id], onDelete: SetNull)
-  parent2         PersonProfile? @relation("FamilyParent2", fields: [parent2PersonId], references: [id], onDelete: SetNull)
-  children        FamilyChild[]
+  externalIds          Json                @default("{}")
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  user                 TreemichUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent1              PersonProfile?      @relation("FamilyParent1", fields: [parent1PersonId], references: [id], onDelete: SetNull)
+  parent2              PersonProfile?      @relation("FamilyParent2", fields: [parent2PersonId], references: [id], onDelete: SetNull)
+  children             FamilyChild[]
   derivedRelationships Relationship[]
-  lifeEvents      LifeEvent[]
+  lifeEvents           LifeEvent[]
+  validationFindings   ValidationFinding[]
 
   @@index([userId])
   @@index([userId, parent1PersonId])
@@ -347,7 +376,7 @@ model FamilyChild {
 }
 
 model Place {
-  id           String    @id @default(cuid())
+  id           String       @id @default(cuid())
   userId       String
   name         String
   addressLine1 String?
@@ -355,11 +384,11 @@ model Place {
   adminArea    String?
   postalCode   String?
   countryCode  String?
-  latitude     Decimal?  @db.Decimal(10, 7)
-  longitude    Decimal?  @db.Decimal(10, 7)
+  latitude     Decimal?     @db.Decimal(10, 7)
+  longitude    Decimal?     @db.Decimal(10, 7)
   notes        String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   user         TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
   lifeEvents   LifeEvent[]
 
@@ -368,31 +397,33 @@ model Place {
 }
 
 model LifeEvent {
-  id               String         @id @default(cuid())
-  userId           String
-  eventType        LifeEventType
-  /** Non-null display label when `eventType` is CUSTOM (required by API for CUSTOM). */
-  customLabel      String?
-  dateQualifier    DateQualifier  @default(EXACT)
-  year             Int?
-  month            Int?
-  day              Int?
-  endYear          Int?
-  endMonth         Int?
-  endDay           Int?
-  personProfileId  String?
-  relationshipId   String?
-  familyId         String?
-  placeId          String?
-  notes            String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  user             TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  personProfile    PersonProfile? @relation(fields: [personProfileId], references: [id], onDelete: Cascade)
-  relationship     Relationship?  @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
-  family           Family?        @relation(fields: [familyId], references: [id], onDelete: Cascade)
-  place            Place?         @relation(fields: [placeId], references: [id], onDelete: SetNull)
-  citations        Citation[]
+  id              String         @id @default(cuid())
+  userId          String
+  eventType       LifeEventType
+  /**
+   * Non-null display label when `eventType` is CUSTOM (required by API for CUSTOM).
+   */
+  customLabel     String?
+  dateQualifier   DateQualifier  @default(EXACT)
+  year            Int?
+  month           Int?
+  day             Int?
+  endYear         Int?
+  endMonth        Int?
+  endDay          Int?
+  personProfileId String?
+  relationshipId  String?
+  familyId        String?
+  placeId         String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  user            TreemichUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personProfile   PersonProfile? @relation(fields: [personProfileId], references: [id], onDelete: Cascade)
+  relationship    Relationship?  @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  family          Family?        @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  place           Place?         @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  citations       Citation[]
 
   @@index([userId, personProfileId])
   @@index([userId, relationshipId])
@@ -401,50 +432,50 @@ model LifeEvent {
 }
 
 model Repository {
-  id             String   @id @default(cuid())
-  userId         String
-  name           String
-  addressLine1   String?
-  url            String?
-  notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  user           TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sources        Source[]
+  id           String       @id @default(cuid())
+  userId       String
+  name         String
+  addressLine1 String?
+  url          String?
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  user         TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources      Source[]
 
   @@unique([userId, name])
   @@index([userId])
 }
 
 model Source {
-  id             String       @id @default(cuid())
-  userId         String
-  repositoryId   String?
-  title          String
-  author         String?
-  publication    String?
-  url            String?
-  notes          String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  user           TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-  repository     Repository?  @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
-  citations      Citation[]
+  id           String       @id @default(cuid())
+  userId       String
+  repositoryId String?
+  title        String
+  author       String?
+  publication  String?
+  url          String?
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  user         TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository   Repository?  @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  citations    Citation[]
 
   @@index([userId])
   @@index([userId, repositoryId])
 }
 
 model Citation {
-  id          String    @id @default(cuid())
+  id          String       @id @default(cuid())
   userId      String
   sourceId    String
   lifeEventId String
   page        String?
   notes       String?
   citedAt     String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
   user        TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
   source      Source       @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   lifeEvent   LifeEvent    @relation(fields: [lifeEventId], references: [id], onDelete: Cascade)
@@ -481,20 +512,97 @@ model MediaLink {
   user          TreemichUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
   mediaObject   MediaObject         @relation(fields: [mediaObjectId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, mediaObjectId, targetType, targetId])
   @@index([userId, targetType, targetId])
   @@index([mediaObjectId])
 }
 
+model ValidationFinding {
+  id              String                    @id @default(cuid())
+  userId          String
+  code            String
+  severity        ValidationFindingSeverity
+  message         String
+  personId        String?
+  relationshipId  String?
+  relatedPersonId String?
+  familyId        String?
+  status          ValidationFindingStatus   @default(OPEN)
+  fingerprint     String
+  firstSeenAt     DateTime                  @default(now())
+  lastSeenAt      DateTime                  @default(now())
+  resolvedAt      DateTime?
+  dismissedAt     DateTime?
+  inProgressAt    DateTime?
+  metadata        Json                      @default("{}")
+  user            TreemichUser              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person          PersonProfile?            @relation("ValidationFindingPerson", fields: [personId], references: [id], onDelete: SetNull)
+  relationship    Relationship?             @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  relatedPerson   PersonProfile?            @relation("ValidationFindingRelatedPerson", fields: [relatedPersonId], references: [id], onDelete: SetNull)
+  family          Family?                   @relation(fields: [familyId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, fingerprint])
+  @@index([userId, status])
+  @@index([userId, code])
+  @@index([userId, severity])
+  @@index([userId, personId])
+  @@index([userId, relationshipId])
+  @@index([userId, familyId])
+}
+
+model PersonDuplicateCandidate {
+  id          String                         @id @default(cuid())
+  userId      String
+  personAId   String
+  personBId   String
+  score       Int
+  reasons     Json                           @default("[]")
+  status      PersonDuplicateCandidateStatus @default(PENDING)
+  dismissedAt DateTime?
+  mergedAt    DateTime?
+  createdAt   DateTime                       @default(now())
+  updatedAt   DateTime                       @updatedAt
+  user        TreemichUser                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personA     PersonProfile                  @relation("DuplicateCandidatePersonA", fields: [personAId], references: [id], onDelete: Cascade)
+  personB     PersonProfile                  @relation("DuplicateCandidatePersonB", fields: [personBId], references: [id], onDelete: Cascade)
+  mergeAudits PersonMergeAudit[]
+
+  @@unique([userId, personAId, personBId])
+  @@index([userId, status, score])
+  @@index([personAId])
+  @@index([personBId])
+}
+
+model PersonMergeAudit {
+  id                     String                    @id @default(cuid())
+  userId                 String
+  candidateId            String?
+  canonicalPersonId      String
+  duplicatePersonId      String
+  changedCounts          Json                      @default("{}")
+  warnings               Json                      @default("[]")
+  externalIdentityPolicy String
+  metadata               Json                      @default("{}")
+  createdAt              DateTime                  @default(now())
+  user                   TreemichUser              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidate              PersonDuplicateCandidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+  canonicalPerson        PersonProfile             @relation("PersonMergeAuditCanonical", fields: [canonicalPersonId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([candidateId])
+  @@index([canonicalPersonId])
+}
+
 model CooccurrenceSchedule {
-  id         String       @id @default(cuid())
-  userId     String       @unique
-  enabled    Boolean      @default(true)
-  intervalDays Int         @default(7)
-  nextRunAt  DateTime
-  lastRunAt  DateTime?
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  user       TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String       @id @default(cuid())
+  userId       String       @unique
+  enabled      Boolean      @default(true)
+  intervalDays Int          @default(7)
+  nextRunAt    DateTime
+  lastRunAt    DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  user         TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([enabled, nextRunAt])
 }
@@ -518,23 +626,23 @@ model CooccurrenceJob {
 }
 
 model CooccurrenceEdge {
-  id                String       @id @default(cuid())
+  id                String                          @id @default(cuid())
   userId            String
   personAId         String
   personBId         String
   sourceProvider    PersonExternalIdentityProvider?
   sourceImportedAt  DateTime?
-  sourceMetadata    Json         @default("{}")
+  sourceMetadata    Json                            @default("{}")
   sharedPhotos      Int
   score             Float
   personAPhotoCount Int
   personBPhotoCount Int
   computedAt        DateTime
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  user              TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-  personA           PersonProfile @relation("CooccurrencePersonA", fields: [personAId], references: [id], onDelete: Cascade)
-  personB           PersonProfile @relation("CooccurrencePersonB", fields: [personBId], references: [id], onDelete: Cascade)
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+  user              TreemichUser                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personA           PersonProfile                   @relation("CooccurrencePersonA", fields: [personAId], references: [id], onDelete: Cascade)
+  personB           PersonProfile                   @relation("CooccurrencePersonB", fields: [personBId], references: [id], onDelete: Cascade)
 
   @@unique([userId, personAId, personBId])
   @@index([userId])
@@ -551,46 +659,46 @@ model DataMigrationCheckpoint {
 }
 
 model GedcomImportJob {
-  id           String                @id @default(cuid())
-  userId       String
-  status       GedcomImportJobStatus @default(PENDING)
-  fileName     String                @default("import.ged")
-  byteSize     Int
+  id            String                @id @default(cuid())
+  userId        String
+  status        GedcomImportJobStatus @default(PENDING)
+  fileName      String                @default("import.ged")
+  byteSize      Int
   /// Raw UTF-8 payload (bounded by `TREEMICH_GEDCOM_IMPORT_MAX_BYTES` at upload).
-  gedcomUtf8   String                @db.Text
+  gedcomUtf8    String                @db.Text
   /// Client-supplied map of GEDCOM INDI xref (e.g. `@I1@` or `I1`) → Treemich PersonProfile id for this user.
-  indiMatches  Json                  @default("{}")
+  indiMatches   Json                  @default("{}")
   /// Options: dryRun, skipAlreadyImportedIndis, etc.
-  importOptions Json                 @default("{}")
-  startedAt    DateTime?
-  completedAt  DateTime?
-  errorMessage String?
+  importOptions Json                  @default("{}")
+  startedAt     DateTime?
+  completedAt   DateTime?
+  errorMessage  String?
   /// Structured parse/apply messages (truncated server-side).
-  lineLog      Json                  @default("[]")
+  lineLog       Json                  @default("[]")
   /// Counts and ids created (families, events, …).
-  summary      Json?
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
-  user         TreemichUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  summary       Json?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  user          TreemichUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }
 
 /// Async GEDCOM export (UTF-8 text stored when complete, capped like import max bytes).
 model GedcomExportJob {
-  id                        String                 @id @default(cuid())
+  id                        String                @id @default(cuid())
   userId                    String
-  status                    GedcomExportJobStatus  @default(PENDING)
-  redactLiving              Boolean                @default(false)
-  includeTreemichCustomTags Boolean                @default(true)
+  status                    GedcomExportJobStatus @default(PENDING)
+  redactLiving              Boolean               @default(false)
+  includeTreemichCustomTags Boolean               @default(true)
   byteSize                  Int?
-  gedcomUtf8                String?                @db.Text
+  gedcomUtf8                String?               @db.Text
   startedAt                 DateTime?
   completedAt               DateTime?
   errorMessage              String?
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
-  user                      TreemichUser           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  user                      TreemichUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }

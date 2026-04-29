@@ -63,12 +63,17 @@ export const patchMediaObjectBodySchema = z.object({
   title: z.string().optional().nullable()
 });
 
-export const mediaLinkTargetTypeSchema = z.enum(["PERSON_PROFILE", "LIFE_EVENT", "SOURCE"]);
+export const mediaLinkTargetTypeSchema = z.enum(["PERSON_PROFILE", "LIFE_EVENT", "SOURCE", "FAMILY"]);
 
 export const createMediaLinkBodySchema = z.object({
   targetType: mediaLinkTargetTypeSchema,
   targetId: z.string().min(1),
   notes: z.string().optional().nullable()
+});
+
+export const targetMediaLinkQuerySchema = z.object({
+  targetType: mediaLinkTargetTypeSchema,
+  targetId: z.string().min(1)
 });
 
 export type CreateRepositoryBody = z.infer<typeof createRepositoryBodySchema>;
@@ -80,6 +85,8 @@ export type MergeSourcesBody = z.infer<typeof mergeSourcesBodySchema>;
 export type CreateMediaObjectBody = z.infer<typeof createMediaObjectBodySchema>;
 export type PatchMediaObjectBody = z.infer<typeof patchMediaObjectBodySchema>;
 export type CreateMediaLinkBody = z.infer<typeof createMediaLinkBodySchema>;
+export type MediaLinkTargetType = z.infer<typeof mediaLinkTargetTypeSchema>;
+export type TargetMediaLinkQuery = z.infer<typeof targetMediaLinkQuerySchema>;
 
 export type RepositoryRecord = {
   id: string;
@@ -118,8 +125,12 @@ export type MediaObjectRecord = {
 export type MediaLinkRecord = {
   id: string;
   mediaObjectId: string;
-  targetType: z.infer<typeof mediaLinkTargetTypeSchema>;
+  targetType: MediaLinkTargetType;
   targetId: string;
   notes: string | null;
   createdAt: string;
+};
+
+export type TargetMediaLinkRecord = MediaLinkRecord & {
+  mediaObject: MediaObjectRecord;
 };

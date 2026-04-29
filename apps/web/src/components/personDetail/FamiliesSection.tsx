@@ -1,9 +1,17 @@
 import { useState } from "react";
 import type { CreateLifeEventBody, PatchLifeEventBody } from "@treemich/shared";
-import type { FamilyRecord, Person, LifeEventRecord, PatchFamilyBody } from "../../lib/api";
+import type {
+  FamilyRecord,
+  Person,
+  LifeEventRecord,
+  MediaObjectRecord,
+  PatchFamilyBody,
+  TargetMediaLinkRecord
+} from "../../lib/api";
 import { getPersonDisplayLabel } from "../../lib/personDisplay";
 import { DestructiveConfirmDialog } from "../DestructiveConfirmDialog";
 import { FamilyLifeEventsBlock } from "./FamilyLifeEventsBlock";
+import { FamilyMediaLinksBlock } from "./FamilyMediaLinksBlock";
 
 type Props = {
   person: Person;
@@ -12,6 +20,11 @@ type Props = {
   onPatchFamily?: (familyId: string, body: PatchFamilyBody) => Promise<void>;
   onDeleteFamily?: (familyId: string) => Promise<void>;
   savingFamilyId?: string | null;
+  familyMediaLinksById?: Partial<Record<string, TargetMediaLinkRecord[]>>;
+  mediaObjects?: MediaObjectRecord[];
+  mediaManagementEnabled?: boolean;
+  onFamilyMediaLinkCreate?: (familyId: string, mediaObjectId: string) => Promise<void>;
+  onFamilyMediaLinkDelete?: (linkId: string) => Promise<void>;
   familyLifeEventsById?: Partial<Record<string, LifeEventRecord[]>>;
   onFamilyLifeEventCreate?: (familyId: string, body: CreateLifeEventBody) => Promise<void>;
   onFamilyLifeEventPatch?: (familyId: string, eventId: string, body: PatchLifeEventBody) => Promise<void>;
@@ -33,6 +46,11 @@ export const FamiliesSection = ({
   onPatchFamily,
   onDeleteFamily,
   savingFamilyId,
+  familyMediaLinksById,
+  mediaObjects = [],
+  mediaManagementEnabled = true,
+  onFamilyMediaLinkCreate,
+  onFamilyMediaLinkDelete,
   familyLifeEventsById,
   onFamilyLifeEventCreate,
   onFamilyLifeEventPatch,
@@ -217,6 +235,16 @@ export const FamiliesSection = ({
                     ) : null}
                   </div>
                 )}
+
+                <FamilyMediaLinksBlock
+                  familyId={family.id}
+                  links={familyMediaLinksById?.[family.id]}
+                  mediaObjects={mediaObjects}
+                  managementEnabled={mediaManagementEnabled}
+                  disabled={busy}
+                  onAttach={onFamilyMediaLinkCreate}
+                  onUnlink={onFamilyMediaLinkDelete}
+                />
 
                 <div className="field-group">
                   <span className="field-label">Children ({family.children.length})</span>

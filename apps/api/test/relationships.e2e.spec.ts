@@ -22,6 +22,10 @@ const getCooccurrenceEdgeBetweenMock = vi.fn();
 const getPersistedPhotoCooccurrenceMock = vi.fn();
 const syncCooccurrenceScheduleFromPreferencesMock = vi.fn();
 const listPeopleMock = vi.fn();
+const listDuplicateCandidatesMock = vi.fn();
+const recomputeDuplicateCandidatesMock = vi.fn();
+const updateDuplicateCandidateMock = vi.fn();
+const mergeDuplicateCandidateMock = vi.fn();
 const getPersonThumbnailMock = vi.fn();
 const listAssetsWithPeopleMock = vi.fn();
 const loginWithImmichMock = vi.fn();
@@ -317,6 +321,17 @@ describe("Treemich API routes", () => {
       }
     });
     listPersonServiceMock.mockResolvedValue([]);
+    listDuplicateCandidatesMock.mockResolvedValue([]);
+    recomputeDuplicateCandidatesMock.mockResolvedValue({
+      candidates: [],
+      summary: { created: 0, updated: 0, preservedDismissed: 0, pending: 0 }
+    });
+    updateDuplicateCandidateMock.mockResolvedValue({ id: "dup-1", status: "DISMISSED" });
+    mergeDuplicateCandidateMock.mockResolvedValue({
+      auditId: "audit-1",
+      canonicalPersonId: "p1",
+      duplicatePersonId: "p2"
+    });
     resolvePersonIdMock.mockImplementation((_userId: string, id: string) => Promise.resolve(id));
     listExternalIdentitiesMock.mockResolvedValue([]);
     deletePersonServiceMock.mockResolvedValue(undefined);
@@ -369,6 +384,12 @@ describe("Treemich API routes", () => {
         deleteExternalIdentity: deleteExternalIdentityMock,
         delete: deletePersonServiceMock
       } as unknown as AppServices["personService"],
+      personDuplicateService: {
+        list: listDuplicateCandidatesMock,
+        recomputeCandidates: recomputeDuplicateCandidatesMock,
+        updateStatus: updateDuplicateCandidateMock,
+        mergePeople: mergeDuplicateCandidateMock
+      } as unknown as AppServices["personDuplicateService"],
       lifeEventService: lifeEventServiceMock as unknown as AppServices["lifeEventService"],
       personNameService: personNameServiceMock as unknown as AppServices["personNameService"],
       researchTaskService: researchTaskServiceMock as unknown as AppServices["researchTaskService"],
@@ -526,6 +547,74 @@ describe("Treemich API routes", () => {
     expect(json.people).toHaveLength(1);
     expect(json.people[0].id).toBe("p1");
     expect(json.people[0].hasRelationship).toBe(true);
+  });
+
+  it("lists duplicate candidates", async () => {
+    listDuplicateCandidatesMock.mockResolvedValueOnce([{ id: "dup-1", status: "PENDING" }]);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/people/duplicates?status=PENDING&limit=25"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ candidates: [{ id: "dup-1", status: "PENDING" }] });
+    expect(listDuplicateCandidatesMock).toHaveBeenCalledWith("user-1", { status: "PENDING", limit: 25 });
+  });
+
+  it("recomputes duplicate candidates", async () => {
+    recomputeDuplicateCandidatesMock.mockResolvedValueOnce({
+      candidates: [],
+      summary: { created: 1, updated: 0, preservedDismissed: 0, pending: 1 }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people/duplicates/recompute"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      candidates: [],
+      summary: { created: 1, updated: 0, preservedDismissed: 0, pending: 1 }
+    });
+    expect(recomputeDuplicateCandidatesMock).toHaveBeenCalledWith("user-1");
+  });
+
+  it("dismisses duplicate candidates", async () => {
+    updateDuplicateCandidateMock.mockResolvedValueOnce({ id: "dup-1", status: "DISMISSED" });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/people/duplicates/dup-1",
+      payload: { status: "DISMISSED" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ id: "dup-1", status: "DISMISSED" });
+    expect(updateDuplicateCandidateMock).toHaveBeenCalledWith("user-1", "dup-1", "DISMISSED");
+  });
+
+  it("merges duplicate candidates after explicit confirmation", async () => {
+    mergeDuplicateCandidateMock.mockResolvedValueOnce({
+      auditId: "audit-1",
+      canonicalPersonId: "p1",
+      duplicatePersonId: "p2"
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/people/duplicates/dup-1/merge",
+      payload: { canonicalPersonId: "p1", duplicatePersonId: "p2", confirm: true }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      auditId: "audit-1",
+      canonicalPersonId: "p1",
+      duplicatePersonId: "p2"
+    });
+    expect(mergeDuplicateCandidateMock).toHaveBeenCalledWith("user-1", "dup-1", "p1", "p2");
   });
 
   it("updates gender profile", async () => {
