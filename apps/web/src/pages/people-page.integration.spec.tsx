@@ -89,6 +89,8 @@ describe("PeoplePage + life events (integration)", () => {
   let placesMapCallCount = 0;
   let peopleLoadCount = 0;
   let relationshipsLoadCount = 0;
+  let preferencePatchShouldFail = false;
+  let preferencesGetNeverResolves = false;
 
   beforeEach(() => {
     try {
@@ -101,6 +103,8 @@ describe("PeoplePage + life events (integration)", () => {
     placesMapCallCount = 0;
     peopleLoadCount = 0;
     relationshipsLoadCount = 0;
+    preferencePatchShouldFail = false;
+    preferencesGetNeverResolves = false;
     globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       const method = init?.method ?? "GET";
@@ -134,7 +138,23 @@ describe("PeoplePage + life events (integration)", () => {
       }
 
       if (method === "GET" && url.endsWith("/user/preferences")) {
+        if (preferencesGetNeverResolves) {
+          return new Promise<Response>(() => undefined);
+        }
         return jsonResponse({});
+      }
+
+      if (method === "PATCH" && url.endsWith("/user/preferences")) {
+        if (preferencePatchShouldFail) {
+          return jsonResponse({ error: "save failed" }, 500);
+        }
+        const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+        return jsonResponse({
+          showSingleFamilyTree: true,
+          primaryFamilyUnitByPersonId: {},
+          cooccurrence: { refreshEnabled: true, refreshIntervalDays: 7 },
+          searchIncludeAlternateNames: body.searchIncludeAlternateNames ?? true
+        });
       }
 
       if (method === "GET" && /\/people$/.test(url)) {
@@ -615,6 +635,138 @@ describe("PeoplePage + life events (integration)", () => {
       .mocked(globalThis.fetch)
       .mock.calls.filter((call) => String(call[0]).includes("/places/map"));
     expect(mapCallsAfter.length).toBeGreaterThanOrEqual(1);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("renders Settings search preferences and disables planned workspaces", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    const researchNav = container.querySelector('[data-workspace="research"]') as HTMLButtonElement | null;
+    const reportsNav = container.querySelector('[data-workspace="reports"]') as HTMLButtonElement | null;
+    const settingsNav = container.querySelector('[data-workspace="settings"]') as HTMLButtonElement | null;
+
+    expect(researchNav?.disabled).toBe(true);
+    expect(researchNav?.title).toBe("Planned for Phase C");
+    expect(reportsNav?.disabled).toBe(true);
+    expect(reportsNav?.title).toBe("Planned for Phase E");
+    expect(settingsNav?.disabled).toBe(false);
+
+    await act(async () => {
+      settingsNav!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Search settings");
+    expect(container.textContent).toContain("Match alternate Treemich names in relationship search");
+    const checkbox = container.querySelector('.settings-toggle input[type="checkbox"]') as HTMLInputElement | null;
+    expect(checkbox?.checked).toBe(true);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("shows a Settings skeleton while preferences are loading", async () => {
+    preferencesGetNeverResolves = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    const settingsNav = container.querySelector('[data-workspace="settings"]') as HTMLButtonElement | null;
+    await act(async () => {
+      settingsNav!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[aria-label="Loading search settings"]')).toBeTruthy();
+    expect(container.querySelector(".settings-skeleton")).toBeTruthy();
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("saves Settings alternate-name preference immediately", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    const settingsNav = container.querySelector('[data-workspace="settings"]') as HTMLButtonElement | null;
+    await act(async () => {
+      settingsNav!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const checkbox = container.querySelector('.settings-toggle input[type="checkbox"]') as HTMLInputElement;
+    await act(async () => {
+      checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const preferencePatch = vi.mocked(globalThis.fetch).mock.calls.find(
+      (call) =>
+        String(call[0]).endsWith("/user/preferences") &&
+        call[1]?.method === "PATCH" &&
+        String(call[1]?.body).includes("searchIncludeAlternateNames")
+    );
+    expect(preferencePatch?.[1]?.body).toBe(JSON.stringify({ searchIncludeAlternateNames: false }));
+    expect(container.textContent).toContain("Alternate-name relationship search disabled.");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("rolls back Settings alternate-name preference when save fails", async () => {
+    preferencePatchShouldFail = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    const settingsNav = container.querySelector('[data-workspace="settings"]') as HTMLButtonElement | null;
+    await act(async () => {
+      settingsNav!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const checkbox = container.querySelector('.settings-toggle input[type="checkbox"]') as HTMLInputElement;
+    await act(async () => {
+      checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const rolledBackCheckbox = container.querySelector(
+      '.settings-toggle input[type="checkbox"]'
+    ) as HTMLInputElement;
+    expect(rolledBackCheckbox.checked).toBe(true);
+    expect(container.textContent).toContain("Could not save search settings");
 
     act(() => {
       root.unmount();

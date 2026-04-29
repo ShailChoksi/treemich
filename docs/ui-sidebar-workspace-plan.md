@@ -1,5 +1,13 @@
 # Sidebar Workspace UI Plan (Implementation-Ready Checklist)
 
+## Status
+
+Deferred. This redesign is not implemented in the current UI. The current people surface uses the workspace shell in `apps/web/src/pages/people.tsx` plus the stacked inspector in `apps/web/src/components/PersonDetailPanel.tsx`.
+
+Revisit this plan after the Phase A workspace cleanup if the stacked inspector becomes a usability blocker. Phase A should not create `PersonSidebarWorkspace`, `sidebarSections`, sidebar section persistence, sidebar badges, or sidebar keyboard navigation.
+
+---
+
 This document breaks the sidebar redesign into concrete, shippable tasks with file-level targets, test scope, rollout, and acceptance criteria.
 
 Scope: `apps/web` only for v1 (no new API contracts required).  

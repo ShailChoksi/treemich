@@ -268,6 +268,11 @@ body {
   color: #e0f2fe;
 }
 
+.workspace-nav-item--disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
 .workspace-nav-icon {
   display: inline-flex;
   align-items: center;
@@ -285,6 +290,38 @@ body {
 .workspace-nav-label {
   font-size: 0.92rem;
   font-weight: 600;
+}
+
+.workspace-nav-status {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: #94a3b8;
+  text-align: right;
+}
+
+.settings-card {
+  gap: 16px;
+}
+
+.settings-skeleton {
+  height: 120px;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #e2e8f0;
+}
+
+.settings-toggle input[type="checkbox"] {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.settings-toggle .hint {
+  display: block;
+  margin-top: 4px;
 }
 
 .workspace-main {

@@ -16,7 +16,7 @@ import type { AgeFilter, InterpreterIntent } from "@treemich/shared/search/inter
 import { getRequiredAuth } from "../auth/request.js";
 import { prisma } from "../db/client.js";
 import { partialDateToComparableDate } from "../lifeEvents/dateValue.js";
-import { parseUserPreferences } from "../preferences.js";
+import { parseUserPreferences, withUserPreferenceDefaults } from "../preferences.js";
 import { RuleBasedInterpreter } from "../search/interpreter/ruleBasedInterpreter.js";
 import { personToJson } from "../people/service.js";
 
@@ -161,7 +161,7 @@ export const registerSearchGetRoute = (app: FastifyInstance) => {
       select: { preferences: true }
     });
     const includeAlternateNames =
-      parseUserPreferences(userRow.preferences).searchIncludeAlternateNames === true;
+      withUserPreferenceDefaults(parseUserPreferences(userRow.preferences)).searchIncludeAlternateNames === true;
     const normalizedSourceName = interpreted.parsed.sourceName.trim().toLowerCase();
     const searchablePeople = await loadSearchPeople(auth.user.id);
     const sourceCandidates = searchablePeople

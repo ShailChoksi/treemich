@@ -215,6 +215,7 @@ describe("Treemich API routes", () => {
     name: string;
     gender?: string;
     externalDisplayName?: string | null;
+    alternateNames?: Array<{ givenName?: string | null; surname?: string | null; prefix?: string | null; suffix?: string | null }>;
   }) => {
     const [givenName, ...surnameParts] = person.name.split(/\s+/);
     return {
@@ -246,7 +247,7 @@ describe("Treemich API routes", () => {
             }
           ]
         : [],
-      personNames: [],
+      personNames: person.alternateNames ?? [],
       thumbnails: []
     };
   };
@@ -672,6 +673,58 @@ describe("Treemich API routes", () => {
     const json = response.json();
     expect(json.sourceCandidates[0].name).toBe("Person source-id");
     expect(json.matches[0].person.name).toBe("Jane");
+  });
+
+  it("matches NL search sources by alternate names by default", async () => {
+    treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: {} });
+    personProfileFindManyMock.mockResolvedValueOnce([
+      makeSearchPersonRow({
+        id: "source-id",
+        name: "Eliza Smith",
+        alternateNames: [{ givenName: "Beth", surname: "Smith", prefix: null, suffix: null }]
+      }),
+      makeSearchPersonRow({ id: "target-id", name: "Jane" })
+    ]);
+    traverseRelationshipChainMock.mockResolvedValueOnce(["target-id"]);
+    getProfilesForPersonIdsMock.mockResolvedValueOnce(
+      new Map([["target-id", { id: "target-id", gender: "FEMALE" }]])
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/search?q=daughter%20of%20Beth"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(traverseRelationshipChainMock).toHaveBeenCalledWith("user-1", ["source-id"], ["CHILD_OF"]);
+    expect(response.json().matches[0].person.name).toBe("Jane");
+  });
+
+  it("excludes alternate names from NL search when disabled", async () => {
+    treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({
+      preferences: { searchIncludeAlternateNames: false }
+    });
+    personProfileFindManyMock.mockResolvedValueOnce([
+      makeSearchPersonRow({
+        id: "source-id",
+        name: "Eliza Smith",
+        alternateNames: [{ givenName: "Beth", surname: "Smith", prefix: null, suffix: null }]
+      }),
+      makeSearchPersonRow({ id: "target-id", name: "Jane" })
+    ]);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/search?q=daughter%20of%20Beth"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(traverseRelationshipChainMock).not.toHaveBeenCalled();
+    expect(response.json()).toMatchObject({
+      sourceCandidates: [],
+      matches: [],
+      message: "No person found for Beth"
+    });
   });
 
   it("searches adopted children via family pedigree instead of graph hops", async () => {
@@ -1411,7 +1464,7 @@ describe("Treemich API routes", () => {
   });
 
   describe("user preferences", () => {
-    it("returns empty object when user has no saved preferences", async () => {
+    it("returns defaults when user has no saved preferences", async () => {
       treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: {} });
 
       const response = await app.inject({
@@ -1423,7 +1476,8 @@ describe("Treemich API routes", () => {
       expect(response.json()).toEqual({
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
-        cooccurrence: defaultCooccurrencePreferences
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true
       });
     });
 
@@ -1458,11 +1512,12 @@ describe("Treemich API routes", () => {
           friends: true,
           pets: false
         },
-        cooccurrence: defaultCooccurrencePreferences
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true
       });
     });
 
-    it("returns empty object when stored preferences are corrupted", async () => {
+    it("returns defaults when stored preferences are corrupted", async () => {
       treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({
         preferences: { familyViewStyle: "nonExistentStyle", extra: 123 }
       });
@@ -1476,7 +1531,8 @@ describe("Treemich API routes", () => {
       expect(response.json()).toEqual({
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
-        cooccurrence: defaultCooccurrencePreferences
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true
       });
     });
 
@@ -1505,7 +1561,8 @@ describe("Treemich API routes", () => {
         ...savedPrefs,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
-        cooccurrence: defaultCooccurrencePreferences
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
@@ -1543,7 +1600,8 @@ describe("Treemich API routes", () => {
         ...merged,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
-        cooccurrence: defaultCooccurrencePreferences
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
@@ -1609,7 +1667,8 @@ describe("Treemich API routes", () => {
         ...merged,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
-        cooccurrence: defaultCooccurrencePreferences
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true
       });
       expect(treemichUserUpdateMock).toHaveBeenCalledWith({
         where: { id: "user-1" },
@@ -1652,7 +1711,8 @@ describe("Treemich API routes", () => {
         ...merged,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
-        cooccurrence: defaultCooccurrencePreferences
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true
       });
       expect(treemichUserUpdateMock).toHaveBeenNthCalledWith(1, {
         where: { id: "user-1" },
@@ -1674,7 +1734,8 @@ describe("Treemich API routes", () => {
         ...cleared,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
-        cooccurrence: defaultCooccurrencePreferences
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true
       });
       expect(treemichUserUpdateMock).toHaveBeenNthCalledWith(2, {
         where: { id: "user-1" },

@@ -43,6 +43,8 @@ Interoperability export as **GEDCOM 5.5.1** UTF-8 (`LINEAGE-LINKED`), including 
 
 - **`GET /api/export/gedcom?redactLiving=1`** — omits person-scoped life-event blocks for individuals who have **no** `DEATH` life event (living heuristic). Union structure (**FAM**, **FAMS**, **FAMC**) is still exported.
 
+- **`POST /api/export/gedcom/jobs`** — queues an async GEDCOM export. Poll **`GET /api/export/gedcom/jobs/:jobId`** for status; completed jobs include a session-authenticated result path and an expiring signed `downloadUrl` token. The signed token currently expires after 15 minutes.
+
 Disable the route in restrictive environments with **`TREEMICH_GEDCOM_EXPORT_ENABLED=false`** (default when unset: enabled).
 
 ### GEDCOM import (Phase 5b)
@@ -146,6 +148,8 @@ aunts of Mike born in 2005
 ```
 female second cousins of Mike older than 20
 ```
+
+Relationship search includes alternate Treemich names by default. Turn off **Match alternate Treemich names in relationship search** in the Settings workspace if you want natural-language source-person matching to use only primary display/profile names.
 
 ## Project Layout
 

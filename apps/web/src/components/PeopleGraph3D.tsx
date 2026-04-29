@@ -626,10 +626,6 @@ const PeopleGraph3DComponent = ({
           searchFeedback={searchFeedback}
           treeValidationIssueCount={treeValidationIssueCount}
           treeValidationEngineDisabled={treeValidationEngineDisabled}
-          searchIncludeAlternateNames={savedPreferences?.searchIncludeAlternateNames === true}
-          onSearchIncludeAlternateNamesChange={(next) =>
-            onPreferencesChange({ searchIncludeAlternateNames: next })
-          }
           providerFilter={providerFilter}
           onProviderFilterChange={setProviderFilter}
           onNewPerson={onNewPerson}

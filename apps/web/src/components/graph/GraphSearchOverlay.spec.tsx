@@ -28,8 +28,6 @@ const renderOverlay = (onCenterView = vi.fn()): RenderResult => {
         searchFeedback={null}
         treeValidationIssueCount={null}
         treeValidationEngineDisabled={false}
-        searchIncludeAlternateNames={false}
-        onSearchIncludeAlternateNamesChange={() => undefined}
         providerFilter="all"
         onProviderFilterChange={() => undefined}
       />
@@ -97,8 +95,6 @@ describe("GraphSearchOverlay", () => {
           searchFeedback={null}
           treeValidationIssueCount={null}
           treeValidationEngineDisabled={false}
-          searchIncludeAlternateNames={false}
-          onSearchIncludeAlternateNamesChange={() => undefined}
           providerFilter="all"
           onProviderFilterChange={() => undefined}
         />
@@ -133,8 +129,6 @@ describe("GraphSearchOverlay", () => {
           searchFeedback={null}
           treeValidationIssueCount={null}
           treeValidationEngineDisabled={false}
-          searchIncludeAlternateNames={false}
-          onSearchIncludeAlternateNamesChange={() => undefined}
           providerFilter="all"
           onProviderFilterChange={() => undefined}
         />
@@ -171,8 +165,6 @@ describe("GraphSearchOverlay", () => {
           searchFeedback={null}
           treeValidationIssueCount={null}
           treeValidationEngineDisabled={false}
-          searchIncludeAlternateNames={false}
-          onSearchIncludeAlternateNamesChange={() => undefined}
           providerFilter="all"
           onProviderFilterChange={onProviderFilterChange}
         />
@@ -185,6 +177,18 @@ describe("GraphSearchOverlay", () => {
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(onProviderFilterChange).toHaveBeenCalledWith("unlinked");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("does not render the alternate-name preference checkbox", () => {
+    const { container, root } = renderOverlay();
+
+    expect(container.textContent).not.toContain("Match alternate Treemich names");
+    expect(container.querySelector(".graph-search-alt-names")).toBeNull();
 
     act(() => {
       root.unmount();
