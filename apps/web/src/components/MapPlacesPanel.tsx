@@ -2,8 +2,8 @@
  * @file Leaflet map of geocoded life-event places (collapsible popout, filters, living toggle, selection highlight).
  */
 
-import type { PlacesMapPoint } from "../lib/api";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { getPlacesMap, type PlacesMapPoint } from "../lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { latLngBounds } from "leaflet";
 import {
@@ -31,11 +31,12 @@ const clusterMarkerPathOptionsDefault = {
 } as const;
 
 type Props = {
-  mapUiEnabled: boolean;
-  places: PlacesMapPoint[] | null;
+  isActive?: boolean;
+  mapUiEnabled?: boolean;
+  places?: PlacesMapPoint[] | null;
   isLoading?: boolean;
-  includeLiving: boolean;
-  onIncludeLivingChange: (next: boolean) => void;
+  includeLiving?: boolean;
+  onIncludeLivingChange?: (next: boolean) => void;
   onFocusPerson: (personId: string) => void;
   getPersonLabel: (personId: string) => string;
   /** When set, clusters that include this person id (via map `samplePersonIds`) render green. */
@@ -44,6 +45,8 @@ type Props = {
   onRetry?: () => void;
   /** Bumps when shell layout resizes; triggers Leaflet `invalidateSize` without window.resize. */
   layoutResizeSignal?: number;
+  /** Bumps when person/place-affecting data changes while the Places workspace is mounted. */
+  refreshSignal?: unknown;
   initialUiState?: MapUiSnapshot;
   onUiStateChange?: (next: MapUiSnapshot) => void;
 };
@@ -123,20 +126,27 @@ const MapViewportController = ({
  * Sidebar map: OSM tiles, clustered geocoded places, filters, and optional highlight for the selected person.
  */
 export const MapPlacesPanel = ({
-  mapUiEnabled,
-  places,
-  isLoading,
-  includeLiving,
+  isActive = true,
+  mapUiEnabled: externalMapUiEnabled,
+  places: externalPlaces,
+  isLoading: externalIsLoading,
+  includeLiving: externalIncludeLiving,
   onIncludeLivingChange,
   onFocusPerson,
   getPersonLabel,
   selectedPersonId = null,
-  error,
+  error: externalError,
   onRetry,
   layoutResizeSignal = 0,
+  refreshSignal,
   initialUiState,
   onUiStateChange
 }: Props) => {
+  const [placesState, setPlacesState] = useState<PlacesMapPoint[] | null>(null);
+  const [isLoadingState, setIsLoadingState] = useState(false);
+  const [mapUiEnabledState, setMapUiEnabledState] = useState(true);
+  const [loadErrorState, setLoadErrorState] = useState<string | null>(null);
+  const [includeLivingState, setIncludeLivingState] = useState(true);
   const [search, setSearch] = useState(initialUiState?.search ?? "");
   const [minEvents, setMinEvents] = useState(initialUiState?.minEvents ?? 1);
   const [baseClusterCellDegrees, setBaseClusterCellDegrees] = useState(
@@ -146,6 +156,12 @@ export const MapPlacesPanel = ({
   const [mapZoom, setMapZoom] = useState(initialUiState?.zoom ?? 2);
   const [autoFitEnabled, setAutoFitEnabled] = useState(!initialUiState?.center);
   const [viewportBounds, setViewportBounds] = useState<GeoBounds | null>(null);
+  const requestIdRef = useRef(0);
+  const places = externalPlaces !== undefined ? externalPlaces : placesState;
+  const isLoading = externalIsLoading ?? isLoadingState;
+  const mapUiEnabled = externalMapUiEnabled ?? mapUiEnabledState;
+  const includeLiving = externalIncludeLiving ?? includeLivingState;
+  const error = externalError ?? loadErrorState;
   const placesSafe = places ?? [];
   const hasGeocodedPlaces = placesSafe.length > 0;
   const focusPersonId = selectedPersonId?.trim() ? selectedPersonId.trim() : null;
@@ -178,6 +194,36 @@ export const MapPlacesPanel = ({
           fitPoints.reduce((sum, point) => sum + point.latitude, 0) / fitPoints.length,
           fitPoints.reduce((sum, point) => sum + point.longitude, 0) / fitPoints.length
         ]);
+
+  const loadMapPlaces = useCallback(async (nextIncludeLiving: boolean) => {
+    const requestId = (requestIdRef.current += 1);
+    setIsLoadingState(true);
+    setLoadErrorState(null);
+    try {
+      const response = await getPlacesMap({ includeLiving: nextIncludeLiving });
+      if (requestIdRef.current !== requestId) {
+        return;
+      }
+      setMapUiEnabledState(response.mapUiEnabled);
+      setPlacesState(response.places);
+    } catch (err: unknown) {
+      if (requestIdRef.current !== requestId) {
+        return;
+      }
+      setLoadErrorState(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      if (requestIdRef.current === requestId) {
+        setIsLoadingState(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (externalPlaces !== undefined || !isActive) {
+      return;
+    }
+    void loadMapPlaces(includeLiving);
+  }, [externalPlaces, includeLiving, isActive, loadMapPlaces, refreshSignal]);
 
   useEffect(() => {
     onUiStateChange?.({
@@ -218,8 +264,12 @@ export const MapPlacesPanel = ({
       <section className="card">
         <h3>Map</h3>
         <p className="hint person-names-error">{error}</p>
-        {onRetry ? (
-          <button type="button" className="secondary-button" onClick={onRetry}>
+        {onRetry || externalPlaces === undefined ? (
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onRetry ?? (() => void loadMapPlaces(includeLiving))}
+          >
             Retry map load
           </button>
         ) : null}
@@ -283,7 +333,11 @@ export const MapPlacesPanel = ({
             className="map-places-checkbox"
             type="checkbox"
             checked={includeLiving}
-            onChange={(event) => onIncludeLivingChange(event.target.checked)}
+            onChange={(event) => {
+              const next = event.target.checked;
+              setIncludeLivingState(next);
+              onIncludeLivingChange?.(next);
+            }}
           />
           Include living people places
         </label>

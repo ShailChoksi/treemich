@@ -28,15 +28,26 @@ vi.mock("../components/PeopleGraph3D", () => ({
 }));
 
 type MapPanelProps = {
-  places: Array<{ id: string; name: string; latitude: number; longitude: number }> | null;
+  places?: Array<{ id: string; name: string; latitude: number; longitude: number }> | null;
+  isActive?: boolean;
   selectedPersonId?: string | null;
+  refreshSignal?: unknown;
   initialUiState?: MapUiSnapshot;
   onUiStateChange?: (next: MapUiSnapshot) => void;
 };
 let latestMapPanelProps: MapPanelProps | null = null;
+let mapPanelMockPlaces: MapPanelProps["places"] = null;
 vi.mock("../components/MapPlacesPanel", () => ({
   MapPlacesPanel: (props: MapPanelProps) => {
-    latestMapPanelProps = props;
+    latestMapPanelProps = { ...props, places: mapPanelMockPlaces };
+    if (props.isActive) {
+      void fetch("/places/map?includeLiving=true")
+        .then((response) => response.json())
+        .then((response: { places?: MapPanelProps["places"] }) => {
+          mapPanelMockPlaces = response.places ?? null;
+          latestMapPanelProps = { ...props, places: mapPanelMockPlaces };
+        });
+    }
     return null;
   }
 }));
@@ -100,6 +111,7 @@ describe("PeoplePage + life events (integration)", () => {
     }
     latestMapPanelProps = null;
     latestGraphProps = null;
+    mapPanelMockPlaces = null;
     placesMapCallCount = 0;
     peopleLoadCount = 0;
     relationshipsLoadCount = 0;
@@ -208,9 +220,6 @@ describe("PeoplePage + life events (integration)", () => {
 
       if (method === "GET" && url.includes("/places/map")) {
         placesMapCallCount += 1;
-        if (placesMapCallCount === 1) {
-          return jsonResponse({ mapUiEnabled: true, places: [] });
-        }
         return jsonResponse({
           mapUiEnabled: true,
           places: [

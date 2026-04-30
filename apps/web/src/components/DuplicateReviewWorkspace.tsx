@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PersonDuplicateCandidateRecord } from "../lib/api";
 
 type Props = {
@@ -33,6 +33,12 @@ export const DuplicateReviewWorkspace = ({
   const [busyGlobal, setBusyGlobal] = useState(false);
   const [canonicalByCandidateId, setCanonicalByCandidateId] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void Promise.resolve(onRefresh()).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : "Could not load duplicate candidates");
+    });
+  }, [onRefresh]);
 
   const pendingCandidates = useMemo(
     () => candidates.filter((candidate) => candidate.status === "PENDING"),
