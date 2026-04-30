@@ -428,12 +428,7 @@ export const userPreferencesSchema = z.object({
   graphFilterVisibility: graphFilterVisibilitySchema.optional(),
   familyViewStyle: familyViewStyleSchema.optional(),
   graphLineRoutingStyle: graphLineRoutingStyleSchema.optional(),
-  graphRenderLimit: z
-    .number()
-    .int()
-    .min(minGraphRenderLimit)
-    .max(maxGraphRenderLimit)
-    .optional(),
+  graphRenderLimit: z.number().int().min(minGraphRenderLimit).max(maxGraphRenderLimit).optional(),
   showSingleFamilyTree: z.boolean().optional(),
   lastSelectedPersonId: z.string().nullable().optional(),
   primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional(),

@@ -495,13 +495,11 @@ const PeoplePageShell = () => {
       const requestId = graphRenderLimitSaveRequestRef.current + 1;
       graphRenderLimitSaveRequestRef.current = requestId;
       setGraphRenderLimitSaveState("saving");
-      void graph
-        .onPreferencesChange({ graphRenderLimit: next })
-        .then((saved) => {
-          if (graphRenderLimitSaveRequestRef.current === requestId) {
-            setGraphRenderLimitSaveState(saved ? "saved" : "error");
-          }
-        });
+      void graph.onPreferencesChange({ graphRenderLimit: next }).then((saved) => {
+        if (graphRenderLimitSaveRequestRef.current === requestId) {
+          setGraphRenderLimitSaveState(saved ? "saved" : "error");
+        }
+      });
     },
     [graph]
   );
@@ -601,8 +599,8 @@ const PeoplePageShell = () => {
               <div className="stack">
                 <h2>Graph settings</h2>
                 <p className="hint">
-                  Tune how much of the tree is rendered at once. Higher values show more people but can
-                  reduce frame rate on large trees.
+                  Tune how much of the tree is rendered at once. Higher values show more people but can reduce
+                  frame rate on large trees.
                 </p>
               </div>
               <label className="settings-toggle">
