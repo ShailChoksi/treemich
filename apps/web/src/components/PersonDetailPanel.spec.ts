@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import "../styles.css";
 import type { Person, LifeEventRecord, RelationshipRecord } from "../lib/api";
 import {
-  PersonDetailPanel,
+  PersonDetailPanelWithProps,
   getRelativeRelationshipLabel,
   indexRelationshipsByPersonId
 } from "./PersonDetailPanel";
@@ -36,7 +36,7 @@ const relationship = (
   ...extra
 });
 
-type PanelProps = ComponentProps<typeof PersonDetailPanel>;
+type PanelProps = ComponentProps<typeof PersonDetailPanelWithProps>;
 
 const marriageEv = (y: number, m: number, d: number): LifeEventRecord => ({
   id: "ev-m",
@@ -128,11 +128,15 @@ const renderPanel = (overrides?: {
     primaryFamilyUnitByPersonId: {},
     onPrimaryFamilyUnitChange: () => undefined,
     relationshipLifeEventsById: {},
+    researchTasks: [],
+    onResearchTaskCreate: async () => undefined,
+    onResearchTaskUpdate: async () => undefined,
+    onResearchTaskDelete: async () => undefined,
     ...overrides?.panelProps
   };
 
   act(() => {
-    root.render(createElement(PersonDetailPanel, baseProps));
+    root.render(createElement(PersonDetailPanelWithProps, baseProps));
   });
 
   return { container, root };
@@ -173,7 +177,7 @@ describe("getRelativeRelationshipLabel", () => {
   });
 });
 
-describe("PersonDetailPanel", () => {
+describe("PersonDetailPanelWithProps", () => {
   it("shows all sections expanded by default and includes in-laws", () => {
     const { container, root } = renderPanel();
     expect(container.textContent).toContain("Profile");

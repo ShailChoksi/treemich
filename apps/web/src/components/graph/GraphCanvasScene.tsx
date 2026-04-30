@@ -18,8 +18,9 @@ import {
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Person } from "../../lib/api";
 import type { AddRelativeSlot } from "./NodeActionButtons";
+import { useGraphScene } from "./GraphSceneContext";
+import { BATCHED_DASH_SIZE, BATCHED_GAP_SIZE, RELATIONSHIP_LINE_DASH_SCALE } from "./graphLineMaterials";
 import { partitionLinesByStyle, type GraphLine } from "./graphRelationshipLines";
-import type { GraphVisibilityBucket } from "./graphVisibility";
 import type { NodePosition } from "./layout";
 import type { RelationshipKind } from "./relationshipStyles";
 import { AnimatedNodes } from "./scene/AnimatedNodes";
@@ -74,7 +75,12 @@ const TwoPointLineSegmentsBatch = ({
       opacity: firstLine?.opacity ?? style.opacity
     };
     const material = firstLine?.dashed
-      ? new LineDashedMaterial({ ...materialOptions, dashSize: 0.35, gapSize: 0.18, scale: 2.5 })
+      ? new LineDashedMaterial({
+          ...materialOptions,
+          dashSize: BATCHED_DASH_SIZE,
+          gapSize: BATCHED_GAP_SIZE,
+          scale: RELATIONSHIP_LINE_DASH_SCALE
+        })
       : new LineBasicMaterial(materialOptions);
     const segments = new LineSegments(geometry, material);
     if (firstLine?.dashed) {
@@ -126,11 +132,6 @@ type Props = {
   showNodeActionButtons: boolean;
   hoveredPersonId: string | null;
   highlightedPersonIds: Set<string>;
-  peopleIds: string[];
-  thumbnailCacheKeys?: Record<string, string | undefined>;
-  prioritizedNodeIds: Set<string>;
-  renderVisibilityBucketByPersonId: Map<string, GraphVisibilityBucket>;
-  renderNearPersonIds: string[];
   /** When false, the graph is not visible (e.g. another workspace active) */
   isVisible: boolean;
   setHoveredPersonId: (updater: (current: string | null) => string | null) => void;
@@ -155,11 +156,6 @@ export const GraphCanvasScene = ({
   showNodeActionButtons,
   hoveredPersonId,
   highlightedPersonIds,
-  peopleIds,
-  thumbnailCacheKeys,
-  prioritizedNodeIds,
-  renderVisibilityBucketByPersonId,
-  renderNearPersonIds,
   isVisible,
   setHoveredPersonId,
   onNodeClick,
@@ -172,6 +168,7 @@ export const GraphCanvasScene = ({
   lastCameraSampleRef,
   onThumbnailProgress
 }: Props) => {
+  const { peopleIds, thumbnailCacheKeys, prioritizedNodeIds, renderNearPersonIds } = useGraphScene();
   const hasRestoredCameraRef = useRef(false);
   const partitionedLines = useMemo(
     () => partitionLinesByStyle(visibleRelationshipLines),
@@ -291,7 +288,7 @@ export const GraphCanvasScene = ({
           lineWidth={1.35}
           transparent
           dashed={Boolean(line.dashed)}
-          dashScale={line.dashed ? 2.5 : undefined}
+          dashScale={line.dashed ? RELATIONSHIP_LINE_DASH_SCALE : undefined}
           opacity={line.opacity ?? relationshipStyleByKind[line.kind].opacity}
         />
       ))}
@@ -304,8 +301,6 @@ export const GraphCanvasScene = ({
         highlightedPersonIds={highlightedPersonIds}
         thumbnailNodeIds={thumbnailNodeIds}
         thumbnailTextures={thumbnailTextures}
-        prioritizedNodeIds={prioritizedNodeIds}
-        visibilityBucketByPersonId={renderVisibilityBucketByPersonId}
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
         onNodeActionOpen={onNodeActionOpen}

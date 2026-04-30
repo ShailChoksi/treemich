@@ -1,5 +1,6 @@
 import {
   defaultCooccurrencePreferences,
+  defaultGraphRenderLimit,
   defaultShowSingleFamilyTree,
   userPreferencesSchema,
   type CooccurrencePreferences,
@@ -25,6 +26,7 @@ export const withUserPreferenceDefaults = (
 
   return {
     ...parsed,
+    graphRenderLimit: parsed.graphRenderLimit ?? defaultGraphRenderLimit,
     showSingleFamilyTree: parsed.showSingleFamilyTree ?? defaultShowSingleFamilyTree,
     primaryFamilyUnitByPersonId: parsed.primaryFamilyUnitByPersonId ?? {},
     cooccurrence: getCooccurrencePreferences(parsed),
@@ -40,6 +42,7 @@ export const mergeUserPreferences = (
   ...incoming,
   graphFilterVisibility: incoming.graphFilterVisibility ?? current.graphFilterVisibility,
   familyViewStyle: incoming.familyViewStyle ?? current.familyViewStyle,
+  graphRenderLimit: incoming.graphRenderLimit ?? current.graphRenderLimit,
   showSingleFamilyTree: incoming.showSingleFamilyTree ?? current.showSingleFamilyTree,
   lastSelectedPersonId:
     incoming.lastSelectedPersonId !== undefined

@@ -11,19 +11,15 @@ import {
   type ReactNode
 } from "react";
 import type {
-  CreateResearchTaskBody,
   FamilyRecord,
   Gender,
   LifeEventRecord,
   MediaObjectRecord,
   PatchFamilyBody,
-  PersonDuplicateCandidateRecord,
-  ResearchTaskRecord,
   RelationshipRecord,
   RelationshipType,
   TargetMediaLinkRecord,
-  TimelineEventRecord,
-  ValidationFindingRecord
+  TimelineEventRecord
 } from "../lib/api";
 import {
   createEvidenceMediaLink,
@@ -31,35 +27,24 @@ import {
   createPersonLifeEvent,
   createRelationship,
   createRelationshipLifeEvent,
-  createResearchTask,
   deleteEvidenceMediaLink,
   deleteFamily,
   deleteFamilyLifeEvent,
   deletePersonLifeEvent,
   deleteRelationship,
   deleteRelationshipLifeEvent,
-  deleteResearchTask,
-  getDuplicateCandidates,
   getFamiliesForPerson,
   getFamilyLifeEvents,
   getMediaLinksForTarget,
   getPersonLifeEvents,
   getPersonTimeline,
   getRelationshipLifeEvents,
-  getResearchTasks,
-  getValidationFindings,
   listEvidenceMediaObjects,
-  mergeDuplicateCandidate,
   patchFamily,
-  recomputeDuplicateCandidates,
-  recomputeValidationFindings,
-  updateDuplicateCandidate,
   updateFamilyLifeEvent,
   updatePersonLifeEvent,
   updatePersonProfile,
-  updateRelationshipLifeEvent,
-  updateResearchTask,
-  updateValidationFinding
+  updateRelationshipLifeEvent
 } from "../lib/api";
 import {
   buildBirthPlaceInput,
@@ -100,13 +85,6 @@ type PersonDetailContextValue = {
   lifeEventsByPersonId: Record<string, LifeEventRecord[]>;
   relationshipLifeEventsById: Record<string, LifeEventRecord[]>;
   personTimelineById: Record<string, TimelineEventRecord[]>;
-  researchTasksByPersonId: Record<string, ResearchTaskRecord[]>;
-  allResearchTasks: ResearchTaskRecord[];
-  allResearchTasksLoading: boolean;
-  validationFindings: ValidationFindingRecord[];
-  validationFindingsLoading: boolean;
-  duplicateCandidates: PersonDuplicateCandidateRecord[];
-  duplicateCandidatesLoading: boolean;
   familiesByPersonId: Record<string, FamilyRecord[] | undefined>;
   familyMediaLinksById: Partial<Record<string, TargetMediaLinkRecord[]>>;
   evidenceMediaObjects: MediaObjectRecord[];
@@ -129,27 +107,6 @@ type PersonDetailContextValue = {
   handlePersonLifeEventCreate: (body: CreateLifeEventBody) => Promise<void>;
   handlePersonLifeEventPatch: (eventId: string, body: PatchLifeEventBody) => Promise<void>;
   handlePersonLifeEventDelete: (eventId: string) => Promise<void>;
-  refreshAllResearchTasks: () => Promise<void>;
-  refreshValidationFindings: () => Promise<void>;
-  refreshDuplicateCandidates: () => Promise<void>;
-  handleResearchTaskCreate: (body: CreateResearchTaskBody) => Promise<void>;
-  handleResearchTaskUpdate: (
-    taskId: string,
-    patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "personId">>
-  ) => Promise<void>;
-  handleResearchTaskDelete: (taskId: string) => Promise<void>;
-  handleValidationRecompute: () => Promise<void>;
-  handleValidationFindingStatusChange: (
-    findingId: string,
-    nextStatus: "OPEN" | "IN_PROGRESS" | "DISMISSED"
-  ) => Promise<void>;
-  handleDuplicateRecompute: () => Promise<void>;
-  handleDuplicateDismiss: (candidateId: string) => Promise<void>;
-  handleDuplicateMerge: (
-    candidateId: string,
-    canonicalPersonId: string,
-    duplicatePersonId: string
-  ) => Promise<void>;
   handleFamilyPatch: (familyId: string, body: PatchFamilyBody) => Promise<void>;
   handleFamilyDelete: (familyId: string) => Promise<void>;
   handleFamilyMediaLinkCreate: (familyId: string, mediaObjectId: string) => Promise<void>;
@@ -184,15 +141,6 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
     Record<string, LifeEventRecord[]>
   >({});
   const [personTimelineById, setPersonTimelineById] = useState<Record<string, TimelineEventRecord[]>>({});
-  const [researchTasksByPersonId, setResearchTasksByPersonId] = useState<
-    Record<string, ResearchTaskRecord[]>
-  >({});
-  const [allResearchTasks, setAllResearchTasks] = useState<ResearchTaskRecord[]>([]);
-  const [allResearchTasksLoading, setAllResearchTasksLoading] = useState(false);
-  const [validationFindings, setValidationFindings] = useState<ValidationFindingRecord[]>([]);
-  const [validationFindingsLoading, setValidationFindingsLoading] = useState(false);
-  const [duplicateCandidates, setDuplicateCandidates] = useState<PersonDuplicateCandidateRecord[]>([]);
-  const [duplicateCandidatesLoading, setDuplicateCandidatesLoading] = useState(false);
   const [familiesByPersonId, setFamiliesByPersonId] = useState<Record<string, FamilyRecord[] | undefined>>(
     {}
   );
@@ -262,7 +210,6 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
     setRelationshipLifeEventsById({});
     setProfileEventFieldsByPersonId({});
     setPersonTimelineById({});
-    setResearchTasksByPersonId({});
     setFamiliesByPersonId({});
     setFamilyLifeEventsById({});
     setFamilyMediaLinksById({});
@@ -330,28 +277,6 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       });
     return () => controller.abort();
   }, [selectedPerson, setStatus, timelineForSelected]);
-
-  const researchForSelected = selectedPerson ? researchTasksByPersonId[selectedPerson.id] : undefined;
-  useEffect(() => {
-    if (!selectedPerson || researchForSelected !== undefined) {
-      return;
-    }
-    const controller = new AbortController();
-    getResearchTasks(selectedPerson.id, { signal: controller.signal })
-      .then((tasks) => {
-        if (!controller.signal.aborted) {
-          setResearchTasksByPersonId((current) => ({ ...current, [selectedPerson.id]: tasks }));
-        }
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted || isAbortError(err)) {
-          return;
-        }
-        setStatus(`Could not load research tasks: ${getErrorMessage(err)}`);
-        setResearchTasksByPersonId((current) => ({ ...current, [selectedPerson.id]: [] }));
-      });
-    return () => controller.abort();
-  }, [researchForSelected, selectedPerson, setStatus]);
 
   const familiesForSelected = selectedPerson ? familiesByPersonId[selectedPerson.id] : undefined;
   useEffect(() => {
@@ -515,44 +440,6 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       });
     return () => controller.abort();
   }, [relationshipLifeEventsById, relationships, selectedPersonId, setStatus]);
-
-  const refreshResearchTasksForSelectedPerson = useCallback(async () => {
-    if (!selectedPerson) {
-      return;
-    }
-    const tasks = await getResearchTasks(selectedPerson.id);
-    setResearchTasksByPersonId((current) => ({ ...current, [selectedPerson.id]: tasks }));
-  }, [selectedPerson]);
-
-  const refreshAllResearchTasks = useCallback(async () => {
-    setAllResearchTasksLoading(true);
-    try {
-      const tasks = await getResearchTasks();
-      setAllResearchTasks(tasks);
-    } finally {
-      setAllResearchTasksLoading(false);
-    }
-  }, []);
-
-  const refreshValidationFindings = useCallback(async () => {
-    setValidationFindingsLoading(true);
-    try {
-      const findings = await getValidationFindings();
-      setValidationFindings(findings);
-    } finally {
-      setValidationFindingsLoading(false);
-    }
-  }, []);
-
-  const refreshDuplicateCandidates = useCallback(async () => {
-    setDuplicateCandidatesLoading(true);
-    try {
-      const candidates = await getDuplicateCandidates({ status: "PENDING", limit: 100 });
-      setDuplicateCandidates(candidates);
-    } finally {
-      setDuplicateCandidatesLoading(false);
-    }
-  }, []);
 
   const onProfileSave = useCallback(async () => {
     const personToSave = selectedPerson;
@@ -759,86 +646,6 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
     [afterPersonLifeEventsUpdated, selectedPerson, setStatus]
   );
 
-  const handleResearchTaskCreate = useCallback(
-    async (body: CreateResearchTaskBody) => {
-      await createResearchTask(body);
-      await refreshResearchTasksForSelectedPerson();
-      await refreshAllResearchTasks();
-    },
-    [refreshAllResearchTasks, refreshResearchTasksForSelectedPerson]
-  );
-
-  const handleResearchTaskUpdate = useCallback(
-    async (
-      taskId: string,
-      patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "personId">>
-    ) => {
-      await updateResearchTask(taskId, patch);
-      await refreshResearchTasksForSelectedPerson();
-      await refreshAllResearchTasks();
-    },
-    [refreshAllResearchTasks, refreshResearchTasksForSelectedPerson]
-  );
-
-  const handleResearchTaskDelete = useCallback(
-    async (taskId: string) => {
-      await deleteResearchTask(taskId);
-      await refreshResearchTasksForSelectedPerson();
-      await refreshAllResearchTasks();
-    },
-    [refreshAllResearchTasks, refreshResearchTasksForSelectedPerson]
-  );
-
-  const handleValidationRecompute = useCallback(async () => {
-    const result = await recomputeValidationFindings();
-    setValidationFindings(result.findings);
-    graph.setTreeValidationIssueCount(
-      result.findings.filter((finding) => finding.status !== "RESOLVED").length
-    );
-    graph.setTreeValidationEngineDisabled(result.engineDisabled);
-    setStatus(`Validation recomputed: ${result.summary.current} current issue(s)`);
-  }, [graph, setStatus]);
-
-  const handleValidationFindingStatusChange = useCallback(
-    async (findingId: string, nextStatus: "OPEN" | "IN_PROGRESS" | "DISMISSED") => {
-      await updateValidationFinding(findingId, nextStatus);
-      await refreshValidationFindings();
-    },
-    [refreshValidationFindings]
-  );
-
-  const handleDuplicateRecompute = useCallback(async () => {
-    const result = await recomputeDuplicateCandidates();
-    setDuplicateCandidates(result.candidates);
-    setStatus(
-      `Duplicate scan complete: ${result.summary.pending} pending candidate(s), ${result.summary.created} new`
-    );
-  }, [setStatus]);
-
-  const handleDuplicateDismiss = useCallback(
-    async (candidateId: string) => {
-      await updateDuplicateCandidate(candidateId, { status: "DISMISSED" });
-      await refreshDuplicateCandidates();
-    },
-    [refreshDuplicateCandidates]
-  );
-
-  const handleDuplicateMerge = useCallback(
-    async (candidateId: string, canonicalPersonId: string, duplicatePersonId: string) => {
-      const result = await mergeDuplicateCandidate(candidateId, {
-        canonicalPersonId,
-        duplicatePersonId,
-        confirm: true
-      });
-      await graph.refreshGraphData({ bypassSaveGuard: true });
-      await refreshDuplicateCandidates();
-      graph.setSelectedPersonId(result.canonicalPersonId);
-      graph.setGraphCameraFocusPersonId(result.canonicalPersonId);
-      setStatus(`Merged duplicate person into ${result.canonicalPersonId}`);
-    },
-    [graph, refreshDuplicateCandidates, setStatus]
-  );
-
   const handleFamilyPatch = useCallback(
     async (familyId: string, body: PatchFamilyBody) => {
       graph.setSavingFamilyId(familyId);
@@ -971,7 +778,9 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
             );
           }
           setRelationshipLifeEventsById((current) => ({ ...current, [rid]: next }));
-          await graph.refreshRelationshipsOnly();
+          void graph.refreshRelationshipsOnly().catch((err: unknown) => {
+            setStatus(`Could not refresh relationships: ${getErrorMessage(err)}`);
+          });
           setStatus("Relationship updated");
           return;
         }
@@ -1021,7 +830,9 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       setStatus("Life event saved");
       const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
       setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
-      await graph.refreshRelationshipsOnly();
+      void graph.refreshRelationshipsOnly().catch((err: unknown) => {
+        setStatus(`Could not refresh relationships: ${getErrorMessage(err)}`);
+      });
     },
     [graph, setStatus]
   );
@@ -1032,7 +843,9 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       setStatus("Life event saved");
       const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
       setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
-      await graph.refreshRelationshipsOnly();
+      void graph.refreshRelationshipsOnly().catch((err: unknown) => {
+        setStatus(`Could not refresh relationships: ${getErrorMessage(err)}`);
+      });
     },
     [graph, setStatus]
   );
@@ -1043,7 +856,9 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       setStatus("Life event deleted");
       const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
       setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
-      await graph.refreshRelationshipsOnly();
+      void graph.refreshRelationshipsOnly().catch((err: unknown) => {
+        setStatus(`Could not refresh relationships: ${getErrorMessage(err)}`);
+      });
     },
     [graph, setStatus]
   );
@@ -1164,13 +979,6 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       lifeEventsByPersonId,
       relationshipLifeEventsById,
       personTimelineById,
-      researchTasksByPersonId,
-      allResearchTasks,
-      allResearchTasksLoading,
-      validationFindings,
-      validationFindingsLoading,
-      duplicateCandidates,
-      duplicateCandidatesLoading,
       familiesByPersonId,
       familyMediaLinksById,
       evidenceMediaObjects,
@@ -1188,17 +996,6 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       handlePersonLifeEventCreate,
       handlePersonLifeEventPatch,
       handlePersonLifeEventDelete,
-      refreshAllResearchTasks,
-      refreshValidationFindings,
-      refreshDuplicateCandidates,
-      handleResearchTaskCreate,
-      handleResearchTaskUpdate,
-      handleResearchTaskDelete,
-      handleValidationRecompute,
-      handleValidationFindingStatusChange,
-      handleDuplicateRecompute,
-      handleDuplicateDismiss,
-      handleDuplicateMerge,
       handleFamilyPatch,
       handleFamilyDelete,
       handleFamilyMediaLinkCreate,
@@ -1211,10 +1008,6 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       handleFamilyLifeEventDelete
     }),
     [
-      allResearchTasks,
-      allResearchTasksLoading,
-      duplicateCandidates,
-      duplicateCandidatesLoading,
       evidenceMediaObjects,
       familiesByPersonId,
       familyLifeEventsById,
@@ -1225,9 +1018,6 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       handleBirthCountryChange,
       handleBirthDateChange,
       handleDeathDateChange,
-      handleDuplicateDismiss,
-      handleDuplicateMerge,
-      handleDuplicateRecompute,
       handleFamilyDelete,
       handleFamilyLifeEventCreate,
       handleFamilyLifeEventDelete,
@@ -1244,26 +1034,15 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       handleRelationshipLifeEventCreate,
       handleRelationshipLifeEventDelete,
       handleRelationshipLifeEventPatch,
-      handleResearchTaskCreate,
-      handleResearchTaskDelete,
-      handleResearchTaskUpdate,
       handleSurnameChange,
-      handleValidationFindingStatusChange,
-      handleValidationRecompute,
       lifeEventsByPersonId,
       nicknamesByPersonId,
       onProfileSave,
       onUpdateExistingRelationship,
       personTimelineById,
-      refreshAllResearchTasks,
-      refreshDuplicateCandidates,
-      refreshValidationFindings,
       relationshipLifeEventsById,
-      researchTasksByPersonId,
       selectedProfileEventFields,
-      surnameByPersonId,
-      validationFindings,
-      validationFindingsLoading
+      surnameByPersonId
     ]
   );
 

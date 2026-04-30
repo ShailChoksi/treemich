@@ -252,4 +252,57 @@ describe("PeopleGraphDataContext", () => {
 
     root.unmount();
   });
+
+  it("exposes retryGraphData that runs the same fetches as a full graph refresh", async () => {
+    const graphBox: { current: ReturnType<typeof usePeopleGraphData> | null } = { current: null };
+    const Probe = () => {
+      graphBox.current = usePeopleGraphData();
+      return null;
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          ToastProvider,
+          null,
+          createElement(
+            PeopleGraphDataProvider,
+            { immichBaseUrl: null, currentUserName: null },
+            createElement(Probe)
+          )
+        )
+      );
+    });
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (graphBox.current && graphBox.current.people.length > 0 && !graphBox.current.isLoading) {
+        break;
+      }
+    }
+    expect(graphBox.current?.people.length).toBeGreaterThan(0);
+
+    vi.mocked(globalThis.fetch).mockClear();
+
+    await act(async () => {
+      graphBox.current?.retryGraphData();
+      for (let i = 0; i < 25; i += 1) {
+        await Promise.resolve();
+      }
+    });
+
+    const calls = vi.mocked(globalThis.fetch).mock.calls.map(([input, init]) => ({
+      url: typeof input === "string" ? input : input.toString(),
+      method: init?.method ?? "GET"
+    }));
+    expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(true);
+    expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
+    expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(true);
+
+    root.unmount();
+  });
 });

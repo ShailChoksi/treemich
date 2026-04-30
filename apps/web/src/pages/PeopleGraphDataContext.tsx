@@ -86,9 +86,11 @@ type PeopleGraphDataContextValue = {
   setTreeValidationIssueCount: (count: number | null) => void;
   setTreeValidationEngineDisabled: (disabled: boolean) => void;
   refreshGraphData: (options?: RefreshGraphDataOptions) => Promise<void>;
+  /** Stable `void refreshGraphData()` for memoized graph props (retry buttons, layout error). */
+  retryGraphData: () => void;
   refreshPeopleOnly: () => Promise<void>;
   refreshRelationshipsOnly: () => Promise<void>;
-  onPreferencesChange: (prefs: Partial<UserPreferences>) => void;
+  onPreferencesChange: (prefs: Partial<UserPreferences>) => Promise<boolean>;
   onSearchIncludeAlternateNamesChange: (next: boolean) => void;
   onPrimaryFamilyUnitChange: (personId: string, unitKey: string | null) => void;
   onDismissSuggestion: (key: string) => void;
@@ -326,6 +328,10 @@ export const PeopleGraphDataProvider = ({
     [currentUserName, setSelectedPersonId, setStatus]
   );
 
+  const retryGraphData = useCallback(() => {
+    void refreshGraphData();
+  }, [refreshGraphData]);
+
   useEffect(() => {
     refreshGraphData().catch((error: unknown) => {
       setStatus(getErrorMessage(error));
@@ -370,12 +376,14 @@ export const PeopleGraphDataProvider = ({
             : current?.lastSelectedPersonId,
         primaryFamilyUnitByPersonId: prefs.primaryFamilyUnitByPersonId ?? current?.primaryFamilyUnitByPersonId
       }));
-      void updateUserPreferences(prefs)
+      return updateUserPreferences(prefs)
         .then((nextPrefs) => {
           setSavedPreferences(nextPrefs);
+          return true;
         })
         .catch((err: unknown) => {
           setStatus(`Could not save preferences: ${getErrorMessage(err)}`);
+          return false;
         });
     },
     [setStatus]
@@ -418,7 +426,7 @@ export const PeopleGraphDataProvider = ({
       } else {
         next[personId] = unitKey;
       }
-      onPreferencesChange({ primaryFamilyUnitByPersonId: next });
+      void onPreferencesChange({ primaryFamilyUnitByPersonId: next });
     },
     [onPreferencesChange, savedPreferences?.primaryFamilyUnitByPersonId]
   );
@@ -427,7 +435,7 @@ export const PeopleGraphDataProvider = ({
     (suggestionKey: string) => {
       const dismissedSuggestions = new Set(savedPreferences?.dismissedSuggestions ?? []);
       dismissedSuggestions.add(suggestionKey);
-      onPreferencesChange({
+      void onPreferencesChange({
         dismissedSuggestions: [...dismissedSuggestions].sort((left, right) => left.localeCompare(right))
       });
     },
@@ -609,7 +617,7 @@ export const PeopleGraphDataProvider = ({
       return;
     }
     lastPersistedSelectionRef.current = selectedPersonId;
-    onPreferencesChange({ lastSelectedPersonId: selectedPersonId });
+    void onPreferencesChange({ lastSelectedPersonId: selectedPersonId });
   }, [
     hasRelationships,
     onPreferencesChange,
@@ -678,6 +686,7 @@ export const PeopleGraphDataProvider = ({
       setTreeValidationIssueCount,
       setTreeValidationEngineDisabled,
       refreshGraphData,
+      retryGraphData,
       refreshPeopleOnly,
       refreshRelationshipsOnly,
       onPreferencesChange,
@@ -725,6 +734,7 @@ export const PeopleGraphDataProvider = ({
       onSearchIncludeAlternateNamesChange,
       people,
       refreshGraphData,
+      retryGraphData,
       refreshPeopleOnly,
       refreshRelationshipsOnly,
       relationships,

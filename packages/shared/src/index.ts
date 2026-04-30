@@ -420,10 +420,20 @@ export const defaultCooccurrencePreferences: CooccurrencePreferences = {
 };
 
 /** Persisted Treemich UI preferences (graph, layout, dismissed hints, search). */
+export const defaultGraphRenderLimit = 120;
+export const minGraphRenderLimit = 20;
+export const maxGraphRenderLimit = 1000;
+
 export const userPreferencesSchema = z.object({
   graphFilterVisibility: graphFilterVisibilitySchema.optional(),
   familyViewStyle: familyViewStyleSchema.optional(),
   graphLineRoutingStyle: graphLineRoutingStyleSchema.optional(),
+  graphRenderLimit: z
+    .number()
+    .int()
+    .min(minGraphRenderLimit)
+    .max(maxGraphRenderLimit)
+    .optional(),
   showSingleFamilyTree: z.boolean().optional(),
   lastSelectedPersonId: z.string().nullable().optional(),
   primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional(),

@@ -2,13 +2,15 @@
  * @file Three.js scene layer: AnimatedNodes.tsx.
  */
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import type { Texture } from "three";
 import type { Person } from "../../../lib/api";
+import { useGraphScene } from "../GraphSceneContext";
 import { NodeActionButtons, type AddRelativeSlot } from "../NodeActionButtons";
 import type { GraphVisibilityBucket } from "../graphVisibility";
 import { PersonNode, PersonNodeFallback, PersonNodeMinimal } from "../PersonNode";
 import type { NodePosition } from "../layout";
+import { logThumbnailRenderProfile } from "../thumbnailPerfProfiler";
 import { NodeInstancedMesh, type NodeRenderTier } from "./NodeInstancedMesh";
 import { useAnimatedNodeTransforms } from "./useAnimatedNodeTransforms";
 
@@ -25,8 +27,6 @@ type Props = {
   highlightedPersonIds: Set<string>;
   thumbnailNodeIds: Set<string>;
   thumbnailTextures: Map<string, Texture>;
-  prioritizedNodeIds: Set<string>;
-  visibilityBucketByPersonId: Map<string, GraphVisibilityBucket>;
   onNodeClick: (personId: string, event: { stopPropagation: () => void }) => void;
   onNodeHover: (personId: string, hovered: boolean) => void;
   onNodeActionOpen: (slot: AddRelativeSlot) => void;
@@ -83,12 +83,11 @@ export const AnimatedNodes = ({
   highlightedPersonIds,
   thumbnailNodeIds,
   thumbnailTextures,
-  prioritizedNodeIds,
-  visibilityBucketByPersonId,
   onNodeClick,
   onNodeHover,
   onNodeActionOpen
 }: Props) => {
+  const { prioritizedNodeIds, renderVisibilityBucketByPersonId } = useGraphScene();
   const largeGraphTierEnabled = shouldUseLargeGraphTier(displayVisiblePeople.length);
   const displayPositions = useMemo(
     () =>
@@ -115,7 +114,7 @@ export const AnimatedNodes = ({
       const isHighlighted = highlightedPersonIds.has(item.person.id);
       const isPriorityNode =
         isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(item.person.id);
-      const visibilityBucket = visibilityBucketByPersonId.get(item.person.id) ?? "near";
+      const visibilityBucket = renderVisibilityBucketByPersonId.get(item.person.id) ?? "near";
       const renderTier = resolveNodeRenderTier({
         visibilityBucket,
         isPriorityNode,
@@ -131,8 +130,38 @@ export const AnimatedNodes = ({
     largeGraphTierEnabled,
     prioritizedNodeIds,
     selectedPersonId,
-    visibilityBucketByPersonId
+    renderVisibilityBucketByPersonId
   ]);
+
+  useEffect(() => {
+    let nearBucketCount = 0;
+    let midBucketCount = 0;
+    let farBucketCount = 0;
+    let culledBucketCount = 0;
+    for (const item of displayVisiblePeople) {
+      const bucket = renderVisibilityBucketByPersonId.get(item.person.id) ?? "near";
+      if (bucket === "near") {
+        nearBucketCount += 1;
+      } else if (bucket === "mid") {
+        midBucketCount += 1;
+      } else if (bucket === "far") {
+        farBucketCount += 1;
+      } else {
+        culledBucketCount += 1;
+      }
+    }
+    logThumbnailRenderProfile({
+      visiblePeopleCount: displayVisiblePeople.length,
+      detailedNodeCount: peopleByTier.detailed.length,
+      thumbnailTierNodeCount: peopleByTier.thumbnail.length,
+      minimalNodeCount: peopleByTier.minimal.length,
+      visibleThumbnailNodeCount: thumbnailNodeIds.size,
+      nearBucketCount,
+      midBucketCount,
+      farBucketCount,
+      culledBucketCount
+    });
+  }, [displayVisiblePeople, peopleByTier, renderVisibilityBucketByPersonId, thumbnailNodeIds.size]);
 
   return (
     <>
@@ -165,7 +194,7 @@ export const AnimatedNodes = ({
         const isHovered = hoveredPersonId === person.id;
         const isHighlighted = highlightedPersonIds.has(person.id);
         const isPriorityNode = isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(person.id);
-        const visibilityBucket = visibilityBucketByPersonId.get(person.id) ?? "near";
+        const visibilityBucket = renderVisibilityBucketByPersonId.get(person.id) ?? "near";
         const renderTier = resolveNodeRenderTier({
           visibilityBucket,
           isPriorityNode,

@@ -2,6 +2,7 @@
  * @file Three.js relationship graph, overlays, search, and server layout integration.
  */
 
+import { defaultGraphRenderLimit } from "@treemich/shared";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -13,6 +14,7 @@ import {
   type RelationshipType,
   type UserPreferences
 } from "../lib/api";
+import type { PeopleGraph3DBundledProps } from "./peopleGraph3dSceneBundles";
 import { AddRelativePopup } from "./graph/AddRelativePopup";
 import type { AddRelativeSubmitPayload } from "./graph/AddRelativePopup";
 import { findPersonBySearchTerm, useGraphSearch } from "./graph/useGraphSearch";
@@ -28,6 +30,7 @@ import {
 } from "./graph/relationshipStyles";
 import { useGraphLayoutState } from "./graph/useGraphLayoutState";
 import { useGraphCameraControls } from "./graph/useGraphCameraControls";
+import { GraphSceneProvider } from "./graph/GraphSceneContext";
 import { GraphSurfaceOverlays } from "./graph/GraphSurfaceOverlays";
 import { GraphFooterStatus } from "./graph/GraphFooterStatus";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -37,48 +40,8 @@ import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { RELATIONSHIP_TYPES } from "../lib/relationshipConstants";
 import type { GraphUiSnapshot } from "../lib/workspaceUiState";
 
-type Props = {
-  people: Person[];
-  relationships: RelationshipRecord[];
-  serverPositionsByPersonId?: Record<string, [number, number, number]>;
-  serverLayoutRevision?: string | null;
-  serverLayoutAlgorithmVersion?: string | null;
-  selectedPersonId: string | null;
-  status: string | null;
-  isLoading: boolean;
-  isSavingRelationship: boolean;
-  loadError: string | null;
-  layoutError?: string | null;
-  focusPersonRequest: string | null;
-  cameraFocusPersonRequest: string | null;
-  defaultToNoRelationshipsGraphState: boolean;
-  noRelationshipsGraphFilterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]>;
-  savedPreferences: UserPreferences | null;
-  treeValidationIssueCount: number | null;
-  treeValidationEngineDisabled: boolean;
-  onFocusPersonConsumed: () => void;
-  onCameraFocusPersonConsumed: () => void;
-  onSelectedPersonChange?: (personId: string | null) => void;
-  onCreateRelationship: (
-    sourcePersonId: string,
-    targetPersonId: string,
-    relationshipType: RelationshipType
-  ) => Promise<void>;
-  onNewPerson?: () => void;
-  onPreferencesChange: (prefs: Partial<UserPreferences>) => void;
-  onRetryGraphLoad?: () => void;
-  onRetryLayout?: () => void;
-  /** When false, global graph camera/arrow shortcuts do not run (e.g. other workspaces). */
-  graphKeyboardEnabled?: boolean;
-  /** Bumps when workspace layout resizes; triggers canvas/GL refresh without window.resize. */
-  layoutResizeSignal?: number;
-  initialUiState?: GraphUiSnapshot;
-  onUiStateChange?: (next: GraphUiSnapshot) => void;
-  /** When false, the graph canvas is hidden but still mounted (preserving WebGL context and state). */
-  isVisible?: boolean;
-};
+type Props = PeopleGraph3DBundledProps;
 
-const DEFAULT_RENDER_LIMIT = 120;
 const EMPTY_PHOTO_EDGES: [] = [];
 const EMPTY_PHOTO_CLUSTERS: [] = [];
 
@@ -159,37 +122,47 @@ const resolveInitialGraphViewPreferences = (
  * Exported as memo-wrapped `PeopleGraph3D`.
  */
 const PeopleGraph3DComponent = ({
-  people,
-  relationships,
-  serverPositionsByPersonId,
-  serverLayoutRevision,
-  serverLayoutAlgorithmVersion,
-  selectedPersonId: parentSelectedPersonId,
-  status,
-  isLoading,
-  isSavingRelationship,
-  loadError,
-  layoutError = null,
-  focusPersonRequest,
-  cameraFocusPersonRequest,
-  defaultToNoRelationshipsGraphState,
-  noRelationshipsGraphFilterVisibility,
-  savedPreferences,
-  treeValidationIssueCount,
-  treeValidationEngineDisabled,
-  onFocusPersonConsumed,
-  onCameraFocusPersonConsumed,
-  onSelectedPersonChange,
-  onCreateRelationship,
-  onNewPerson,
-  onPreferencesChange,
-  onRetryGraphLoad,
-  onRetryLayout,
-  graphKeyboardEnabled = true,
-  layoutResizeSignal = 0,
-  initialUiState,
-  onUiStateChange,
-  isVisible = true
+  graphModel: {
+    people,
+    relationships,
+    serverPositionsByPersonId,
+    serverLayoutRevision,
+    serverLayoutAlgorithmVersion,
+    selectedPersonId: parentSelectedPersonId
+  },
+  graphStatus: {
+    status,
+    isLoading,
+    isSavingRelationship,
+    loadError,
+    layoutError = null,
+    focusPersonRequest,
+    cameraFocusPersonRequest,
+    treeValidationIssueCount,
+    treeValidationEngineDisabled
+  },
+  graphPreferences: {
+    savedPreferences,
+    defaultToNoRelationshipsGraphState,
+    noRelationshipsGraphFilterVisibility
+  },
+  graphHandlers: {
+    onFocusPersonConsumed,
+    onCameraFocusPersonConsumed,
+    onSelectedPersonChange,
+    onCreateRelationship,
+    onNewPerson,
+    onPreferencesChange,
+    onRetryGraphLoad,
+    onRetryLayout
+  },
+  graphViewState: {
+    graphKeyboardEnabled = true,
+    layoutResizeSignal = 0,
+    initialUiState,
+    onUiStateChange,
+    isVisible = true
+  }
 }: Props) => {
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
   const [focusPersonId, setFocusPersonId] = useState<string | null>(initialUiState?.focusPersonId ?? null);
@@ -287,7 +260,7 @@ const PeopleGraph3DComponent = ({
     serverPositionsByPersonId,
     serverLayoutRevision,
     serverLayoutAlgorithmVersion,
-    renderLimit: DEFAULT_RENDER_LIMIT
+    renderLimit: savedPreferences?.graphRenderLimit ?? defaultGraphRenderLimit
   });
   const thumbnailCandidatePersonIds = useMemo(
     () => filteredPeople.filter(canLoadPersonThumbnail).map((person) => person.id),
@@ -571,6 +544,22 @@ const PeopleGraph3DComponent = ({
   const handleThumbnailProgress = useCallback((progress: { loaded: number; total: number }) => {
     setThumbnailProgress(progress);
   }, []);
+  const graphSceneContextValue = useMemo(
+    () => ({
+      peopleIds: thumbnailCandidatePersonIds,
+      thumbnailCacheKeys,
+      prioritizedNodeIds,
+      renderNearPersonIds,
+      renderVisibilityBucketByPersonId
+    }),
+    [
+      prioritizedNodeIds,
+      renderNearPersonIds,
+      renderVisibilityBucketByPersonId,
+      thumbnailCacheKeys,
+      thumbnailCandidatePersonIds
+    ]
+  );
 
   const handleToggleFilter = (filter: GraphFilter) => {
     setGraphViewPreferences((current) => {
@@ -578,7 +567,7 @@ const PeopleGraph3DComponent = ({
         ...current,
         filterVisibility: { ...current.filterVisibility, [filter]: !current.filterVisibility[filter] }
       };
-      onPreferencesChange({
+      void onPreferencesChange({
         graphFilterVisibility: next.filterVisibility,
         showSingleFamilyTree: next.showSingleFamilyTree
       });
@@ -589,7 +578,7 @@ const PeopleGraph3DComponent = ({
   const handleShowSingleFamilyTreeChange = (next: boolean) => {
     setGraphViewPreferences((current) => {
       const nextPreferences = { ...current, showSingleFamilyTree: next };
-      onPreferencesChange({
+      void onPreferencesChange({
         showSingleFamilyTree: nextPreferences.showSingleFamilyTree,
         graphFilterVisibility: nextPreferences.filterVisibility
       });
@@ -662,32 +651,29 @@ const PeopleGraph3DComponent = ({
             </div>
           }
         >
-          <GraphCanvasScene
-            layoutResizeSignal={layoutResizeSignal}
-            displayVisiblePeople={renderVisiblePeople}
-            visibleRelationshipLines={renderVisibleRelationshipLines}
-            renderVisibilityBucketByPersonId={renderVisibilityBucketByPersonId}
-            relationshipStyleByKind={relationshipStyleByKind}
-            selectedPersonId={selectedPersonId}
-            showNodeActionButtons={!addRelativeIntent}
-            hoveredPersonId={hoveredPersonId}
-            highlightedPersonIds={highlightedPersonIds}
-            peopleIds={thumbnailCandidatePersonIds}
-            thumbnailCacheKeys={thumbnailCacheKeys}
-            prioritizedNodeIds={prioritizedNodeIds}
-            renderNearPersonIds={renderNearPersonIds}
-            setHoveredPersonId={setHoveredPersonId}
-            onNodeClick={handlePersonNodeClick}
-            onNodeActionOpen={handleOpenAddRelative}
-            onCanvasMissed={handleCanvasMissed}
-            onCameraSample={handleCameraSample}
-            initialCameraState={initialUiState?.camera ?? null}
-            cameraRef={cameraRef}
-            orbitControlsRef={orbitControlsRef}
-            lastCameraSampleRef={lastCameraSampleRef}
-            isVisible={isVisible}
-            onThumbnailProgress={handleThumbnailProgress}
-          />
+          <GraphSceneProvider value={graphSceneContextValue}>
+            <GraphCanvasScene
+              layoutResizeSignal={layoutResizeSignal}
+              displayVisiblePeople={renderVisiblePeople}
+              visibleRelationshipLines={renderVisibleRelationshipLines}
+              relationshipStyleByKind={relationshipStyleByKind}
+              selectedPersonId={selectedPersonId}
+              showNodeActionButtons={!addRelativeIntent}
+              hoveredPersonId={hoveredPersonId}
+              highlightedPersonIds={highlightedPersonIds}
+              setHoveredPersonId={setHoveredPersonId}
+              onNodeClick={handlePersonNodeClick}
+              onNodeActionOpen={handleOpenAddRelative}
+              onCanvasMissed={handleCanvasMissed}
+              onCameraSample={handleCameraSample}
+              initialCameraState={initialUiState?.camera ?? null}
+              cameraRef={cameraRef}
+              orbitControlsRef={orbitControlsRef}
+              lastCameraSampleRef={lastCameraSampleRef}
+              isVisible={isVisible}
+              onThumbnailProgress={handleThumbnailProgress}
+            />
+          </GraphSceneProvider>
         </ErrorBoundary>
       </div>
       <GraphFooterStatus status={status} busy={isSavingRelationship} thumbnailProgress={thumbnailProgress} />

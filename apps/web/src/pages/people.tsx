@@ -7,21 +7,30 @@ import {
   useMemo,
   useRef,
   useState,
-  type ComponentProps,
   type CSSProperties,
   type KeyboardEvent,
   type MutableRefObject
 } from "react";
+import { defaultGraphRenderLimit, maxGraphRenderLimit, minGraphRenderLimit } from "@treemich/shared";
 import type { UserPreferences } from "../lib/api";
 import { getLocalStorageItem, setLocalStorageItem } from "../lib/safeLocalStorage";
 import { parseMapUiSnapshot, type MapUiSnapshot } from "../lib/workspaceUiState";
 import { CreatePersonDialog } from "../components/CreatePersonDialog";
 import { MapPlacesPanel } from "../components/MapPlacesPanel";
 import { PeopleGraph3D } from "../components/PeopleGraph3D";
+import type {
+  PeopleGraph3DHandlersBundle,
+  PeopleGraph3DModelBundle,
+  PeopleGraph3DPreferencesBundle,
+  PeopleGraph3DStatusBundle,
+  PeopleGraph3DViewStateBundle
+} from "../components/peopleGraph3dSceneBundles";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
 import { WorkspaceSkeleton } from "../components/WorkspaceSkeleton";
 import { PeopleGraphDataProvider, usePeopleGraphData } from "./PeopleGraphDataContext";
-import { PersonDetailProvider, usePersonDetail } from "./PersonDetailContext";
+import { PeopleReviewProvider, usePeopleReview } from "./PeopleReviewContext";
+import { usePersonDetail } from "./PersonDetailContext";
+import { PersonDetailProviderTree } from "./PersonDetailProviderTree";
 import { ToastProvider, useToast, type ToastMessage } from "./ToastContext";
 
 export {
@@ -106,6 +115,12 @@ const isWorkspaceEnabled = (workspaceId: WorkspaceId) =>
 
 const searchIncludeAlternateNamesEnabled = (preferences: UserPreferences | null | undefined) =>
   preferences?.searchIncludeAlternateNames ?? true;
+
+const graphRenderLimitValue = (preferences: UserPreferences | null | undefined) =>
+  preferences?.graphRenderLimit ?? defaultGraphRenderLimit;
+
+const clampGraphRenderLimit = (value: number) =>
+  Math.min(maxGraphRenderLimit, Math.max(minGraphRenderLimit, Math.round(value)));
 
 type Props = {
   immichBaseUrl?: string | null;
@@ -192,6 +207,93 @@ const GraphContainer = memo(
     const isTreeView = activeWorkspace === "tree";
     const noRelationshipsDefaultsEnabled =
       graph.relationships.length === 0 && !graph.savedPreferences?.graphFilterVisibility;
+
+    const graphModel = useMemo<PeopleGraph3DModelBundle>(
+      () => ({
+        people: graph.people,
+        relationships: graph.relationships,
+        serverPositionsByPersonId: graph.serverLayout?.positionsByPersonId,
+        serverLayoutRevision: graph.serverLayout?.layoutRevision ?? null,
+        serverLayoutAlgorithmVersion: graph.serverLayout?.algorithmVersion ?? null,
+        selectedPersonId: graph.selectedPersonId
+      }),
+      [
+        graph.people,
+        graph.relationships,
+        graph.serverLayout?.positionsByPersonId,
+        graph.serverLayout?.layoutRevision,
+        graph.serverLayout?.algorithmVersion,
+        graph.selectedPersonId
+      ]
+    );
+
+    const graphStatus = useMemo<PeopleGraph3DStatusBundle>(
+      () => ({
+        status,
+        isLoading: graph.isLoading,
+        isSavingRelationship: graph.isSavingRelationship,
+        loadError: graph.loadError,
+        layoutError: graph.graphLayoutError ?? null,
+        focusPersonRequest: graph.graphFocusPersonId,
+        cameraFocusPersonRequest: graph.graphCameraFocusPersonId,
+        treeValidationIssueCount: graph.treeValidationIssueCount,
+        treeValidationEngineDisabled: graph.treeValidationEngineDisabled
+      }),
+      [
+        status,
+        graph.isLoading,
+        graph.isSavingRelationship,
+        graph.loadError,
+        graph.graphLayoutError,
+        graph.graphFocusPersonId,
+        graph.graphCameraFocusPersonId,
+        graph.treeValidationIssueCount,
+        graph.treeValidationEngineDisabled
+      ]
+    );
+
+    const graphPreferences = useMemo<PeopleGraph3DPreferencesBundle>(
+      () => ({
+        savedPreferences: graph.savedPreferences,
+        defaultToNoRelationshipsGraphState: noRelationshipsDefaultsEnabled,
+        noRelationshipsGraphFilterVisibility
+      }),
+      [graph.savedPreferences, noRelationshipsDefaultsEnabled]
+    );
+
+    const graphHandlers = useMemo<PeopleGraph3DHandlersBundle>(
+      () => ({
+        onFocusPersonConsumed: graph.clearGraphFocus,
+        onCameraFocusPersonConsumed: graph.clearGraphCameraFocus,
+        onSelectedPersonChange: graph.setSelectedPersonId,
+        onCreateRelationship: graph.onCreateRelationship,
+        onNewPerson,
+        onPreferencesChange: graph.onPreferencesChange,
+        onRetryGraphLoad: graph.retryGraphData,
+        onRetryLayout: graph.retryGraphData
+      }),
+      [
+        graph.clearGraphFocus,
+        graph.clearGraphCameraFocus,
+        graph.setSelectedPersonId,
+        graph.onCreateRelationship,
+        graph.onPreferencesChange,
+        graph.retryGraphData,
+        onNewPerson
+      ]
+    );
+
+    const graphViewState = useMemo<PeopleGraph3DViewStateBundle>(
+      () => ({
+        graphKeyboardEnabled: true,
+        layoutResizeSignal,
+        initialUiState: graph.graphUiSnapshot,
+        onUiStateChange: graph.setGraphUiSnapshot,
+        isVisible: isTreeView
+      }),
+      [layoutResizeSignal, graph.graphUiSnapshot, graph.setGraphUiSnapshot, isTreeView]
+    );
+
     return (
       <section
         className={`people-main-column ${isTreeView ? "" : "workspace-view-hidden"}`}
@@ -199,37 +301,11 @@ const GraphContainer = memo(
         inert={!isTreeView ? true : undefined}
       >
         <PeopleGraph3D
-          people={graph.people}
-          relationships={graph.relationships}
-          serverPositionsByPersonId={graph.serverLayout?.positionsByPersonId}
-          serverLayoutRevision={graph.serverLayout?.layoutRevision ?? null}
-          serverLayoutAlgorithmVersion={graph.serverLayout?.algorithmVersion ?? null}
-          selectedPersonId={graph.selectedPersonId}
-          status={status}
-          isLoading={graph.isLoading}
-          isSavingRelationship={graph.isSavingRelationship}
-          loadError={graph.loadError}
-          layoutError={graph.graphLayoutError}
-          focusPersonRequest={graph.graphFocusPersonId}
-          cameraFocusPersonRequest={graph.graphCameraFocusPersonId}
-          noRelationshipsGraphFilterVisibility={noRelationshipsGraphFilterVisibility}
-          defaultToNoRelationshipsGraphState={noRelationshipsDefaultsEnabled}
-          savedPreferences={graph.savedPreferences}
-          treeValidationIssueCount={graph.treeValidationIssueCount}
-          treeValidationEngineDisabled={graph.treeValidationEngineDisabled}
-          onFocusPersonConsumed={graph.clearGraphFocus}
-          onCameraFocusPersonConsumed={graph.clearGraphCameraFocus}
-          onSelectedPersonChange={graph.setSelectedPersonId}
-          onCreateRelationship={graph.onCreateRelationship}
-          onNewPerson={onNewPerson}
-          onPreferencesChange={graph.onPreferencesChange}
-          onRetryGraphLoad={() => void graph.refreshGraphData()}
-          onRetryLayout={() => void graph.refreshGraphData()}
-          graphKeyboardEnabled
-          layoutResizeSignal={layoutResizeSignal}
-          initialUiState={graph.graphUiSnapshot}
-          onUiStateChange={graph.setGraphUiSnapshot}
-          isVisible={isTreeView}
+          graphModel={graphModel}
+          graphStatus={graphStatus}
+          graphPreferences={graphPreferences}
+          graphHandlers={graphHandlers}
+          graphViewState={graphViewState}
         />
       </section>
     );
@@ -238,87 +314,6 @@ const GraphContainer = memo(
 
 const DetailContainer = memo(
   ({ activeWorkspace, contextPaneOpen }: { activeWorkspace: WorkspaceId; contextPaneOpen: boolean }) => {
-    const graph = usePeopleGraphData();
-    const detail = usePersonDetail();
-    const detailProps = useMemo<ComponentProps<typeof PersonDetailPanel>>(
-      () => ({
-        person: graph.selectedPerson,
-        people: graph.people,
-        relationships: graph.relationships,
-        dismissedSuggestionKeys: graph.savedPreferences?.dismissedSuggestions ?? [],
-        genders: detail.genders,
-        genderValue: graph.selectedPerson
-          ? (detail.genderByPersonId[graph.selectedPerson.id] ?? "UNKNOWN")
-          : "UNKNOWN",
-        onGenderChange: detail.handleGenderChange,
-        birthDateValue: detail.selectedProfileEventFields.birthDate,
-        onBirthDateChange: detail.handleBirthDateChange,
-        givenNameValue: graph.selectedPerson
-          ? (detail.givenNameByPersonId[graph.selectedPerson.id] ?? "")
-          : "",
-        surnameValue: graph.selectedPerson ? (detail.surnameByPersonId[graph.selectedPerson.id] ?? "") : "",
-        nicknamesValue: graph.selectedPerson
-          ? (detail.nicknamesByPersonId[graph.selectedPerson.id] ?? "")
-          : "",
-        deathDateValue: detail.selectedProfileEventFields.deathDate,
-        birthCityValue: detail.selectedProfileEventFields.birthCity,
-        birthCountryValue: detail.selectedProfileEventFields.birthCountry,
-        onGivenNameChange: detail.handleGivenNameChange,
-        onSurnameChange: detail.handleSurnameChange,
-        onNicknamesChange: detail.handleNicknamesChange,
-        onDeathDateChange: detail.handleDeathDateChange,
-        onBirthCityChange: detail.handleBirthCityChange,
-        onBirthCountryChange: detail.handleBirthCountryChange,
-        onProfileSave: detail.onProfileSave,
-        isSavingProfile: graph.isSavingProfile,
-        onFocusPerson: graph.focusPersonInGraph,
-        onCreateRelationship: graph.onCreateRelationship,
-        onUpdateRelationship: detail.onUpdateExistingRelationship,
-        onDeleteRelationship: graph.onDeleteExistingRelationship,
-        onDeletePerson: graph.handleDeletePerson,
-        onThumbnailUpload: graph.handleUploadPersonThumbnail,
-        onImmichThumbnailImport: graph.handleImportImmichThumbnail,
-        onImmichIdentityLink: graph.handleLinkImmichIdentity,
-        onImmichIdentityUnlink: graph.handleUnlinkImmichIdentity,
-        onDismissSuggestion: graph.onDismissSuggestion,
-        isSavingRelationship: graph.isSavingRelationship,
-        immichBaseUrl: graph.immichBaseUrl,
-        primaryFamilyUnitByPersonId: graph.savedPreferences?.primaryFamilyUnitByPersonId ?? {},
-        onPrimaryFamilyUnitChange: graph.onPrimaryFamilyUnitChange,
-        relationshipLifeEventsById: detail.relationshipLifeEventsById,
-        personLifeEvents: graph.selectedPerson
-          ? detail.lifeEventsByPersonId[graph.selectedPerson.id]
-          : undefined,
-        onPersonLifeEventCreate: detail.handlePersonLifeEventCreate,
-        onPersonLifeEventPatch: detail.handlePersonLifeEventPatch,
-        onPersonLifeEventDelete: detail.handlePersonLifeEventDelete,
-        onRelationshipLifeEventCreate: detail.handleRelationshipLifeEventCreate,
-        onRelationshipLifeEventPatch: detail.handleRelationshipLifeEventPatch,
-        onRelationshipLifeEventDelete: detail.handleRelationshipLifeEventDelete,
-        onPersonNamesChanged: graph.refreshPeopleOnly,
-        personTimeline: graph.selectedPerson ? detail.personTimelineById[graph.selectedPerson.id] : undefined,
-        researchTasks: graph.selectedPerson
-          ? detail.researchTasksByPersonId[graph.selectedPerson.id]
-          : undefined,
-        families: graph.selectedPerson ? detail.familiesByPersonId[graph.selectedPerson.id] : undefined,
-        onFamilyPatch: detail.handleFamilyPatch,
-        onFamilyDelete: detail.handleFamilyDelete,
-        savingFamilyId: graph.savingFamilyId,
-        familyMediaLinksById: detail.familyMediaLinksById,
-        mediaObjects: detail.evidenceMediaObjects,
-        mediaManagementEnabled: import.meta.env.VITE_EVIDENCE_MANAGEMENT_UI !== "false",
-        onFamilyMediaLinkCreate: detail.handleFamilyMediaLinkCreate,
-        onFamilyMediaLinkDelete: detail.handleFamilyMediaLinkDelete,
-        familyLifeEventsById: detail.familyLifeEventsById,
-        onFamilyLifeEventCreate: detail.handleFamilyLifeEventCreate,
-        onFamilyLifeEventPatch: detail.handleFamilyLifeEventPatch,
-        onFamilyLifeEventDelete: detail.handleFamilyLifeEventDelete,
-        onResearchTaskCreate: detail.handleResearchTaskCreate,
-        onResearchTaskUpdate: detail.handleResearchTaskUpdate,
-        onResearchTaskDelete: detail.handleResearchTaskDelete
-      }),
-      [detail, graph]
-    );
     return (
       <aside
         className={`people-sidebar workspace-context-pane ${contextPaneOpen ? "" : "workspace-pane--closed"}`}
@@ -328,7 +323,7 @@ const DetailContainer = memo(
           inert={activeWorkspace !== "tree" ? true : undefined}
           aria-hidden={activeWorkspace !== "tree"}
         >
-          <PersonDetailPanel {...detailProps} />
+          <PersonDetailPanel />
         </div>
         {activeWorkspace !== "tree" ? (
           <section
@@ -350,9 +345,11 @@ const DetailContainer = memo(
 export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Props) => (
   <ToastProvider>
     <PeopleGraphDataProvider immichBaseUrl={immichBaseUrl} currentUserName={currentUserName}>
-      <PersonDetailProvider>
-        <PeoplePageShell />
-      </PersonDetailProvider>
+      <PeopleReviewProvider>
+        <PersonDetailProviderTree>
+          <PeoplePageShell />
+        </PersonDetailProviderTree>
+      </PeopleReviewProvider>
     </PeopleGraphDataProvider>
   </ToastProvider>
 );
@@ -360,7 +357,12 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
 const PeoplePageShell = () => {
   const graph = usePeopleGraphData();
   const detail = usePersonDetail();
+  const review = usePeopleReview();
   const { toasts } = useToast();
+  const [graphRenderLimitSaveState, setGraphRenderLimitSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const graphRenderLimitSaveRequestRef = useRef(0);
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>(() => {
     if (typeof window === "undefined") {
       return "tree";
@@ -487,6 +489,23 @@ const PeoplePageShell = () => {
     [graph]
   );
 
+  const handleGraphRenderLimitChange = useCallback(
+    (value: number) => {
+      const next = clampGraphRenderLimit(value);
+      const requestId = graphRenderLimitSaveRequestRef.current + 1;
+      graphRenderLimitSaveRequestRef.current = requestId;
+      setGraphRenderLimitSaveState("saving");
+      void graph
+        .onPreferencesChange({ graphRenderLimit: next })
+        .then((saved) => {
+          if (graphRenderLimitSaveRequestRef.current === requestId) {
+            setGraphRenderLimitSaveState(saved ? "saved" : "error");
+          }
+        });
+    },
+    [graph]
+  );
+
   const renderSecondaryWorkspace = () => {
     if (activeWorkspace === "evidence") {
       return (
@@ -536,17 +555,17 @@ const PeoplePageShell = () => {
       return (
         <ResearchWorkspace
           people={graph.people}
-          tasks={detail.allResearchTasks}
-          findings={detail.validationFindings}
-          tasksLoading={detail.allResearchTasksLoading}
-          findingsLoading={detail.validationFindingsLoading}
+          tasks={review.allResearchTasks}
+          findings={review.validationFindings}
+          tasksLoading={review.allResearchTasksLoading}
+          findingsLoading={review.validationFindingsLoading}
           validationEngineDisabled={graph.treeValidationEngineDisabled}
-          onRefreshTasks={detail.refreshAllResearchTasks}
-          onRefreshFindings={detail.refreshValidationFindings}
-          onRecomputeFindings={detail.handleValidationRecompute}
-          onTaskUpdate={detail.handleResearchTaskUpdate}
-          onTaskDelete={detail.handleResearchTaskDelete}
-          onFindingStatusChange={detail.handleValidationFindingStatusChange}
+          onRefreshTasks={review.refreshAllResearchTasks}
+          onRefreshFindings={review.refreshValidationFindings}
+          onRecomputeFindings={review.handleValidationRecompute}
+          onTaskUpdate={review.handleResearchTaskUpdate}
+          onTaskDelete={review.handleResearchTaskDelete}
+          onFindingStatusChange={review.handleValidationFindingStatusChange}
           onOpenPerson={openPersonFromResearch}
         />
       );
@@ -555,12 +574,12 @@ const PeoplePageShell = () => {
     if (activeWorkspace === "duplicates") {
       return (
         <DuplicateReviewWorkspace
-          candidates={detail.duplicateCandidates}
-          loading={detail.duplicateCandidatesLoading}
-          onRefresh={detail.refreshDuplicateCandidates}
-          onRecompute={detail.handleDuplicateRecompute}
-          onDismiss={detail.handleDuplicateDismiss}
-          onMerge={detail.handleDuplicateMerge}
+          candidates={review.duplicateCandidates}
+          loading={review.duplicateCandidatesLoading}
+          onRefresh={review.refreshDuplicateCandidates}
+          onRecompute={review.handleDuplicateRecompute}
+          onDismiss={review.handleDuplicateDismiss}
+          onMerge={review.handleDuplicateMerge}
           onOpenPerson={openPersonFromResearch}
         />
       );
@@ -579,6 +598,41 @@ const PeoplePageShell = () => {
             </section>
           ) : (
             <section className="card stack workspace-intro-card settings-card">
+              <div className="stack">
+                <h2>Graph settings</h2>
+                <p className="hint">
+                  Tune how much of the tree is rendered at once. Higher values show more people but can
+                  reduce frame rate on large trees.
+                </p>
+              </div>
+              <label className="settings-toggle">
+                <input
+                  type="number"
+                  min={minGraphRenderLimit}
+                  max={maxGraphRenderLimit}
+                  step={20}
+                  value={graphRenderLimitValue(graph.savedPreferences)}
+                  onChange={(event) => {
+                    const next = event.currentTarget.valueAsNumber;
+                    if (Number.isFinite(next)) {
+                      handleGraphRenderLimitChange(next);
+                    }
+                  }}
+                />
+                <span>
+                  <strong>Maximum rendered people</strong>
+                  <span className="hint">
+                    Current bounds are {minGraphRenderLimit} to {maxGraphRenderLimit}. Default is{" "}
+                    {defaultGraphRenderLimit}.
+                  </span>
+                </span>
+              </label>
+              <p className="hint" role="status" aria-live="polite">
+                Rendering up to {graphRenderLimitValue(graph.savedPreferences)} people.
+                {graphRenderLimitSaveState === "saving" ? " Saving..." : null}
+                {graphRenderLimitSaveState === "saved" ? " Graph render limit saved." : null}
+                {graphRenderLimitSaveState === "error" ? " Could not save graph render limit." : null}
+              </p>
               <div className="stack">
                 <h2>Search settings</h2>
                 <p className="hint">

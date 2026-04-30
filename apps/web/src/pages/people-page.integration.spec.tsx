@@ -2,23 +2,14 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PeoplePage } from "./people";
-import type { PersonRecord, RelationshipRecord, RelationshipType } from "../lib/api";
+import type { PeopleGraph3DBundledProps } from "../components/peopleGraph3dSceneBundles";
+import type { PersonRecord, RelationshipRecord } from "../lib/api";
 import type { GraphUiSnapshot, MapUiSnapshot } from "../lib/workspaceUiState";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
-type GraphProps = {
-  people?: PersonRecord[];
-  relationships?: RelationshipRecord[];
-  onCreateRelationship?: (
-    sourcePersonId: string,
-    targetPersonId: string,
-    relationshipType: RelationshipType
-  ) => Promise<void>;
-  initialUiState?: GraphUiSnapshot;
-  onUiStateChange?: (next: GraphUiSnapshot) => void;
-};
+type GraphProps = PeopleGraph3DBundledProps;
 let latestGraphProps: GraphProps | null = null;
 vi.mock("../components/PeopleGraph3D", () => ({
   PeopleGraph3D: (props: GraphProps) => {
@@ -162,6 +153,7 @@ describe("PeoplePage + life events (integration)", () => {
         }
         const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
         return jsonResponse({
+          graphRenderLimit: body.graphRenderLimit ?? 120,
           showSingleFamilyTree: true,
           primaryFamilyUnitByPersonId: {},
           cooccurrence: { refreshEnabled: true, refreshIntervalDays: 7 },
@@ -210,6 +202,18 @@ describe("PeoplePage + life events (integration)", () => {
 
       if (method === "GET" && url.includes("/tree/validation")) {
         return jsonResponse({ findings: [], engineDisabled: false, persist: false });
+      }
+
+      if (method === "GET" && url.includes("/research/tasks")) {
+        return jsonResponse({ tasks: [] });
+      }
+
+      if (method === "GET" && url.includes("/validation/findings")) {
+        return jsonResponse({ findings: [] });
+      }
+
+      if (method === "GET" && url.includes("/people/duplicates?")) {
+        return jsonResponse({ candidates: [] });
       }
 
       if (method === "GET" && url.includes("/people/p1/life-events")) {
@@ -286,8 +290,9 @@ describe("PeoplePage + life events (integration)", () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    act(() => {
+    await act(async () => {
       root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+      await Promise.resolve();
     });
 
     for (let i = 0; i < 30; i += 1) {
@@ -346,6 +351,7 @@ describe("PeoplePage + life events (integration)", () => {
     for (let i = 0; i < 20; i += 1) {
       await act(async () => {
         await Promise.resolve();
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
       });
       const fetchMock = vi.mocked(globalThis.fetch);
       if (
@@ -382,12 +388,14 @@ describe("PeoplePage + life events (integration)", () => {
       await act(async () => {
         await Promise.resolve();
       });
-      if (latestGraphProps?.people?.some((person) => person.id === "p1")) {
+      if (latestGraphProps?.graphModel.people?.some((person) => person.id === "p1")) {
         break;
       }
     }
 
-    expect(latestGraphProps?.people?.find((person) => person.id === "p1")?.name).toBe("Alex Smith");
+    expect(latestGraphProps?.graphModel.people?.find((person) => person.id === "p1")?.name).toBe(
+      "Alex Smith"
+    );
 
     const profileContent = container.querySelector("#person-detail-section-content-profile");
     const labels = [...(profileContent?.querySelectorAll(".field-group") ?? [])];
@@ -416,7 +424,7 @@ describe("PeoplePage + life events (integration)", () => {
       await act(async () => {
         await Promise.resolve();
       });
-      const graphPerson = latestGraphProps?.people?.find((person) => person.id === "p1");
+      const graphPerson = latestGraphProps?.graphModel.people?.find((person) => person.id === "p1");
       if (graphPerson?.name === "Taylor Jones") {
         break;
       }
@@ -429,7 +437,9 @@ describe("PeoplePage + life events (integration)", () => {
     expect(profilePatch?.[1]?.body).toBe(
       JSON.stringify({ gender: "UNKNOWN", givenName: "Taylor", surname: "Jones", nicknames: null })
     );
-    expect(latestGraphProps?.people?.find((person) => person.id === "p1")?.name).toBe("Taylor Jones");
+    expect(latestGraphProps?.graphModel.people?.find((person) => person.id === "p1")?.name).toBe(
+      "Taylor Jones"
+    );
 
     act(() => {
       root.unmount();
@@ -456,7 +466,9 @@ describe("PeoplePage + life events (integration)", () => {
     }
 
     expect(container.textContent).toContain("Birth date: Jan 1, 1990");
-    expect(latestGraphProps?.people?.find((person) => person.id === "p1")?.birthDate).toBe("1990-01-01");
+    expect(latestGraphProps?.graphModel.people?.find((person) => person.id === "p1")?.birthDate).toBe(
+      "1990-01-01"
+    );
 
     const birthInput = container.querySelector(
       '#person-detail-section-content-profile input[type="date"]'
@@ -478,7 +490,7 @@ describe("PeoplePage + life events (integration)", () => {
       await act(async () => {
         await Promise.resolve();
       });
-      const graphPerson = latestGraphProps?.people?.find((person) => person.id === "p1");
+      const graphPerson = latestGraphProps?.graphModel.people?.find((person) => person.id === "p1");
       if (
         graphPerson?.birthDate === "1992-02-03" &&
         container.textContent?.includes("Birth date: Feb 3, 1992")
@@ -487,7 +499,9 @@ describe("PeoplePage + life events (integration)", () => {
       }
     }
 
-    expect(latestGraphProps?.people?.find((person) => person.id === "p1")?.birthDate).toBe("1992-02-03");
+    expect(latestGraphProps?.graphModel.people?.find((person) => person.id === "p1")?.birthDate).toBe(
+      "1992-02-03"
+    );
     expect(container.textContent).toContain("Birth date: Feb 3, 1992");
 
     act(() => {
@@ -579,30 +593,30 @@ describe("PeoplePage + life events (integration)", () => {
       await act(async () => {
         await Promise.resolve();
       });
-      if (latestGraphProps?.onCreateRelationship) {
+      if (latestGraphProps?.graphHandlers.onCreateRelationship) {
         break;
       }
     }
 
     await act(async () => {
-      await latestGraphProps?.onCreateRelationship?.("p1", "p3", "SIBLING_OF");
+      await latestGraphProps?.graphHandlers.onCreateRelationship?.("p1", "p3", "SIBLING_OF");
     });
 
     for (let i = 0; i < 30; i += 1) {
       await act(async () => {
         await Promise.resolve();
       });
-      if (latestGraphProps?.people?.some((person) => person.id === "p3")) {
+      if (latestGraphProps?.graphModel.people?.some((person) => person.id === "p3")) {
         break;
       }
     }
 
     expect(peopleLoadCount).toBeGreaterThanOrEqual(2);
     expect(relationshipsLoadCount).toBeGreaterThanOrEqual(2);
-    expect(latestGraphProps?.people).toEqual(
+    expect(latestGraphProps?.graphModel.people).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "p3", name: "Charlie Brown" })])
     );
-    expect(latestGraphProps?.relationships).toEqual(
+    expect(latestGraphProps?.graphModel.relationships).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "r2", toPersonId: "p3" })])
     );
 
@@ -688,6 +702,11 @@ describe("PeoplePage + life events (integration)", () => {
     });
 
     expect(container.textContent).toContain("Search settings");
+    expect(container.textContent).toContain("Maximum rendered people");
+    const renderLimitInput = container.querySelector(
+      '.settings-toggle input[type="number"]'
+    ) as HTMLInputElement | null;
+    expect(renderLimitInput?.value).toBe("120");
     expect(container.textContent).toContain("Match alternate Treemich names in relationship search");
     const checkbox = container.querySelector(
       '.settings-toggle input[type="checkbox"]'
@@ -700,13 +719,61 @@ describe("PeoplePage + life events (integration)", () => {
     container.remove();
   });
 
-  it("renders the Interchange workspace and probes GEDCOM import availability", async () => {
+  it("persists graph render limit changes from Settings", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
 
     act(() => {
       root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+
+    const settingsNav = container.querySelector('[data-workspace="settings"]') as HTMLButtonElement | null;
+    await act(async () => {
+      settingsNav!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const renderLimitInput = container.querySelector(
+      '.settings-toggle input[type="number"]'
+    ) as HTMLInputElement | null;
+    expect(renderLimitInput).toBeTruthy();
+
+    await act(async () => {
+      setInputValue(renderLimitInput!, "240");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const preferencePatch = vi.mocked(globalThis.fetch).mock.calls.find((call) => {
+      const [input, init] = call;
+      if (!String(input).endsWith("/user/preferences") || init?.method !== "PATCH") {
+        return false;
+      }
+      return JSON.parse(String(init.body)).graphRenderLimit === 240;
+    });
+    expect(preferencePatch).toBeTruthy();
+    expect(JSON.parse(String(preferencePatch?.[1]?.body))).toEqual({ graphRenderLimit: 240 });
+    expect(renderLimitInput?.value).toBe("240");
+    expect(container.textContent).toContain("Rendering up to 240 people.");
+    expect(container.textContent).toContain("Graph render limit saved.");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("renders the Interchange workspace and probes GEDCOM import availability", async () => {
+    await import("../components/GedcomInterchangeSection");
+    await import("../components/ImmichImportWorkspace");
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+      await Promise.resolve();
     });
 
     const interchangeNav = container.querySelector(
@@ -867,12 +934,12 @@ describe("PeoplePage + life events (integration)", () => {
       await act(async () => {
         await Promise.resolve();
       });
-      if (latestGraphProps?.initialUiState) {
+      if (latestGraphProps?.graphViewState.initialUiState) {
         break;
       }
     }
 
-    expect(latestGraphProps?.initialUiState).toEqual(
+    expect(latestGraphProps?.graphViewState.initialUiState).toEqual(
       expect.objectContaining({
         searchTerm: "alex",
         focusPersonId: "p1",
@@ -882,7 +949,7 @@ describe("PeoplePage + life events (integration)", () => {
     );
 
     await act(async () => {
-      latestGraphProps?.onUiStateChange?.({
+      latestGraphProps?.graphViewState.onUiStateChange?.({
         schemaVersion: 1,
         searchTerm: "updated",
         focusPersonId: "p2",

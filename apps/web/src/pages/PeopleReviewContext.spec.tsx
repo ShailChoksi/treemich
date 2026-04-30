@@ -1,29 +1,12 @@
 import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PeopleGraphDataProvider, usePeopleGraphData } from "./PeopleGraphDataContext";
-import { PersonDetailProvider, usePersonDetail } from "./PersonDetailContext";
+import { PeopleGraphDataProvider } from "./PeopleGraphDataContext";
+import { PeopleReviewProvider, usePeopleReview } from "./PeopleReviewContext";
 import { ToastProvider } from "./ToastContext";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
-
-const birthEvent = {
-  id: "lev-b",
-  eventType: "BIRTH",
-  dateQualifier: "EXACT",
-  year: 1991,
-  month: 5,
-  day: 6,
-  endYear: null,
-  endMonth: null,
-  endDay: null,
-  notes: null,
-  place: null,
-  citations: [],
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-01T00:00:00.000Z"
-};
 
 const jsonResponse = (data: unknown, status = 200) =>
   Promise.resolve(
@@ -33,7 +16,7 @@ const jsonResponse = (data: unknown, status = 200) =>
     })
   );
 
-describe("PersonDetailContext", () => {
+describe("PeopleReviewContext", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
@@ -48,7 +31,7 @@ describe("PersonDetailContext", () => {
               name: "Alex Smith",
               hasRelationship: true,
               birthDate: null,
-              profile: { id: "p1", gender: "MALE", givenName: "Alex", surname: "Smith", nicknames: "Al" }
+              profile: { id: "p1", gender: "UNKNOWN", givenName: "Alex", surname: "Smith", nicknames: null }
             }
           ]
         });
@@ -68,41 +51,31 @@ describe("PersonDetailContext", () => {
       if (method === "POST" && url.includes("/graph/layout")) {
         return jsonResponse({ layoutRevision: "lr1", algorithmVersion: "alg1", positionsByPersonId: {} });
       }
-      if (method === "GET" && url.includes("/people/p1/life-events")) {
-        return jsonResponse({ lifeEvents: [birthEvent] });
+      if (method === "GET" && url.includes("/tree/validation")) {
+        return jsonResponse({ findings: [], engineDisabled: false, persist: false });
       }
-      if (method === "GET" && url.includes("/people/p1/timeline")) {
-        return jsonResponse({ timeline: [] });
-      }
-      if (method === "GET" && url.includes("/people/p1/research-tasks")) {
-        return jsonResponse({ researchTasks: [] });
-      }
-      if (method === "GET" && url.includes("/people/p1/families")) {
-        return jsonResponse({ families: [] });
-      }
-      if (method === "POST" && url.includes("/relationships/r-spouse/life-events")) {
+      if (method === "GET" && url.includes("/research/tasks?personId=p1")) {
         return jsonResponse({
-          ...birthEvent,
-          id: "rel-ev-1",
-          eventType: "MARRIAGE"
-        });
-      }
-      if (method === "GET" && url.includes("/relationships/r-spouse/life-events")) {
-        return jsonResponse({
-          lifeEvents: [
-            {
-              ...birthEvent,
-              id: "rel-ev-1",
-              eventType: "MARRIAGE"
-            }
+          tasks: [
+            { id: "t1", personId: "p1", title: "Check census", status: "OPEN", dueDate: null, notes: null }
           ]
         });
       }
-      if (method === "GET" && url.includes("/media/objects")) {
-        return jsonResponse({ mediaObjects: [] });
+      if (method === "GET" && url.endsWith("/research/tasks")) {
+        return jsonResponse({
+          tasks: [
+            { id: "t2", personId: null, title: "Global task", status: "OPEN", dueDate: null, notes: null }
+          ]
+        });
       }
-      if (method === "GET" && url.includes("/tree/validation")) {
-        return jsonResponse({ findings: [], engineDisabled: false, persist: false });
+      if (method === "GET" && url.includes("/validation/findings")) {
+        return jsonResponse({ findings: [{ id: "vf1", status: "OPEN", severity: "warning", code: "TEST" }] });
+      }
+      if (method === "GET" && url.includes("/people/duplicates?")) {
+        return jsonResponse({ candidates: [{ id: "dup1", status: "PENDING" }] });
+      }
+      if (method === "POST" && url.includes("/people/duplicates/dup1/merge")) {
+        return jsonResponse({ canonicalPersonId: "p1", duplicatePersonId: "p2" });
       }
       return jsonResponse({ error: `unmocked ${method} ${url}` }, 404);
     }) as typeof fetch;
@@ -114,23 +87,13 @@ describe("PersonDetailContext", () => {
     document.body.innerHTML = "";
   });
 
-  it("rebuilds draft fields from people and loads selected life events", async () => {
-    let selectedPersonId: string | null = null;
-    let givenName = "";
-    let birthDate = "";
+  it("loads selected-person research tasks in the page-scoped review provider", async () => {
+    let taskCount = 0;
     const Probe = () => {
-      const graph = usePeopleGraphData();
-      const detail = usePersonDetail();
+      const review = usePeopleReview();
       useEffect(() => {
-        selectedPersonId = graph.selectedPersonId;
-        givenName = graph.selectedPerson ? (detail.givenNameByPersonId[graph.selectedPerson.id] ?? "") : "";
-        birthDate = detail.selectedProfileEventFields.birthDate;
-      }, [
-        detail.givenNameByPersonId,
-        detail.selectedProfileEventFields.birthDate,
-        graph.selectedPerson,
-        graph.selectedPersonId
-      ]);
+        taskCount = review.researchTasksByPersonId.p1?.length ?? 0;
+      }, [review.researchTasksByPersonId]);
       return null;
     };
     const container = document.createElement("div");
@@ -145,7 +108,7 @@ describe("PersonDetailContext", () => {
           createElement(
             PeopleGraphDataProvider,
             { immichBaseUrl: null, currentUserName: null },
-            createElement(PersonDetailProvider, null, createElement(Probe))
+            createElement(PeopleReviewProvider, null, createElement(Probe))
           )
         )
       );
@@ -154,21 +117,19 @@ describe("PersonDetailContext", () => {
       await act(async () => {
         await Promise.resolve();
       });
-      if (birthDate) {
+      if (taskCount > 0) {
         break;
       }
     }
 
-    expect(selectedPersonId).toBe("p1");
-    expect(givenName).toBe("Alex");
-    expect(birthDate).toBe("1991-05-06");
+    expect(taskCount).toBe(1);
     root.unmount();
   });
 
-  it("uses Tier B relationship refresh after relationship life-event edits", async () => {
-    let detail: ReturnType<typeof usePersonDetail> | null = null;
+  it("owns duplicate merge workflow and triggers full graph refresh", async () => {
+    let review: ReturnType<typeof usePeopleReview> | null = null;
     const Probe = () => {
-      detail = usePersonDetail();
+      review = usePeopleReview();
       return null;
     };
     const container = document.createElement("div");
@@ -183,7 +144,7 @@ describe("PersonDetailContext", () => {
           createElement(
             PeopleGraphDataProvider,
             { immichBaseUrl: null, currentUserName: null },
-            createElement(PersonDetailProvider, null, createElement(Probe))
+            createElement(PeopleReviewProvider, null, createElement(Probe))
           )
         )
       );
@@ -193,13 +154,7 @@ describe("PersonDetailContext", () => {
     vi.mocked(globalThis.fetch).mockClear();
 
     await act(async () => {
-      await detail?.handleRelationshipLifeEventCreate("r-spouse", {
-        eventType: "MARRIAGE",
-        dateQualifier: "EXACT",
-        year: 2000,
-        month: 1,
-        day: 2
-      });
+      await review?.handleDuplicateMerge("dup1", "p1", "p2");
       await Promise.resolve();
     });
 
@@ -208,10 +163,10 @@ describe("PersonDetailContext", () => {
       method: init?.method ?? "GET"
     }));
     expect(
-      calls.some((call) => call.method === "POST" && call.url.includes("/relationships/r-spouse/life-events"))
+      calls.some((call) => call.method === "POST" && call.url.includes("/people/duplicates/dup1/merge"))
     ).toBe(true);
-    expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
-    expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(false);
+    expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(true);
+    expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(true);
 
     root.unmount();
   });
