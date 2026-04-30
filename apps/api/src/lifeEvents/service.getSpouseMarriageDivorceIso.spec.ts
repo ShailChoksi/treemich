@@ -10,6 +10,8 @@ vi.mock("../db/client.js", () => ({
   }
 }));
 
+const mockResolver = { resolveProfile: vi.fn().mockResolvedValue({ id: "pp-1" }) };
+
 describe("LifeEventService.getSpouseMarriageDivorceIsoForPairs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -17,7 +19,7 @@ describe("LifeEventService.getSpouseMarriageDivorceIsoForPairs", () => {
 
   it("does not query when pairs is empty", async () => {
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     const result = await service.getSpouseMarriageDivorceIsoForPairs("user-1", []);
     expect(result.size).toBe(0);
     expect(relationshipFindManyMock).toHaveBeenCalledTimes(0);
@@ -27,7 +29,7 @@ describe("LifeEventService.getSpouseMarriageDivorceIsoForPairs", () => {
     relationshipFindManyMock.mockResolvedValueOnce([]);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     const result = await service.getSpouseMarriageDivorceIsoForPairs("user-1", [{ lo: "a", hi: "b" }]);
 
     expect(relationshipFindManyMock).toHaveBeenCalledWith(
@@ -56,7 +58,7 @@ describe("LifeEventService.getSpouseMarriageDivorceIsoForPairs", () => {
     ]);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     const result = await service.getSpouseMarriageDivorceIsoForPairs("user-1", [{ lo: "a", hi: "z" }]);
 
     expect(result.get("a:z")).toEqual({
@@ -74,7 +76,7 @@ describe("LifeEventService.getSpouseMarriageDivorceIsoForPairs", () => {
     ]);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     const result = await service.getSpouseMarriageDivorceIsoForPairs("user-1", [{ lo: "a", hi: "z" }]);
 
     expect(result.get("a:z")).toEqual({
@@ -94,7 +96,7 @@ describe("LifeEventService.getSpouseMarriageDivorceIsoForPairs", () => {
     ]);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     const result = await service.getSpouseMarriageDivorceIsoForPairs("user-1", [{ lo: "a", hi: "z" }]);
 
     expect(result.get("a:z")).toEqual({
@@ -110,7 +112,7 @@ describe("LifeEventService.getSpouseMarriageDivorceIsoForPairs", () => {
     lifeEventFindManyMock.mockResolvedValueOnce([]);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     await service.getSpouseMarriageDivorceIsoForPairs("user-1", [
       { lo: "x", hi: "y" },
       { lo: "x", hi: "y" }

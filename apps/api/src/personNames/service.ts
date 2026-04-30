@@ -3,17 +3,7 @@ import type { CreatePersonNameBody, PatchPersonNameBody } from "@treemich/shared
 import { formatPersonNameDisplay } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import { HttpNotFoundError, HttpValidationError } from "../lifeEvents/errors.js";
-
-const includeProfile = async (userId: string, personId: string) =>
-  (await prisma.personProfile.findFirst({
-    where: { userId, id: personId }
-  })) ??
-  (
-    await prisma.personExternalIdentity.findFirst({
-      where: { userId, providerPersonId: personId },
-      include: { person: true }
-    })
-  )?.person;
+import type { ProfileResolver } from "../people/profileResolver.js";
 
 export const personNameToJson = (row: PersonName) => ({
   id: row.id,
@@ -66,8 +56,21 @@ export const resolveDisplayNameForPerson = (opts: {
 };
 
 export class PersonNameService {
+  constructor(private readonly profileResolver: ProfileResolver) {}
+
+  private async resolveProfileOrNull(userId: string, personId: string) {
+    try {
+      return await this.profileResolver.resolveProfile(userId, personId);
+    } catch (error) {
+      if (error instanceof HttpNotFoundError) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
   async listByPersonId(userId: string, personId: string) {
-    const profile = await includeProfile(userId, personId);
+    const profile = await this.resolveProfileOrNull(userId, personId);
     if (!profile) {
       return [] as ReturnType<typeof personNameToJson>[];
     }
@@ -122,7 +125,7 @@ export class PersonNameService {
   }
 
   async create(userId: string, personId: string, body: CreatePersonNameBody) {
-    const profile = await includeProfile(userId, personId);
+    const profile = await this.resolveProfileOrNull(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -149,7 +152,7 @@ export class PersonNameService {
   }
 
   async update(userId: string, personId: string, nameId: string, body: PatchPersonNameBody) {
-    const profile = await includeProfile(userId, personId);
+    const profile = await this.resolveProfileOrNull(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -214,7 +217,7 @@ export class PersonNameService {
   }
 
   async delete(userId: string, personId: string, nameId: string) {
-    const profile = await includeProfile(userId, personId);
+    const profile = await this.resolveProfileOrNull(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
@@ -235,7 +238,7 @@ export class PersonNameService {
   }
 
   async setPrimary(userId: string, personId: string, nameId: string) {
-    const profile = await includeProfile(userId, personId);
+    const profile = await this.resolveProfileOrNull(userId, personId);
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }

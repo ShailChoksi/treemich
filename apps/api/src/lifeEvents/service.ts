@@ -23,6 +23,7 @@ import {
   type PartialDateParts
 } from "./dateValue.js";
 import { computePersonLifeEventFindings } from "./personLifeEventValidation.js";
+import type { ProfileResolver } from "../people/profileResolver.js";
 
 const isoFromLifeEventRow = (event: Pick<LifeEvent, "year" | "month" | "day">) =>
   partialDateToIsoString({
@@ -44,16 +45,17 @@ export type LifeEventWithRelations = Prisma.LifeEventGetPayload<{
 }>;
 
 export class LifeEventService {
+  constructor(private readonly profileResolver: ProfileResolver) {}
+
   private async getPersonProfile(userId: string, personId: string) {
-    return (
-      (await prisma.personProfile.findFirst({ where: { userId, id: personId } })) ??
-      (
-        await prisma.personExternalIdentity.findFirst({
-          where: { userId, providerPersonId: personId },
-          include: { person: true }
-        })
-      )?.person
-    );
+    try {
+      return await this.profileResolver.resolveProfile(userId, personId);
+    } catch (error) {
+      if (error instanceof HttpNotFoundError) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   private normalizeText(value: string | null | undefined): string | null {
