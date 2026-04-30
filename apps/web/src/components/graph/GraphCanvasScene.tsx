@@ -4,11 +4,21 @@
 
 import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, invalidate, type RootState, useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { MOUSE, PerspectiveCamera, Vector3 } from "three";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import {
+  BufferGeometry,
+  Float32BufferAttribute,
+  LineBasicMaterial,
+  LineDashedMaterial,
+  LineSegments,
+  MOUSE,
+  PerspectiveCamera,
+  Vector3
+} from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Person } from "../../lib/api";
 import type { AddRelativeSlot } from "./NodeActionButtons";
+import { partitionLinesByStyle, type GraphLine } from "./graphRelationshipLines";
 import type { GraphVisibilityBucket } from "./graphVisibility";
 import type { NodePosition } from "./layout";
 import type { RelationshipKind } from "./relationshipStyles";
@@ -28,6 +38,65 @@ type VisibleLine = {
 type DisplayPerson = {
   person: Person;
   displayPosition: NodePosition;
+};
+
+const TwoPointLineSegmentsBatch = ({
+  lines,
+  relationshipStyleByKind
+}: {
+  lines: GraphLine[];
+  relationshipStyleByKind: Record<RelationshipKind, { color: string; opacity: number }>;
+}) => {
+  const lineSegments = useMemo(() => {
+    const positions = new Float32Array(lines.length * 2 * 3);
+    lines.forEach((line, lineIndex) => {
+      const first = line.points[0];
+      const second = line.points[1];
+      if (!first || !second) {
+        return;
+      }
+      const offset = lineIndex * 6;
+      positions[offset] = first[0];
+      positions[offset + 1] = first[1];
+      positions[offset + 2] = first[2];
+      positions[offset + 3] = second[0];
+      positions[offset + 4] = second[1];
+      positions[offset + 5] = second[2];
+    });
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    const firstLine = lines[0];
+    const fallbackStyle = relationshipStyleByKind.PARENT_CHILD;
+    const style = firstLine ? relationshipStyleByKind[firstLine.kind] : fallbackStyle;
+    const materialOptions = {
+      color: style.color,
+      transparent: true,
+      opacity: firstLine?.opacity ?? style.opacity
+    };
+    const material = firstLine?.dashed
+      ? new LineDashedMaterial({ ...materialOptions, dashSize: 0.35, gapSize: 0.18, scale: 2.5 })
+      : new LineBasicMaterial(materialOptions);
+    const segments = new LineSegments(geometry, material);
+    if (firstLine?.dashed) {
+      segments.computeLineDistances();
+    }
+    return segments;
+  }, [lines, relationshipStyleByKind]);
+
+  useEffect(
+    () => () => {
+      lineSegments.geometry.dispose();
+      const material = lineSegments.material;
+      if (Array.isArray(material)) {
+        material.forEach((item) => item.dispose());
+      } else {
+        material.dispose();
+      }
+    },
+    [lineSegments]
+  );
+
+  return <primitive object={lineSegments} />;
 };
 
 const orbitControlMouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN } as const;
@@ -104,6 +173,10 @@ export const GraphCanvasScene = ({
   onThumbnailProgress
 }: Props) => {
   const hasRestoredCameraRef = useRef(false);
+  const partitionedLines = useMemo(
+    () => partitionLinesByStyle(visibleRelationshipLines),
+    [visibleRelationshipLines]
+  );
   const handleNodeHover = useCallback(
     (personId: string, hovered: boolean) => {
       setHoveredPersonId((current) => {
@@ -203,7 +276,14 @@ export const GraphCanvasScene = ({
         onChange={handleOrbitChange}
         onEnd={handleOrbitEnd}
       />
-      {visibleRelationshipLines.map((line) => (
+      {[...partitionedLines.twoPointGroups.entries()].map(([styleKey, lines]) => (
+        <TwoPointLineSegmentsBatch
+          key={styleKey}
+          lines={lines}
+          relationshipStyleByKind={relationshipStyleByKind}
+        />
+      ))}
+      {partitionedLines.trunkLines.map((line) => (
         <Line
           key={line.key}
           points={line.points}

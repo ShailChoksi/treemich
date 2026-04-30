@@ -84,12 +84,39 @@ export const buildMergedParentGroups = ({
 const pedigreeUsesDashedParentLine = (pedigree: RelationshipRecord["childEdgePedigree"]) =>
   pedigree === "ADOPTED" || pedigree === "FOSTER" || pedigree === "STEP";
 
-type GraphLine = {
+export type GraphLine = {
   key: string;
   points: NodePosition[];
   kind: RelationshipKind;
   opacity?: number;
   dashed?: boolean;
+};
+
+export type PartitionedRelationshipLines = {
+  twoPointGroups: Map<string, GraphLine[]>;
+  trunkLines: GraphLine[];
+};
+
+export const relationshipLineStyleKey = (line: GraphLine) =>
+  `${line.kind}:${line.dashed ? "dashed" : "solid"}:${line.opacity ?? "default"}`;
+
+export const partitionLinesByStyle = (lines: GraphLine[]): PartitionedRelationshipLines => {
+  const twoPointGroups = new Map<string, GraphLine[]>();
+  const trunkLines: GraphLine[] = [];
+  for (const line of lines) {
+    if (line.points.length !== 2) {
+      trunkLines.push(line);
+      continue;
+    }
+    const styleKey = relationshipLineStyleKey(line);
+    const group = twoPointGroups.get(styleKey);
+    if (group) {
+      group.push(line);
+    } else {
+      twoPointGroups.set(styleKey, [line]);
+    }
+  }
+  return { twoPointGroups, trunkLines };
 };
 
 export const buildVisibleRelationshipLines = ({

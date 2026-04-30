@@ -26,6 +26,7 @@ export type PersonNodeProps = {
   isHovered: boolean;
   isHighlighted: boolean;
   showLabel?: boolean;
+  instancedVisuals?: boolean;
   preloadedTexture?: Texture | null;
   onClick: (personId: string, event: { stopPropagation: () => void }) => void;
   onHover: (personId: string, hovered: boolean) => void;
@@ -184,6 +185,7 @@ const PersonNodeComponent = ({
   isHovered,
   isHighlighted,
   showLabel = true,
+  instancedVisuals = false,
   preloadedTexture,
   onClick,
   onHover
@@ -251,10 +253,12 @@ const PersonNodeComponent = ({
         <primitive object={hitAreaGeometry20} attach="geometry" />
         <primitive object={invisibleHitAreaMaterial} attach="material" />
       </mesh>
-      <mesh scale={scale}>
-        <primitive object={avatarGeometry20} attach="geometry" />
-        <FadeInTextureMaterial texture={texture} />
-      </mesh>
+      {texture || !instancedVisuals ? (
+        <mesh scale={scale}>
+          <primitive object={avatarGeometry20} attach="geometry" />
+          <FadeInTextureMaterial texture={texture} />
+        </mesh>
+      ) : null}
       {!texture ? (
         <Text
           position={[0, 0, 0.03]}
@@ -268,7 +272,7 @@ const PersonNodeComponent = ({
           {resolvePersonInitials(person.name)}
         </Text>
       ) : null}
-      {showRing(isSelected, isHovered, isHighlighted) ? (
+      {!instancedVisuals && showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.02]}>
           <primitive object={ringGeometry} attach="geometry" />
           <primitive object={ringMaterial} attach="material" />
@@ -299,6 +303,7 @@ const PersonNodeFallbackComponent = ({
   isHovered,
   isHighlighted,
   showLabel = true,
+  instancedVisuals = false,
   onClick,
   onHover
 }: PersonNodeProps) => {
@@ -324,10 +329,12 @@ const PersonNodeFallbackComponent = ({
         <primitive object={hitAreaGeometry16} attach="geometry" />
         <primitive object={invisibleHitAreaMaterial} attach="material" />
       </mesh>
-      <mesh scale={scale}>
-        <primitive object={avatarGeometry16} attach="geometry" />
-        <primitive object={ringMaterial} attach="material" />
-      </mesh>
+      {!instancedVisuals ? (
+        <mesh scale={scale}>
+          <primitive object={avatarGeometry16} attach="geometry" />
+          <primitive object={ringMaterial} attach="material" />
+        </mesh>
+      ) : null}
       <Text
         position={[0, 0, 0.03]}
         fontSize={0.42}
@@ -339,7 +346,7 @@ const PersonNodeFallbackComponent = ({
       >
         {resolvePersonInitials(person.name)}
       </Text>
-      {showRing(isSelected, isHovered, isHighlighted) ? (
+      {!instancedVisuals && showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.02]}>
           <primitive object={ringGeometry} attach="geometry" />
           <primitive object={ringMaterial} attach="material" />
@@ -369,6 +376,7 @@ const PersonNodeMinimalComponent = ({
   isSelected,
   isHovered,
   isHighlighted,
+  instancedVisuals = false,
   onClick,
   onHover
 }: PersonNodeProps) => {
@@ -384,10 +392,12 @@ const PersonNodeMinimalComponent = ({
         <primitive object={hitAreaGeometryLite} attach="geometry" />
         <primitive object={invisibleHitAreaMaterial} attach="material" />
       </mesh>
-      <mesh>
-        <primitive object={avatarGeometryLite} attach="geometry" />
-        <primitive object={ringMaterial} attach="material" />
-      </mesh>
+      {!instancedVisuals ? (
+        <mesh>
+          <primitive object={avatarGeometryLite} attach="geometry" />
+          <primitive object={ringMaterial} attach="material" />
+        </mesh>
+      ) : null}
       <Text
         position={[0, 0, 0.02]}
         fontSize={0.32}
@@ -399,7 +409,7 @@ const PersonNodeMinimalComponent = ({
       >
         {resolvePersonInitials(person.name)}
       </Text>
-      {showRing(isSelected, isHovered, isHighlighted) ? (
+      {!instancedVisuals && showRing(isSelected, isHovered, isHighlighted) ? (
         <mesh position={[0, 0, -0.01]}>
           <primitive object={ringGeometryLite} attach="geometry" />
           <primitive object={ringMaterial} attach="material" />

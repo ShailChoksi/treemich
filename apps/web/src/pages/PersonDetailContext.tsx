@@ -971,7 +971,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
             );
           }
           setRelationshipLifeEventsById((current) => ({ ...current, [rid]: next }));
-          await graph.refreshGraphData({ bypassSaveGuard: true });
+          await graph.refreshRelationshipsOnly();
           setStatus("Relationship updated");
           return;
         }
@@ -1021,7 +1021,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       setStatus("Life event saved");
       const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
       setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
-      await graph.refreshGraphData({ bypassSaveGuard: true });
+      await graph.refreshRelationshipsOnly();
     },
     [graph, setStatus]
   );
@@ -1032,7 +1032,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       setStatus("Life event saved");
       const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
       setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
-      await graph.refreshGraphData({ bypassSaveGuard: true });
+      await graph.refreshRelationshipsOnly();
     },
     [graph, setStatus]
   );
@@ -1043,7 +1043,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       setStatus("Life event deleted");
       const ev = await getRelationshipLifeEvents(relationshipId, { includeCitations: true });
       setRelationshipLifeEventsById((current) => ({ ...current, [relationshipId]: ev }));
-      await graph.refreshGraphData({ bypassSaveGuard: true });
+      await graph.refreshRelationshipsOnly();
     },
     [graph, setStatus]
   );

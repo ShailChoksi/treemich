@@ -35,6 +35,7 @@ export const useAnimatedNodeTransforms = ({
 }: UseAnimatedNodeTransformsOptions) => {
   const groupRefsByPersonIdRef = useRef(new Map<string, Group>());
   const targetPositionByPersonIdRef = useRef(new Map<string, Vector3>());
+  const currentPositionByPersonIdRef = useRef(new Map<string, Vector3>());
   const frameTickRef = useRef(0);
 
   useEffect(() => {
@@ -48,6 +49,11 @@ export const useAnimatedNodeTransforms = ({
     for (const [personId] of groupRefsByPersonIdRef.current) {
       if (!nextIds.has(personId)) {
         groupRefsByPersonIdRef.current.delete(personId);
+      }
+    }
+    for (const [personId] of currentPositionByPersonIdRef.current) {
+      if (!nextIds.has(personId)) {
+        currentPositionByPersonIdRef.current.delete(personId);
       }
     }
 
@@ -86,6 +92,7 @@ export const useAnimatedNodeTransforms = ({
       }
       if (group.position.lengthSq() === 0) {
         group.position.copy(target);
+        currentPositionByPersonIdRef.current.set(personId, group.position.clone());
         continue;
       }
       const distanceSq = group.position.distanceToSquared(target);
@@ -93,10 +100,12 @@ export const useAnimatedNodeTransforms = ({
         if (distanceSq > 0) {
           group.position.copy(target);
         }
+        currentPositionByPersonIdRef.current.set(personId, group.position.clone());
         continue;
       }
       const appliedAlpha = reduceWorkForLargeGraph && !isPriorityNode ? Math.min(alpha, 0.22) : alpha;
       group.position.lerp(target, appliedAlpha);
+      currentPositionByPersonIdRef.current.set(personId, group.position.clone());
     }
   });
 
@@ -106,9 +115,11 @@ export const useAnimatedNodeTransforms = ({
       return;
     }
     groupRefsByPersonIdRef.current.set(personId, group);
+    currentPositionByPersonIdRef.current.set(personId, group.position.clone());
   }, []);
 
   return {
+    currentPositionByPersonIdRef,
     registerGroupRef
   };
 };

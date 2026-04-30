@@ -9,6 +9,7 @@ import { NodeActionButtons, type AddRelativeSlot } from "../NodeActionButtons";
 import type { GraphVisibilityBucket } from "../graphVisibility";
 import { PersonNode, PersonNodeFallback, PersonNodeMinimal } from "../PersonNode";
 import type { NodePosition } from "../layout";
+import { NodeInstancedMesh, type NodeRenderTier } from "./NodeInstancedMesh";
 import { useAnimatedNodeTransforms } from "./useAnimatedNodeTransforms";
 
 type DisplayPerson = {
@@ -97,14 +98,68 @@ export const AnimatedNodes = ({
       })),
     [displayVisiblePeople]
   );
-  const { registerGroupRef } = useAnimatedNodeTransforms({
+  const { currentPositionByPersonIdRef, registerGroupRef } = useAnimatedNodeTransforms({
     displayPositions,
     prioritizedPersonIds: prioritizedNodeIds,
     reduceWorkForLargeGraph: largeGraphTierEnabled
   });
+  const peopleByTier = useMemo(() => {
+    const next: Record<NodeRenderTier, DisplayPerson[]> = {
+      detailed: [],
+      thumbnail: [],
+      minimal: []
+    };
+    for (const item of displayVisiblePeople) {
+      const isSelected = selectedPersonId === item.person.id;
+      const isHovered = hoveredPersonId === item.person.id;
+      const isHighlighted = highlightedPersonIds.has(item.person.id);
+      const isPriorityNode =
+        isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(item.person.id);
+      const visibilityBucket = visibilityBucketByPersonId.get(item.person.id) ?? "near";
+      const renderTier = resolveNodeRenderTier({
+        visibilityBucket,
+        isPriorityNode,
+        largeGraphTierEnabled
+      });
+      next[renderTier].push(item);
+    }
+    return next;
+  }, [
+    displayVisiblePeople,
+    highlightedPersonIds,
+    hoveredPersonId,
+    largeGraphTierEnabled,
+    prioritizedNodeIds,
+    selectedPersonId,
+    visibilityBucketByPersonId
+  ]);
 
   return (
     <>
+      <NodeInstancedMesh
+        people={peopleByTier.detailed}
+        currentPositionByPersonIdRef={currentPositionByPersonIdRef}
+        selectedPersonId={selectedPersonId}
+        hoveredPersonId={hoveredPersonId}
+        highlightedPersonIds={highlightedPersonIds}
+        tier="detailed"
+      />
+      <NodeInstancedMesh
+        people={peopleByTier.thumbnail}
+        currentPositionByPersonIdRef={currentPositionByPersonIdRef}
+        selectedPersonId={selectedPersonId}
+        hoveredPersonId={hoveredPersonId}
+        highlightedPersonIds={highlightedPersonIds}
+        tier="thumbnail"
+      />
+      <NodeInstancedMesh
+        people={peopleByTier.minimal}
+        currentPositionByPersonIdRef={currentPositionByPersonIdRef}
+        selectedPersonId={selectedPersonId}
+        hoveredPersonId={hoveredPersonId}
+        highlightedPersonIds={highlightedPersonIds}
+        tier="minimal"
+      />
       {displayVisiblePeople.map(({ person }) => {
         const isSelected = selectedPersonId === person.id;
         const isHovered = hoveredPersonId === person.id;
@@ -128,6 +183,7 @@ export const AnimatedNodes = ({
                 isHovered={isHovered}
                 isHighlighted={isHighlighted}
                 showLabel={false}
+                instancedVisuals
                 onClick={onNodeClick}
                 onHover={onNodeHover}
               />
@@ -140,6 +196,7 @@ export const AnimatedNodes = ({
                     isHovered={isHovered}
                     isHighlighted={isHighlighted}
                     showLabel={showLabel}
+                    instancedVisuals
                     onClick={onNodeClick}
                     onHover={onNodeHover}
                   />
@@ -152,6 +209,7 @@ export const AnimatedNodes = ({
                   isHighlighted={isHighlighted}
                   showLabel={showLabel}
                   preloadedTexture={thumbnailTextures.get(person.id)}
+                  instancedVisuals
                   onClick={onNodeClick}
                   onHover={onNodeHover}
                 />
@@ -163,6 +221,7 @@ export const AnimatedNodes = ({
                 isHovered={isHovered}
                 isHighlighted={isHighlighted}
                 showLabel={showLabel}
+                instancedVisuals
                 onClick={onNodeClick}
                 onHover={onNodeHover}
               />

@@ -1,6 +1,7 @@
 import { filterGraphLayoutTopologyRelationships } from "@treemich/shared";
 import {
   createContext,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -86,6 +87,7 @@ type PeopleGraphDataContextValue = {
   setTreeValidationEngineDisabled: (disabled: boolean) => void;
   refreshGraphData: (options?: RefreshGraphDataOptions) => Promise<void>;
   refreshPeopleOnly: () => Promise<void>;
+  refreshRelationshipsOnly: () => Promise<void>;
   onPreferencesChange: (prefs: Partial<UserPreferences>) => void;
   onSearchIncludeAlternateNamesChange: (next: boolean) => void;
   onPrimaryFamilyUnitChange: (personId: string, unitKey: string | null) => void;
@@ -233,6 +235,14 @@ export const PeopleGraphDataProvider = ({
     setPeople((current) => (samePeopleList(current, sortedPeople) ? current : sortedPeople));
   }, []);
 
+  const refreshRelationshipsOnly = useCallback(async () => {
+    const relationshipsResponse = await getRelationships();
+    const sortedRelationships = sortRelationshipsStable(relationshipsResponse);
+    setRelationships((current) =>
+      sameRelationshipList(current, sortedRelationships) ? current : sortedRelationships
+    );
+  }, []);
+
   const refreshGraphData = useCallback(
     async (options: RefreshGraphDataOptions = {}) => {
       if (!options.bypassSaveGuard && profileDraftDirtyRef.current) {
@@ -255,13 +265,15 @@ export const PeopleGraphDataProvider = ({
         ]);
         const sortedPeople = sortPeopleStable(peopleResponse);
         const sortedRelationships = sortRelationshipsStable(relationshipsResponse);
-        setPeople((current) => (samePeopleList(current, sortedPeople) ? current : sortedPeople));
-        setRelationships((current) =>
-          sameRelationshipList(current, sortedRelationships) ? current : sortedRelationships
-        );
-        setSavedPreferences((current) => current ?? preferencesResponse);
-        setLoadError(null);
-        setDataRevision((revision) => revision + 1);
+        startTransition(() => {
+          setPeople((current) => (samePeopleList(current, sortedPeople) ? current : sortedPeople));
+          setRelationships((current) =>
+            sameRelationshipList(current, sortedRelationships) ? current : sortedRelationships
+          );
+          setSavedPreferences((current) => current ?? preferencesResponse);
+          setLoadError(null);
+          setDataRevision((revision) => revision + 1);
+        });
 
         const nextSelection = resolvePeopleSelection({
           people: sortedPeople,
@@ -667,6 +679,7 @@ export const PeopleGraphDataProvider = ({
       setTreeValidationEngineDisabled,
       refreshGraphData,
       refreshPeopleOnly,
+      refreshRelationshipsOnly,
       onPreferencesChange,
       onSearchIncludeAlternateNamesChange,
       onPrimaryFamilyUnitChange,
@@ -713,6 +726,7 @@ export const PeopleGraphDataProvider = ({
       people,
       refreshGraphData,
       refreshPeopleOnly,
+      refreshRelationshipsOnly,
       relationships,
       savedPreferences,
       savingFamilyId,

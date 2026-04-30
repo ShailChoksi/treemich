@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildVisibleRelationshipLines } from "./graphRelationshipLines";
+import {
+  buildVisibleRelationshipLines,
+  partitionLinesByStyle,
+  type GraphLine
+} from "./graphRelationshipLines";
 import type { RelationshipRecord } from "../../lib/api";
 import type { NodePosition } from "./layout";
 
@@ -124,5 +128,31 @@ describe("buildVisibleRelationshipLines", () => {
       visibleIdSet: new Set(["p1", "c1"])
     });
     expect(lines.find((l) => l.kind === "PARENT_CHILD")?.dashed).toBeUndefined();
+  });
+});
+
+describe("partitionLinesByStyle", () => {
+  it("groups 2-point segments by style and keeps longer trunks separate", () => {
+    const lines: GraphLine[] = [
+      { key: "parent-a", points: [pos(0, 0, 0), pos(1, 0, 0)], kind: "PARENT_CHILD" },
+      { key: "parent-b", points: [pos(1, 0, 0), pos(2, 0, 0)], kind: "PARENT_CHILD" },
+      { key: "adopted", points: [pos(2, 0, 0), pos(3, 0, 0)], kind: "PARENT_CHILD", dashed: true },
+      {
+        key: "trunk",
+        points: [pos(0, 0, 0), pos(0.5, 0, 0), pos(1, 0, 0)],
+        kind: "PARENT_CHILD"
+      }
+    ];
+
+    const partitioned = partitionLinesByStyle(lines);
+
+    expect(partitioned.twoPointGroups.get("PARENT_CHILD:solid:default")?.map((line) => line.key)).toEqual([
+      "parent-a",
+      "parent-b"
+    ]);
+    expect(partitioned.twoPointGroups.get("PARENT_CHILD:dashed:default")?.map((line) => line.key)).toEqual([
+      "adopted"
+    ]);
+    expect(partitioned.trunkLines.map((line) => line.key)).toEqual(["trunk"]);
   });
 });

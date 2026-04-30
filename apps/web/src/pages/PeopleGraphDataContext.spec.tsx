@@ -51,6 +51,9 @@ describe("PeopleGraphDataContext", () => {
       if (method === "POST" && url.includes("/graph/layout")) {
         return jsonResponse({ layoutRevision: "lr1", algorithmVersion: "alg1", positionsByPersonId: {} });
       }
+      if (method === "POST" && url.includes("/people/p1/relationships")) {
+        return jsonResponse({ id: "r2", fromPersonId: "p1", toPersonId: "p2", type: "SIBLING_OF" });
+      }
       if (method === "GET" && url.includes("/tree/validation")) {
         return jsonResponse({ findings: [], engineDisabled: false, persist: false });
       }
@@ -121,5 +124,132 @@ describe("PeopleGraphDataContext", () => {
       )
     ).toBe(true);
     expect(relationships).toEqual([]);
+  });
+
+  it("refreshes only people for the people-only tier", async () => {
+    let graph: ReturnType<typeof usePeopleGraphData> | null = null;
+    const Probe = () => {
+      graph = usePeopleGraphData();
+      return null;
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          ToastProvider,
+          null,
+          createElement(
+            PeopleGraphDataProvider,
+            { immichBaseUrl: null, currentUserName: null },
+            createElement(Probe)
+          )
+        )
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    vi.mocked(globalThis.fetch).mockClear();
+
+    await act(async () => {
+      await graph?.refreshPeopleOnly();
+    });
+
+    const calls = vi.mocked(globalThis.fetch).mock.calls.map(([input, init]) => ({
+      url: typeof input === "string" ? input : input.toString(),
+      method: init?.method ?? "GET"
+    }));
+    expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(true);
+    expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(false);
+    expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(false);
+
+    root.unmount();
+  });
+
+  it("refreshes only relationships for the metadata-only relationship tier", async () => {
+    let graph: ReturnType<typeof usePeopleGraphData> | null = null;
+    const Probe = () => {
+      graph = usePeopleGraphData();
+      return null;
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          ToastProvider,
+          null,
+          createElement(
+            PeopleGraphDataProvider,
+            { immichBaseUrl: null, currentUserName: null },
+            createElement(Probe)
+          )
+        )
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    vi.mocked(globalThis.fetch).mockClear();
+
+    await act(async () => {
+      await graph?.refreshRelationshipsOnly();
+    });
+
+    const calls = vi.mocked(globalThis.fetch).mock.calls.map(([input, init]) => ({
+      url: typeof input === "string" ? input : input.toString(),
+      method: init?.method ?? "GET"
+    }));
+    expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
+    expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(false);
+    expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(false);
+
+    root.unmount();
+  });
+
+  it("uses full layout refresh for structural relationship creation", async () => {
+    let graph: ReturnType<typeof usePeopleGraphData> | null = null;
+    const Probe = () => {
+      graph = usePeopleGraphData();
+      return null;
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          ToastProvider,
+          null,
+          createElement(
+            PeopleGraphDataProvider,
+            { immichBaseUrl: null, currentUserName: null },
+            createElement(Probe)
+          )
+        )
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    vi.mocked(globalThis.fetch).mockClear();
+
+    await act(async () => {
+      await graph?.onCreateRelationship("p1", "p2", "SIBLING_OF");
+      await Promise.resolve();
+    });
+
+    const calls = vi.mocked(globalThis.fetch).mock.calls.map(([input, init]) => ({
+      url: typeof input === "string" ? input : input.toString(),
+      method: init?.method ?? "GET"
+    }));
+    expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(true);
+    expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
+    expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(true);
+
+    root.unmount();
   });
 });
