@@ -64,9 +64,9 @@ export class RelationshipService {
     personId: string,
     db: DbClient = prisma
   ): Promise<PersonProfile> {
-    const resolved = await this.profileResolver.resolveProfile(userId, personId, db);
+    const canonicalPersonId = await this.profileResolver.resolveProfile(userId, personId, db);
     const profile = await db.personProfile.findFirstOrThrow({
-      where: { id: resolved.id, userId }
+      where: { id: canonicalPersonId, userId }
     });
     return profile;
   }

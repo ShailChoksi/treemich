@@ -18,6 +18,7 @@ import type {
 import { prisma } from "../db/client.js";
 import { HttpConflictError, HttpNotFoundError } from "../lifeEvents/errors.js";
 import { resolveDisplayNameForPerson } from "../personNames/service.js";
+import type { ProfileResolver } from "./profileResolver.js";
 
 type DbClient = Prisma.TransactionClient | typeof prisma;
 
@@ -112,7 +113,11 @@ export const personToJson = (
   };
 };
 
-export class PersonService {
+export class PersonService implements ProfileResolver {
+  async resolveProfile(userId: string, personId: string, db: DbClient = prisma): Promise<string> {
+    return this.resolvePersonId(userId, personId, db);
+  }
+
   async resolvePersonId(userId: string, personId: string, db: DbClient = prisma): Promise<string> {
     const direct = await db.personProfile.findFirst({
       where: { id: personId, userId },

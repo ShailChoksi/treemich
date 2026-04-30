@@ -38,7 +38,7 @@ vi.mock("../config/env.js", () => ({
   isProfilePlaceGeocodingEnabled: isProfilePlaceGeocodingEnabledMock
 }));
 
-const mockResolver = { resolveProfile: vi.fn().mockResolvedValue({ id: "pp-1" }) };
+const mockResolver = { resolveProfile: vi.fn().mockResolvedValue("pp-1") };
 
 describe("LifeEventService.syncPersonProfileFieldsToLifeEvents geocoding", () => {
   beforeEach(() => {

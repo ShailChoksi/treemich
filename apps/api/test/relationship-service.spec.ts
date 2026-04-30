@@ -47,7 +47,7 @@ const mockLifeEventService = {
 const mockProfileResolver = {
   resolveProfile: vi.fn().mockImplementation(async (_userId: string, id: string) => {
     if (id === "p1" || id === "p2") {
-      return { id };
+      return id;
     }
     throw new HttpNotFoundError("Person not found");
   })
@@ -61,7 +61,7 @@ describe("RelationshipService", () => {
 
     mockProfileResolver.resolveProfile.mockImplementation(async (_userId: string, id: string) => {
       if (id === "p1" || id === "p2") {
-        return { id };
+        return id;
       }
       throw new HttpNotFoundError("Person not found");
     });

@@ -14,7 +14,7 @@ const mockLifeEventService = {
   getSpouseMarriageDivorceIsoForPairs: vi.fn().mockResolvedValue(new Map())
 };
 
-const mockResolver = { resolveProfile: vi.fn().mockResolvedValue({ id: "pp-1" }) };
+const mockResolver = { resolveProfile: vi.fn().mockResolvedValue("pp-1") };
 
 describe("RelationshipService.listRelationships", () => {
   beforeEach(() => {

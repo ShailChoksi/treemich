@@ -29,7 +29,7 @@ vi.mock("../db/client.js", () => ({
 }));
 
 const mockProfileResolver = {
-  resolveProfile: vi.fn().mockResolvedValue({ id: "pp-1" })
+  resolveProfile: vi.fn().mockResolvedValue("pp-1")
 };
 
 const fullEventRow = (overrides: Record<string, unknown> = {}) =>
@@ -59,7 +59,7 @@ const fullEventRow = (overrides: Record<string, unknown> = {}) =>
 describe("LifeEventService CUSTOM customLabel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProfileResolver.resolveProfile.mockResolvedValue({ id: "pp-1" });
+    mockProfileResolver.resolveProfile.mockResolvedValue("pp-1");
     relationshipFindFirstMock.mockResolvedValue({ id: "rel-1", userId: "u1" });
     prismaLifeEventFindFirstMock.mockReset();
     prismaLifeEventFindFirstMock.mockResolvedValue(null);

@@ -22,22 +22,22 @@ vi.mock("../db/client.js", () => ({
 }));
 
 describe("ResearchTaskService", () => {
-  const personService = {
-    resolvePersonId: vi.fn()
+  const profileResolver = {
+    resolveProfile: vi.fn()
   };
-  const service = new ResearchTaskService(personService as never);
+  const service = new ResearchTaskService(profileResolver as never);
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("resolves Treemich person ids before listing scoped tasks", async () => {
-    personService.resolvePersonId.mockResolvedValue("person-profile-1");
+    profileResolver.resolveProfile.mockResolvedValue("person-profile-1");
     mocks.researchTaskFindMany.mockResolvedValue([]);
 
     await service.list("user-1", "person-profile-1");
 
-    expect(personService.resolvePersonId).toHaveBeenCalledWith("user-1", "person-profile-1");
+    expect(profileResolver.resolveProfile).toHaveBeenCalledWith("user-1", "person-profile-1");
     expect(mocks.researchTaskFindMany).toHaveBeenCalledWith({
       where: {
         userId: "user-1",
@@ -49,7 +49,7 @@ describe("ResearchTaskService", () => {
 
   it("stores canonical Treemich person ids when creating tasks", async () => {
     const now = new Date("2026-01-01T00:00:00.000Z");
-    personService.resolvePersonId.mockResolvedValue("person-profile-1");
+    profileResolver.resolveProfile.mockResolvedValue("person-profile-1");
     mocks.researchTaskCreate.mockResolvedValue({
       id: "task-1",
       title: "Find record",
@@ -83,7 +83,7 @@ describe("ResearchTaskService", () => {
   it("resolves updated person ids and allows clearing assignment", async () => {
     const now = new Date("2026-01-01T00:00:00.000Z");
     mocks.researchTaskFindFirst.mockResolvedValue({ id: "task-1", userId: "user-1" });
-    personService.resolvePersonId.mockResolvedValue("person-profile-2");
+    profileResolver.resolveProfile.mockResolvedValue("person-profile-2");
     mocks.researchTaskUpdate.mockResolvedValue({
       id: "task-1",
       title: "Find record",

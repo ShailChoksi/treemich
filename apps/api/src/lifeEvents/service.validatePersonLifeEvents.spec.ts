@@ -30,7 +30,7 @@ describe("LifeEventService.validatePersonLifeEvents", () => {
   });
 
   it("maps listPersonLifeEvents rows through computePersonLifeEventFindings", async () => {
-    mockProfileResolver.resolveProfile.mockResolvedValueOnce({ id: "pp-1" });
+    mockProfileResolver.resolveProfile.mockResolvedValueOnce("pp-1");
     lifeEventFindManyMock.mockResolvedValueOnce([
       {
         id: "e-birth",
@@ -66,7 +66,7 @@ describe("LifeEventService.validatePersonLifeEvents", () => {
   });
 
   it("returns empty findings when birth and death dates are consistent", async () => {
-    mockProfileResolver.resolveProfile.mockResolvedValueOnce({ id: "pp-1" });
+    mockProfileResolver.resolveProfile.mockResolvedValueOnce("pp-1");
     lifeEventFindManyMock.mockResolvedValueOnce([
       {
         id: "e-birth",

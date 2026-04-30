@@ -75,7 +75,7 @@ export class PersonNameService {
       return [] as ReturnType<typeof personNameToJson>[];
     }
     const rows = await prisma.personName.findMany({
-      where: { personProfileId: profile.id },
+      where: { personProfileId: profile },
       orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }]
     });
     return rows.map(personNameToJson);
@@ -131,14 +131,14 @@ export class PersonNameService {
     }
     if (body.isPrimary) {
       await prisma.personName.updateMany({
-        where: { personProfileId: profile.id, userId },
+        where: { personProfileId: profile, userId },
         data: { isPrimary: false }
       });
     }
     const created = await prisma.personName.create({
       data: {
         userId,
-        personProfileId: profile.id,
+        personProfileId: profile,
         type: body.type as PersonNameType,
         givenName: body.givenName ?? null,
         surname: body.surname ?? null,
@@ -157,7 +157,7 @@ export class PersonNameService {
       throw new HttpNotFoundError("Person profile not found");
     }
     const existing = await prisma.personName.findFirst({
-      where: { id: nameId, personProfileId: profile.id, userId }
+      where: { id: nameId, personProfileId: profile, userId }
     });
     if (!existing) {
       throw new HttpNotFoundError("Name not found");
@@ -166,7 +166,7 @@ export class PersonNameService {
       const data = this.buildPatchInput(body, true);
       await prisma.$transaction([
         prisma.personName.updateMany({
-          where: { personProfileId: profile.id, userId },
+          where: { personProfileId: profile, userId },
           data: { isPrimary: false }
         }),
         prisma.personName.update({
@@ -222,13 +222,13 @@ export class PersonNameService {
       throw new HttpNotFoundError("Person profile not found");
     }
     const existing = await prisma.personName.findFirst({
-      where: { id: nameId, personProfileId: profile.id, userId }
+      where: { id: nameId, personProfileId: profile, userId }
     });
     if (!existing) {
       throw new HttpNotFoundError("Name not found");
     }
     if (existing.isPrimary) {
-      const count = await prisma.personName.count({ where: { personProfileId: profile.id, userId } });
+      const count = await prisma.personName.count({ where: { personProfileId: profile, userId } });
       if (count <= 1) {
         throw new HttpValidationError("Cannot delete the only name record for a person");
       }
@@ -243,14 +243,14 @@ export class PersonNameService {
       throw new HttpNotFoundError("Person profile not found");
     }
     const existing = await prisma.personName.findFirst({
-      where: { id: nameId, personProfileId: profile.id, userId }
+      where: { id: nameId, personProfileId: profile, userId }
     });
     if (!existing) {
       throw new HttpNotFoundError("Name not found");
     }
     await prisma.$transaction([
       prisma.personName.updateMany({
-        where: { personProfileId: profile.id, userId },
+        where: { personProfileId: profile, userId },
         data: { isPrimary: false }
       }),
       prisma.personName.update({ where: { id: nameId }, data: { isPrimary: true } })

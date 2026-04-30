@@ -19,7 +19,6 @@ import { PersonDuplicateService } from "./personDuplicates/service.js";
 import { PersonNameService } from "./personNames/service.js";
 import { EvidenceService } from "./evidence/service.js";
 import { FamilyService } from "./families/service.js";
-import { CanonicalProfileResolver } from "./people/profileResolver.js";
 import { PersonService } from "./people/service.js";
 import { ReportDataService } from "./reports/reportDataService.js";
 import { ResearchTaskService } from "./researchTasks/service.js";
@@ -44,14 +43,13 @@ export type AppServices = {
   reportService?: ReportDataService;
 };
 
-/** Constructs default service instances (shared `LifeEventService` wired into `RelationshipService`). */
+/** Constructs default service instances. */
 export const buildServices = (): AppServices => {
-  const profileResolver = new CanonicalProfileResolver(prisma);
-  const lifeEventService = new LifeEventService(profileResolver);
   const personService = new PersonService();
-  const relationshipService = new RelationshipService(profileResolver, lifeEventService);
+  const lifeEventService = new LifeEventService(personService);
+  const relationshipService = new RelationshipService(personService, lifeEventService);
   return {
-    authService: new AuthService(),
+    authService: new AuthService({ personService }),
     cooccurrenceService: new CooccurrenceService(),
     immichClientFactory: new ImmichClientFactory(),
     personService,
@@ -59,7 +57,7 @@ export const buildServices = (): AppServices => {
     relationshipService,
     familyService: new FamilyService(relationshipService, personService),
     lifeEventService,
-    personNameService: new PersonNameService(profileResolver),
+    personNameService: new PersonNameService(personService),
     researchTaskService: new ResearchTaskService(personService),
     evidenceService: new EvidenceService(),
     validationFindingService: new ValidationFindingService(),

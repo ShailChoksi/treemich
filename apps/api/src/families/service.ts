@@ -2,7 +2,7 @@ import type { CreateFamilyBody, PatchFamilyBody } from "@treemich/shared";
 import { FamilyChildPedigree, type Prisma } from "@prisma/client";
 import { prisma } from "../db/client.js";
 import { HttpNotFoundError, HttpValidationError } from "../lifeEvents/errors.js";
-import type { PersonService } from "../people/service.js";
+import type { ProfileResolver } from "../people/profileResolver.js";
 import type { RelationshipService } from "../relationships/service.js";
 
 type DbClient = Prisma.TransactionClient | typeof prisma;
@@ -35,12 +35,12 @@ export const familyToJson = (row: FamilyWithChildren) => ({
 export class FamilyService {
   constructor(
     private readonly relationshipService: RelationshipService,
-    private readonly personService: PersonService
+    private readonly profileResolver: ProfileResolver
   ) {}
 
   private async ensureProfiles(tx: DbClient, userId: string, personIds: string[]) {
     for (const personId of new Set(personIds)) {
-      await this.personService.resolvePersonId(userId, personId, tx);
+      await this.profileResolver.resolveProfile(userId, personId, tx);
     }
   }
 
