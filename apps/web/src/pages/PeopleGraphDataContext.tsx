@@ -80,6 +80,8 @@ type PeopleGraphDataContextValue = {
   setIsSavingRelationship: (value: boolean) => void;
   setSavingFamilyId: (id: string | null) => void;
   setProfileDraftDirty: (value: boolean) => void;
+  profileDraftDirty: boolean;
+  mergePersonIntoPeople: (person: PersonRecord) => void;
   setSelectedPersonId: (id: string | null) => void;
   setGraphCameraFocusPersonId: (id: string | null) => void;
   setGraphUiSnapshot: (snapshot: GraphUiSnapshot) => void;
@@ -192,6 +194,7 @@ export const PeopleGraphDataProvider = ({
   const lastPersistedSelectionRef = useRef<string | null>(null);
   const layoutRequestIdRef = useRef(0);
   const profileDraftDirtyRef = useRef(false);
+  const [profileDraftDirty, setProfileDraftDirtyState] = useState(false);
   const isSavingProfileRef = useRef(false);
   const isSavingRelationshipRef = useRef(false);
   const savingFamilyIdRef = useRef<string | null>(null);
@@ -229,6 +232,14 @@ export const PeopleGraphDataProvider = ({
 
   const setProfileDraftDirty = useCallback((value: boolean) => {
     profileDraftDirtyRef.current = value;
+    setProfileDraftDirtyState(value);
+  }, []);
+
+  const mergePersonIntoPeople = useCallback((person: PersonRecord) => {
+    setPeople((current) => {
+      const without = current.filter((entry) => entry.id !== person.id);
+      return sortPeopleStable([...without, person]);
+    });
   }, []);
 
   const refreshPeopleOnly = useCallback(async () => {
@@ -347,8 +358,8 @@ export const PeopleGraphDataProvider = ({
   }, [selectedPerson]);
 
   useEffect(() => {
-    profileDraftDirtyRef.current = false;
-  }, [selectedPersonId]);
+    setProfileDraftDirty(false);
+  }, [selectedPersonId, setProfileDraftDirty]);
 
   useEffect(() => {
     const serialized = JSON.stringify(graphUiSnapshot);
@@ -498,7 +509,7 @@ export const PeopleGraphDataProvider = ({
     }
     try {
       await deletePerson(person.id);
-      profileDraftDirtyRef.current = false;
+      setProfileDraftDirty(false);
       selectedPersonIdRef.current = null;
       setSelectedPersonId(null);
       await refreshGraphData();
@@ -680,6 +691,8 @@ export const PeopleGraphDataProvider = ({
       setIsSavingRelationship,
       setSavingFamilyId,
       setProfileDraftDirty,
+      profileDraftDirty,
+      mergePersonIntoPeople,
       setSelectedPersonId,
       setGraphCameraFocusPersonId,
       setGraphUiSnapshot,
@@ -726,6 +739,7 @@ export const PeopleGraphDataProvider = ({
       isSavingRelationship,
       isSavingSearchPreferences,
       loadError,
+      mergePersonIntoPeople,
       onCreateRelationship,
       onDeleteExistingRelationship,
       onDismissSuggestion,
@@ -733,6 +747,7 @@ export const PeopleGraphDataProvider = ({
       onPrimaryFamilyUnitChange,
       onSearchIncludeAlternateNamesChange,
       people,
+      profileDraftDirty,
       refreshGraphData,
       retryGraphData,
       refreshPeopleOnly,

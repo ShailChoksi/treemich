@@ -24,7 +24,6 @@ import { ReportDataService } from "./reports/reportDataService.js";
 import { ResearchTaskService } from "./researchTasks/service.js";
 import { RelationshipService } from "./relationships/service.js";
 import { ValidationFindingService } from "./validation/validationFindingService.js";
-import { prisma } from "./db/client.js";
 
 /** Service container attached to each Fastify instance (`app.services`). */
 export type AppServices = {

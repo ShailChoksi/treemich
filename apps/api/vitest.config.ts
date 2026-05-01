@@ -4,6 +4,15 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.spec.ts", "test/**/*.spec.ts"],
+    /** Cold `import()` of large route graphs can exceed defaults on slow disks (e.g. WSL + `/mnt`). */
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
+    poolOptions: {
+      threads: {
+        maxThreads: 4,
+        minThreads: 1
+      }
+    },
     setupFiles: ["./test/setup-env.ts"],
     coverage: {
       provider: "v8",

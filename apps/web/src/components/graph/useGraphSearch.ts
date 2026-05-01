@@ -27,6 +27,8 @@ type UseGraphSearchOptions = {
   initialSearchTerm?: string;
   initialHighlightedPersonIds?: string[];
   onSearchFallback?: (query: string) => Promise<SearchFallbackResult | null>;
+  /** Called after search submit moves keyboard/graph focus to a person (re-allows camera auto-center). */
+  onSearchFocusCommitted?: () => void;
 };
 
 export const findPersonBySearchTerm = (people: Person[], searchTerm: string) => {
@@ -59,7 +61,8 @@ export const useGraphSearch = ({
   setHoveredPersonId,
   initialSearchTerm = "",
   initialHighlightedPersonIds = [],
-  onSearchFallback
+  onSearchFallback,
+  onSearchFocusCommitted
 }: UseGraphSearchOptions) => {
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
@@ -118,6 +121,7 @@ export const useGraphSearch = ({
         setFocusPersonId(match.id);
         setPinnedPersonId(match.id);
         setHoveredPersonId(match.id);
+        onSearchFocusCommitted?.();
         setSearchFeedback(`Moved ${match.name} into view`);
         return;
       }
@@ -139,6 +143,7 @@ export const useGraphSearch = ({
         setFocusPersonId(firstMatch.personId);
         setPinnedPersonId(firstMatch.personId);
         setHoveredPersonId(firstMatch.personId);
+        onSearchFocusCommitted?.();
 
         const allIds = new Set(fallbackResult.matches.map((m) => m.personId));
         setHighlightedPersonIds(allIds);
@@ -158,6 +163,7 @@ export const useGraphSearch = ({
     [
       clearHighlights,
       onSearchFallback,
+      onSearchFocusCommitted,
       people,
       searchTerm,
       setFocusPersonId,

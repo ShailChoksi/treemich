@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import rateLimit from "@fastify/rate-limit";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const scheduleGedcomExportJobMock = vi.fn();
 
@@ -28,10 +28,14 @@ vi.mock("../auth/request.js", () => ({
 
 describe("export GEDCOM job routes", () => {
   let app: FastifyInstance;
+  let registerExportGedcomJobRoutes: (typeof import("./export-gedcom-jobs.js"))["registerExportGedcomJobRoutes"];
+
+  beforeAll(async () => {
+    ({ registerExportGedcomJobRoutes } = await import("./export-gedcom-jobs.js"));
+  });
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { registerExportGedcomJobRoutes } = await import("./export-gedcom-jobs.js");
     app = Fastify();
     await app.register(registerExportGedcomJobRoutes);
     await app.ready();

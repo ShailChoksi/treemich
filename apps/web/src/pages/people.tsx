@@ -26,10 +26,12 @@ import type {
   PeopleGraph3DViewStateBundle
 } from "../components/peopleGraph3dSceneBundles";
 import { PersonDetailPanel } from "../components/PersonDetailPanel";
+import { ProfileInfoPane } from "../components/profile/ProfileInfoPane";
+import { ProfileWorkspace } from "../components/profile/ProfileWorkspace";
 import { WorkspaceSkeleton } from "../components/WorkspaceSkeleton";
+import { DestructiveConfirmDialog } from "../components/DestructiveConfirmDialog";
 import { PeopleGraphDataProvider, usePeopleGraphData } from "./PeopleGraphDataContext";
 import { PeopleReviewProvider, usePeopleReview } from "./PeopleReviewContext";
-import { usePersonDetail } from "./PersonDetailContext";
 import { PersonDetailProviderTree } from "./PersonDetailProviderTree";
 import { ToastProvider, useToast, type ToastMessage } from "./ToastContext";
 
@@ -74,8 +76,9 @@ const LEFT_PANE_OPEN_STORAGE_KEY = "treemich.leftPaneOpen";
 const CONTEXT_OPEN_STORAGE_KEY = "treemich.contextOpen";
 const MAP_UI_STATE_STORAGE_KEY = "treemich.map.uiState";
 
-type WorkspaceId =
+export type WorkspaceId =
   | "tree"
+  | "profile"
   | "duplicates"
   | "research"
   | "evidence"
@@ -93,6 +96,7 @@ type WorkspaceItem = {
 
 const WORKSPACE_ITEMS: WorkspaceItem[] = [
   { id: "tree", label: "Tree", iconLabel: "TR" },
+  { id: "profile", label: "Profile", iconLabel: "PR" },
   { id: "duplicates", label: "Duplicates", iconLabel: "DQ" },
   { id: "research", label: "Research", iconLabel: "RS" },
   { id: "evidence", label: "Evidence", iconLabel: "EV" },
@@ -325,7 +329,15 @@ const DetailContainer = memo(
         >
           <PersonDetailPanel />
         </div>
-        {activeWorkspace !== "tree" ? (
+        {activeWorkspace === "profile" ? (
+          <div
+            className="workspace-profile-info-host"
+            hidden={!contextPaneOpen}
+            aria-hidden={!contextPaneOpen}
+          >
+            <ProfileInfoPane />
+          </div>
+        ) : activeWorkspace !== "tree" ? (
           <section
             className="card stack workspace-context-placeholder"
             hidden={!contextPaneOpen}
@@ -356,7 +368,6 @@ export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Pro
 
 const PeoplePageShell = () => {
   const graph = usePeopleGraphData();
-  const detail = usePersonDetail();
   const review = usePeopleReview();
   const { toasts } = useToast();
   const [graphRenderLimitSaveState, setGraphRenderLimitSaveState] = useState<
@@ -386,7 +397,13 @@ const PeoplePageShell = () => {
   });
   const [layoutResizeSignal, setLayoutResizeSignal] = useState(0);
   const [showCreatePersonDialog, setShowCreatePersonDialog] = useState(false);
+  const [createPersonDefaults, setCreatePersonDefaults] = useState({
+    defaultGivenName: "",
+    defaultSurname: ""
+  });
   const [isCreatingPerson, setIsCreatingPerson] = useState(false);
+  const [workspaceDiscardOpen, setWorkspaceDiscardOpen] = useState(false);
+  const pendingWorkspaceAfterDiscardRef = useRef<WorkspaceId | null>(null);
   const [mapUiSnapshot, setMapUiSnapshot] = useState<MapUiSnapshot>(() =>
     parseMapUiSnapshot(getLocalStorageItem(MAP_UI_STATE_STORAGE_KEY))
   );
@@ -471,6 +488,44 @@ const PeoplePageShell = () => {
     [graph]
   );
 
+  const openCreatePersonDialog = useCallback(
+    (defaults?: { defaultGivenName?: string; defaultSurname?: string }) => {
+      setCreatePersonDefaults({
+        defaultGivenName: defaults?.defaultGivenName ?? "",
+        defaultSurname: defaults?.defaultSurname ?? ""
+      });
+      setShowCreatePersonDialog(true);
+    },
+    []
+  );
+
+  const requestWorkspaceChange = useCallback(
+    (next: WorkspaceId) => {
+      if (activeWorkspace === "profile" && graph.profileDraftDirty && next !== "profile") {
+        pendingWorkspaceAfterDiscardRef.current = next;
+        setWorkspaceDiscardOpen(true);
+        return;
+      }
+      setActiveWorkspace(next);
+    },
+    [activeWorkspace, graph.profileDraftDirty]
+  );
+
+  const handleConfirmWorkspaceDiscard = useCallback(async () => {
+    try {
+      await graph.refreshPeopleOnly();
+    } catch {
+      /* ignore */
+    }
+    graph.setProfileDraftDirty(false);
+    const next = pendingWorkspaceAfterDiscardRef.current;
+    pendingWorkspaceAfterDiscardRef.current = null;
+    setWorkspaceDiscardOpen(false);
+    if (next) {
+      setActiveWorkspace(next);
+    }
+  }, [graph]);
+
   const getPersonLabelForMap = useCallback(
     (personId: string) => graph.people.find((person) => person.id === personId)?.name ?? personId,
     [graph.people]
@@ -505,6 +560,15 @@ const PeoplePageShell = () => {
   );
 
   const renderSecondaryWorkspace = () => {
+    if (activeWorkspace === "profile") {
+      return (
+        <ProfileWorkspace
+          requestWorkspaceChange={requestWorkspaceChange}
+          onOpenCreatePersonDialog={openCreatePersonDialog}
+        />
+      );
+    }
+
     if (activeWorkspace === "evidence") {
       return (
         <section className="workspace-main-stack workspace-main-stack--evidence">
@@ -680,7 +744,7 @@ const PeoplePageShell = () => {
         activeWorkspace={activeWorkspace}
         leftPaneOpen={leftPaneOpen}
         workspaceButtonRefs={workspaceButtonRefs}
-        onWorkspaceChange={setActiveWorkspace}
+        onWorkspaceChange={requestWorkspaceChange}
         onWorkspaceKeyDown={handleWorkspaceNavKeyDown}
       />
 
@@ -706,7 +770,7 @@ const PeoplePageShell = () => {
           <GraphContainer
             activeWorkspace={activeWorkspace}
             layoutResizeSignal={layoutResizeSignal}
-            onNewPerson={() => setShowCreatePersonDialog(true)}
+            onNewPerson={() => openCreatePersonDialog()}
           />
           <section
             className={`workspace-main-stack workspace-main-stack--places ${
@@ -740,13 +804,11 @@ const PeoplePageShell = () => {
         type="button"
         className="secondary-button workspace-column-toggle workspace-column-toggle--right"
         onClick={() => setContextPaneOpen((current) => !current)}
-        aria-label={contextPaneOpen ? "Collapse person context column" : "Expand person context column"}
-        title={
-          contextPaneOpen ? "Collapse right column (person context)" : "Expand right column (person context)"
-        }
+        aria-label={contextPaneOpen ? "Collapse Info column" : "Expand Info column"}
+        title={contextPaneOpen ? "Collapse right column (Info)" : "Expand right column (Info)"}
       >
         <span className="workspace-column-toggle-hint" aria-hidden="true">
-          Profile
+          Info
         </span>
         <span className="workspace-column-grip" aria-hidden="true">
           ||
@@ -754,9 +816,23 @@ const PeoplePageShell = () => {
       </button>
 
       <DetailContainer activeWorkspace={activeWorkspace} contextPaneOpen={contextPaneOpen} />
+      <DestructiveConfirmDialog
+        open={workspaceDiscardOpen}
+        title="Discard unsaved changes?"
+        description="You have unsaved profile edits on Profile. Discard them and switch workspace?"
+        confirmLabel="Discard"
+        cancelLabel="Cancel"
+        onCancel={() => {
+          pendingWorkspaceAfterDiscardRef.current = null;
+          setWorkspaceDiscardOpen(false);
+        }}
+        onConfirm={() => void handleConfirmWorkspaceDiscard()}
+      />
       <CreatePersonDialog
         open={showCreatePersonDialog}
         busy={isCreatingPerson}
+        defaultGivenName={createPersonDefaults.defaultGivenName}
+        defaultSurname={createPersonDefaults.defaultSurname}
         onConfirm={handleCreatePerson}
         onCancel={() => setShowCreatePersonDialog(false)}
       />

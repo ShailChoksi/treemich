@@ -17,6 +17,7 @@ type Props = {
   open: boolean;
   title?: string;
   defaultGivenName?: string;
+  defaultSurname?: string;
   busy?: boolean;
   onConfirm: (body: CreatePersonBody) => void | Promise<void>;
   onCancel: () => void;
@@ -34,6 +35,7 @@ export const CreatePersonDialog = ({
   open,
   title = "New Person",
   defaultGivenName = "",
+  defaultSurname = "",
   busy = false,
   onConfirm,
   onCancel
@@ -44,7 +46,7 @@ export const CreatePersonDialog = ({
   const firstInputRef = useRef<HTMLInputElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const [givenName, setGivenName] = useState(defaultGivenName);
-  const [surname, setSurname] = useState("");
+  const [surname, setSurname] = useState(defaultSurname);
   const [gender, setGender] = useState<Gender>("UNKNOWN");
 
   useEffect(() => {
@@ -52,9 +54,9 @@ export const CreatePersonDialog = ({
       return;
     }
     setGivenName(defaultGivenName);
-    setSurname("");
+    setSurname(defaultSurname);
     setGender("UNKNOWN");
-  }, [defaultGivenName, open]);
+  }, [defaultGivenName, defaultSurname, open]);
 
   const getFocusableElements = useCallback(() => {
     const root = dialogRef.current;

@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+/** Opt-in: requires Postgres at `DATABASE_URL` (see file env). Default `npm test` skips this suite. */
+const runLiveGedcomDbRoundTrip = process.env.RUN_LIVE_GEDCOM_E2E === "1";
 import type { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 
@@ -179,7 +182,7 @@ const normalizeUserSnapshot = async (userId: string) => {
   };
 };
 
-describe("GEDCOM live DB round-trip", () => {
+describe.skipIf(!runLiveGedcomDbRoundTrip)("GEDCOM live DB round-trip", () => {
   beforeAll(async () => {
     try {
       const db = await import("../src/db/client.js");

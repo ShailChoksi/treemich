@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import AdmZip from "adm-zip";
 import { HttpConflictError, HttpNotFoundError, HttpValidationError } from "../src/lifeEvents/errors.js";
@@ -155,6 +155,7 @@ vi.mock("../src/db/client.js", () => ({
 
 describe("Treemich API routes", () => {
   let app: FastifyInstance;
+  let buildApp: (typeof import("../src/app.js"))["buildApp"];
   const defaultCooccurrencePreferences = {
     refreshEnabled: true,
     refreshIntervalDays: 7
@@ -342,6 +343,10 @@ describe("Treemich API routes", () => {
     });
   });
 
+  beforeAll(async () => {
+    ({ buildApp } = await import("../src/app.js"));
+  });
+
   beforeEach(async () => {
     const services: AppServices = {
       authService: {
@@ -406,7 +411,6 @@ describe("Treemich API routes", () => {
       } as unknown as AppServices["familyService"]
     };
 
-    const { buildApp } = await import("../src/app.js");
     app = buildApp({ services });
   });
 

@@ -2,6 +2,7 @@
  * @file Graph-related React hook: useGraphCameraControls.
  */
 
+import { invalidate } from "@react-three/fiber";
 import { useCallback } from "react";
 import { Vector3, type PerspectiveCamera } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -52,6 +53,7 @@ export const useGraphCameraControls = ({
       camera.updateProjectionMatrix();
       controls.update();
       lastCameraSampleRef.current.set(position[0], position[1], position[2]);
+      invalidate();
     },
     [cameraRef, lastCameraSampleRef, orbitControlsRef]
   );

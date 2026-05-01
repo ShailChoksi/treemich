@@ -11,9 +11,26 @@ import {
 import { z } from "zod";
 import { getRequiredAuth } from "../auth/request.js";
 
-const querySchema = z.object({
-  q: z.string().trim().min(1).optional()
-});
+const querySchema = z
+  .object({
+    q: z.string().trim().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+    offset: z.coerce.number().int().min(0).optional()
+  })
+  .superRefine((value, ctx) => {
+    if (value.limit != null && (value.q == null || value.q.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "`limit` requires a non-empty `q` search query"
+      });
+    }
+    if (value.offset != null && value.limit == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "`offset` requires `limit`"
+      });
+    }
+  });
 
 const paramsSchema = z.object({
   id: z.string().min(1)
@@ -27,7 +44,18 @@ const identityParamsSchema = z.object({
 export const registerPeopleGetRoute = (app: FastifyInstance) => {
   app.get("/people", async (request) => {
     const auth = getRequiredAuth(request);
-    const { q } = querySchema.parse(request.query);
+    const { q, limit, offset } = querySchema.parse(request.query);
+    if (limit != null && q != null) {
+      const page = await app.services.personService.listSearchPaged(auth.user.id, q, limit, offset ?? 0);
+      const connectedIds = await app.services.relationshipService.getConnectedPersonIds(
+        auth.user.id,
+        page.people.map((person) => person.id)
+      );
+      return {
+        people: page.people.map((person) => ({ ...person, hasRelationship: connectedIds.has(person.id) })),
+        nextOffset: page.nextOffset
+      };
+    }
     const people = await app.services.personService.list(auth.user.id, q);
     const connectedIds = await app.services.relationshipService.getConnectedPersonIds(
       auth.user.id,

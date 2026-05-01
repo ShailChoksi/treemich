@@ -10,7 +10,6 @@ import {
   createPerson,
   searchRelationships,
   type Person,
-  type RelationshipRecord,
   type RelationshipType,
   type UserPreferences
 } from "../lib/api";
@@ -38,7 +37,6 @@ import { GraphLayerControls } from "./graph/GraphLayerControls";
 import { useGraphKeyboardNavigation } from "./graph/useGraphKeyboardNavigation";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { RELATIONSHIP_TYPES } from "../lib/relationshipConstants";
-import type { GraphUiSnapshot } from "../lib/workspaceUiState";
 
 type Props = PeopleGraph3DBundledProps;
 
@@ -185,10 +183,12 @@ const PeopleGraph3DComponent = ({
   const prefsAppliedRef = useRef(false);
   const lastCameraSampleRef = useRef(new Vector3(0, 2, 18));
   const hasInitializedCameraRef = useRef(false);
-  const hasHandledInitialCameraFocusRef = useRef(false);
   const lastAutoCenteredFocusPersonIdRef = useRef<string | null>(null);
   const cameraRef = useRef<PerspectiveCamera | null>(null);
   const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
+  const clearSearchCenterDedupe = useCallback(() => {
+    lastAutoCenteredFocusPersonIdRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!savedPreferences || prefsAppliedRef.current) {
@@ -309,7 +309,8 @@ const PeopleGraph3DComponent = ({
     setHoveredPersonId,
     initialSearchTerm: initialUiState?.searchTerm ?? "",
     initialHighlightedPersonIds: initialUiState?.highlightedPersonIds ?? [],
-    onSearchFallback: handleSearchFallback
+    onSearchFallback: handleSearchFallback,
+    onSearchFocusCommitted: clearSearchCenterDedupe
   });
   const { frameAllNodes, focusPersonById, focusActiveNode, topDownView, nudgeCamera } =
     useGraphCameraControls({
@@ -370,28 +371,40 @@ const PeopleGraph3DComponent = ({
   }, [focusPersonById, focusPersonId, visiblePositionsById]);
 
   useEffect(() => {
-    if (hasInitializedCameraRef.current) {
-      return;
-    }
-    if (initialUiState?.camera) {
-      hasInitializedCameraRef.current = true;
+    if (!hasInitializedCameraRef.current) {
+      if (initialUiState?.camera) {
+        hasInitializedCameraRef.current = true;
+      } else {
+        if (cameraFocusPersonRequest && visiblePositionsById.has(cameraFocusPersonRequest)) {
+          setFocusPersonId(cameraFocusPersonRequest);
+          focusPersonById(cameraFocusPersonRequest);
+          onCameraFocusPersonConsumed();
+          lastAutoCenteredFocusPersonIdRef.current = cameraFocusPersonRequest;
+        } else {
+          frameAllNodes();
+        }
+        hasInitializedCameraRef.current = true;
+      }
       return;
     }
 
-    if (cameraFocusPersonRequest && visiblePositionsById.has(cameraFocusPersonRequest)) {
-      setFocusPersonId(cameraFocusPersonRequest);
-      focusPersonById(cameraFocusPersonRequest);
-      hasHandledInitialCameraFocusRef.current = true;
-      onCameraFocusPersonConsumed();
-    } else {
-      frameAllNodes();
+    if (!cameraFocusPersonRequest) {
+      return;
     }
-    hasInitializedCameraRef.current = true;
+    if (!visiblePositionsById.has(cameraFocusPersonRequest)) {
+      return;
+    }
+    setFocusPersonId(cameraFocusPersonRequest);
+    focusPersonById(cameraFocusPersonRequest);
+    onCameraFocusPersonConsumed();
+    lastAutoCenteredFocusPersonIdRef.current = cameraFocusPersonRequest;
   }, [
     cameraFocusPersonRequest,
     focusPersonById,
     frameAllNodes,
+    initialUiState?.camera,
     onCameraFocusPersonConsumed,
+    setFocusPersonId,
     visiblePositionsById
   ]);
 
@@ -428,19 +441,6 @@ const PeopleGraph3DComponent = ({
     pinnedPersonId,
     searchTerm
   ]);
-
-  useEffect(() => {
-    if (!cameraFocusPersonRequest || hasHandledInitialCameraFocusRef.current) {
-      return;
-    }
-    if (!visiblePositionsById.has(cameraFocusPersonRequest)) {
-      return;
-    }
-    setFocusPersonId(cameraFocusPersonRequest);
-    focusPersonById(cameraFocusPersonRequest);
-    hasHandledInitialCameraFocusRef.current = true;
-    onCameraFocusPersonConsumed();
-  }, [cameraFocusPersonRequest, focusPersonById, onCameraFocusPersonConsumed, visiblePositionsById]);
 
   useEffect(() => {
     if (selectedPersonId) {

@@ -3,8 +3,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PeoplePage } from "./people";
 import type { PeopleGraph3DBundledProps } from "../components/peopleGraph3dSceneBundles";
-import type { PersonRecord, RelationshipRecord } from "../lib/api";
-import type { GraphUiSnapshot, MapUiSnapshot } from "../lib/workspaceUiState";
+import type { MapUiSnapshot } from "../lib/workspaceUiState";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
@@ -88,7 +87,6 @@ const birthEventPayload = {
 
 describe("PeoplePage + life events (integration)", () => {
   const originalFetch = globalThis.fetch;
-  let placesMapCallCount = 0;
   let peopleLoadCount = 0;
   let relationshipsLoadCount = 0;
   let preferencePatchShouldFail = false;
@@ -103,7 +101,6 @@ describe("PeoplePage + life events (integration)", () => {
     latestMapPanelProps = null;
     latestGraphProps = null;
     mapPanelMockPlaces = null;
-    placesMapCallCount = 0;
     peopleLoadCount = 0;
     relationshipsLoadCount = 0;
     preferencePatchShouldFail = false;
@@ -161,6 +158,30 @@ describe("PeoplePage + life events (integration)", () => {
         });
       }
 
+      if (method === "GET" && url.includes("/people?") && url.includes("limit=")) {
+        const parsed = new URL(url, "http://localhost");
+        const offset = Number(parsed.searchParams.get("offset") ?? "0");
+        const page =
+          offset === 0
+            ? [
+                {
+                  id: "p9",
+                  name: "Zed SearchHit",
+                  hasRelationship: false,
+                  birthDate: null,
+                  profile: {
+                    id: "p9",
+                    gender: "UNKNOWN",
+                    givenName: "Zed",
+                    surname: "SearchHit",
+                    nicknames: null
+                  }
+                }
+              ]
+            : [];
+        return jsonResponse({ people: page, nextOffset: null });
+      }
+
       if (method === "GET" && /\/people$/.test(url)) {
         peopleLoadCount += 1;
         if (peopleLoadCount > 1) {
@@ -174,7 +195,20 @@ describe("PeoplePage + life events (integration)", () => {
                 profile: { id: "p1", gender: "UNKNOWN", givenName: "Alex", surname: "Smith", nicknames: null }
               },
               { id: "p2", name: "Blair", hasRelationship: true, birthDate: null },
-              { id: "p3", name: "Charlie Brown", hasRelationship: true, birthDate: null }
+              { id: "p3", name: "Charlie Brown", hasRelationship: true, birthDate: null },
+              {
+                id: "p9",
+                name: "Zed SearchHit",
+                hasRelationship: false,
+                birthDate: null,
+                profile: {
+                  id: "p9",
+                  gender: "UNKNOWN",
+                  givenName: "Zed",
+                  surname: "SearchHit",
+                  nicknames: null
+                }
+              }
             ]
           });
         }
@@ -187,7 +221,20 @@ describe("PeoplePage + life events (integration)", () => {
               birthDate: "1990-01-01",
               profile: { id: "p1", gender: "UNKNOWN", givenName: "Alex", surname: "Smith", nicknames: null }
             },
-            { id: "p2", name: "Blair", hasRelationship: true, birthDate: null }
+            { id: "p2", name: "Blair", hasRelationship: true, birthDate: null },
+            {
+              id: "p9",
+              name: "Zed SearchHit",
+              hasRelationship: false,
+              birthDate: null,
+              profile: {
+                id: "p9",
+                gender: "UNKNOWN",
+                givenName: "Zed",
+                surname: "SearchHit",
+                nicknames: null
+              }
+            }
           ]
         });
       }
@@ -223,7 +270,6 @@ describe("PeoplePage + life events (integration)", () => {
       }
 
       if (method === "GET" && url.includes("/places/map")) {
-        placesMapCallCount += 1;
         return jsonResponse({
           mapUiEnabled: true,
           places: [
@@ -1051,5 +1097,66 @@ describe("PeoplePage + life events (integration)", () => {
       root2.unmount();
     });
     container2.remove();
+  });
+
+  it("opens Profile workspace, shows Info toggle label, and paginated search can select a person", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const profileNav = container.querySelector('[data-workspace="profile"]') as HTMLButtonElement | null;
+    expect(profileNav).toBeTruthy();
+    await act(async () => {
+      profileNav!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector(".profile-workspace-title")?.textContent).toContain("Profile");
+    const toggleHint = container.querySelector(
+      ".workspace-column-toggle--right .workspace-column-toggle-hint"
+    );
+    expect(toggleHint?.textContent).toContain("Info");
+
+    const profileInfoHost = container.querySelector(".workspace-profile-info-host");
+    expect(profileInfoHost).toBeTruthy();
+    expect(profileInfoHost?.querySelector(".profile-info-pane")).toBeTruthy();
+    expect(profileInfoHost?.querySelector(".profile-info-pane h2")?.textContent).toContain("Using Profile");
+
+    const searchInput = container.querySelector(".profile-person-search-input") as HTMLInputElement | null;
+    expect(searchInput).toBeTruthy();
+    await act(async () => {
+      setInputValue(searchInput!, "Ze");
+    });
+
+    for (let i = 0; i < 50; i += 1) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      });
+      if (container.querySelector(".profile-person-search-row")) {
+        break;
+      }
+    }
+
+    const row = container.querySelector(".profile-person-search-row") as HTMLButtonElement | null;
+    expect(row).toBeTruthy();
+    await act(async () => {
+      row!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(latestGraphProps?.graphModel.selectedPersonId).toBe("p9");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
   });
 });

@@ -13,7 +13,8 @@ export const usePersonDetailPanelProps = (): PersonDetailPanelProps => {
   const detail = usePersonDetail();
 
   const onDeleteRelationship = useCallback(
-    async (relationship: RelationshipRecord, _relatedPersonId: string) => {
+    async (relationship: RelationshipRecord, relatedPersonId: string) => {
+      void relatedPersonId;
       await graph.onDeleteExistingRelationship(relationship);
     },
     [graph]

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpNotFoundError } from "../src/lifeEvents/errors.js";
 
 const personProfileFindFirstMock = vi.fn();
@@ -54,6 +54,10 @@ const mockProfileResolver = {
 };
 
 describe("RelationshipService", () => {
+  beforeAll(async () => {
+    await import("../src/relationships/service.js");
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -66,6 +70,7 @@ describe("RelationshipService", () => {
       throw new HttpNotFoundError("Person not found");
     });
 
+    txPersonProfileFindFirstOrThrowMock.mockReset();
     txPersonProfileFindFirstOrThrowMock.mockImplementation(async ({ where }: { where: { id: string } }) => {
       if (where.id === "p1" || where.id === "p2") {
         return { id: where.id, userId: "user-1" };
@@ -73,7 +78,8 @@ describe("RelationshipService", () => {
       throw new Error("Record not found");
     });
 
-    txRelationshipUpsertMock.mockImplementation((args: unknown) => args);
+    txRelationshipUpsertMock.mockReset();
+    txRelationshipUpsertMock.mockImplementation((args: unknown) => Promise.resolve(args));
     familyChildFindManyMock.mockResolvedValue([]);
   });
 

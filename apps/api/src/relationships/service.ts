@@ -9,7 +9,6 @@ import { inverseRelationshipType, type RelationshipType as SharedRelationshipTyp
 import { prisma } from "../db/client.js";
 import type { ImmichClient } from "../integrations/immich/client.js";
 import type { LifeEventService } from "../lifeEvents/service.js";
-import { HttpNotFoundError } from "../lifeEvents/errors.js";
 import type { ProfileResolver } from "../people/profileResolver.js";
 import {
   buildPhotoCooccurrenceResult,

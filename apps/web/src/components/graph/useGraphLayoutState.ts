@@ -8,7 +8,6 @@ import type { Person, PhotoCluster, PhotoCooccurrenceEdge, RelationshipRecord } 
 import { buildParentChildIndex, type GraphLayoutMode, type NodePosition } from "./layout";
 import { relationshipFilterForType, type GraphFilterVisibility } from "./relationshipStyles";
 import type { GraphVisibilityThresholds } from "./graphVisibility";
-import { pickNearest } from "./pickNearest";
 import { useLayoutOrchestrator } from "./useLayoutOrchestrator";
 import { useGraphVisibility } from "./useGraphVisibility";
 

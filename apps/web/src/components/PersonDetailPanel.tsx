@@ -54,6 +54,25 @@ export {
   indexRelationshipsByPersonId
 } from "./personDetail/personDetailHelpers";
 
+const DEFAULT_COLLAPSED_SECTIONS = {
+  profile: false,
+  names: true,
+  relatives: false,
+  inLaws: false,
+  suggestions: false,
+  friends: false,
+  pets: false,
+  editRelationship: false,
+  removeRelationship: false,
+  lifeEvents: true,
+  timeline: true,
+  researchTasks: true,
+  families: true
+} as const;
+
+type SectionCollapseKey = keyof typeof DEFAULT_COLLAPSED_SECTIONS;
+type SectionCollapsedState = Record<SectionCollapseKey, boolean>;
+
 export type PersonDetailPanelProps = {
   person: Person | null;
   people: Person[];
@@ -141,29 +160,13 @@ export type PersonDetailPanelProps = {
     patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "personId">>
   ) => Promise<void>;
   onResearchTaskDelete?: (taskId: string) => Promise<void>;
+  /** When set, merged into collapsed-section state when the selected person changes (true = collapsed). */
+  sectionCollapsedOverrides?: Partial<SectionCollapsedState>;
 };
 
 type Props = PersonDetailPanelProps;
 
 const maxVisibleSuggestions = 5;
-const DEFAULT_COLLAPSED_SECTIONS = {
-  profile: false,
-  names: true,
-  relatives: false,
-  inLaws: false,
-  suggestions: false,
-  friends: false,
-  pets: false,
-  editRelationship: false,
-  removeRelationship: false,
-  lifeEvents: true,
-  timeline: true,
-  researchTasks: true,
-  families: true
-} as const;
-
-type SectionCollapseKey = keyof typeof DEFAULT_COLLAPSED_SECTIONS;
-type SectionCollapsedState = Record<SectionCollapseKey, boolean>;
 
 /**
  * People-page sidebar: profile quick edit, relatives, life events, timeline, names, tasks, validation.
@@ -233,7 +236,8 @@ const PersonDetailPanelComponent = ({
   onFamilyLifeEventDelete,
   onResearchTaskCreate,
   onResearchTaskUpdate,
-  onResearchTaskDelete
+  onResearchTaskDelete,
+  sectionCollapsedOverrides
 }: Props) => {
   const [editingRelationshipKey, setEditingRelationshipKey] = useState<string | null>(null);
   const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>(
@@ -247,8 +251,10 @@ const PersonDetailPanelComponent = ({
   const [isSavingProviderLink, setIsSavingProviderLink] = useState(false);
   const [immichProviderPersonId, setImmichProviderPersonId] = useState("");
   const [visibleSuggestionCount, setVisibleSuggestionCount] = useState(maxVisibleSuggestions);
-  const [collapsedSections, setCollapsedSections] =
-    useState<SectionCollapsedState>(DEFAULT_COLLAPSED_SECTIONS);
+  const [collapsedSections, setCollapsedSections] = useState<SectionCollapsedState>(() => ({
+    ...DEFAULT_COLLAPSED_SECTIONS,
+    ...sectionCollapsedOverrides
+  }));
   const relationshipEditorFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const relationshipDeleteConfirmRef = useRef<HTMLButtonElement | null>(null);
   const relationshipActionReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -392,8 +398,8 @@ const PersonDetailPanelComponent = ({
     setPendingDeleteKey(null);
     setShowDeletePersonConfirm(false);
     setVisibleSuggestionCount(maxVisibleSuggestions);
-    setCollapsedSections(DEFAULT_COLLAPSED_SECTIONS);
-  }, [person?.id]);
+    setCollapsedSections({ ...DEFAULT_COLLAPSED_SECTIONS, ...sectionCollapsedOverrides });
+  }, [person?.id, sectionCollapsedOverrides]);
 
   useEffect(() => {
     if (editingRelationshipKey && !activeRelationship) {

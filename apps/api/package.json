@@ -9,6 +9,7 @@
     "start": "node dist/src/server.js",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:live-gedcom-e2e": "vitest run --config vitest.live-gedcom.config.ts",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
