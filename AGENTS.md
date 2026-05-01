@@ -9,11 +9,11 @@
 
 ### Services overview
 
-| Service | How to run | Port |
-|---------|-----------|------|
-| PostgreSQL 16 | `docker compose up -d postgres` | 54321 (host) → 5432 |
-| API (Fastify + Prisma) | `npm run dev:api` or `npm run dev` | 4000 |
-| Web (Vite + React) | `npm run dev:web` or `npm run dev` | 5173 |
+| Service                | How to run                         | Port                |
+| ---------------------- | ---------------------------------- | ------------------- |
+| PostgreSQL 16          | `docker compose up -d postgres`    | 54321 (host) → 5432 |
+| API (Fastify + Prisma) | `npm run dev:api` or `npm run dev` | 4000                |
+| Web (Vite + React)     | `npm run dev:web` or `npm run dev` | 5173                |
 
 ### Quick start (after update script has run)
 
@@ -25,6 +25,7 @@
 ### Key development commands
 
 See `README.md` "Development Commands" section. Summary:
+
 - `npm run lint` — ESLint + Prettier + TypeScript type-check (all workspaces)
 - `npm run test` — Vitest across shared/api/web packages
 - `npm run build` — production build (shared → api → web)
