@@ -18,6 +18,8 @@ import type {
 import { prisma } from "../db/client.js";
 import { HttpConflictError, HttpNotFoundError } from "../lifeEvents/errors.js";
 import { resolveDisplayNameForPerson } from "../personNames/service.js";
+import { comparePersonSearchSortKeys, personRecordSearchSortKey } from "./personSearchRank.js";
+import type { ProfileResolver } from "./profileResolver.js";
 
 type DbClient = Prisma.TransactionClient | typeof prisma;
 
@@ -112,7 +114,24 @@ export const personToJson = (
   };
 };
 
-export class PersonService {
+const buildPersonListSearchWhere = (userId: string, q: string): Prisma.PersonProfileWhereInput => ({
+  userId,
+  OR: [
+    { displayNameOverride: { contains: q, mode: "insensitive" } },
+    { givenName: { contains: q, mode: "insensitive" } },
+    { surname: { contains: q, mode: "insensitive" } },
+    { nicknames: { contains: q, mode: "insensitive" } },
+    { personNames: { some: { givenName: { contains: q, mode: "insensitive" } } } },
+    { personNames: { some: { surname: { contains: q, mode: "insensitive" } } } },
+    { externalIdentities: { some: { displayName: { contains: q, mode: "insensitive" } } } }
+  ]
+});
+
+export class PersonService implements ProfileResolver {
+  async resolveProfile(userId: string, personId: string, db: DbClient = prisma): Promise<string> {
+    return this.resolvePersonId(userId, personId, db);
+  }
+
   async resolvePersonId(userId: string, personId: string, db: DbClient = prisma): Promise<string> {
     const direct = await db.personProfile.findFirst({
       where: { id: personId, userId },
@@ -136,22 +155,7 @@ export class PersonService {
   async list(userId: string, query?: string): Promise<PersonRecord[]> {
     const q = query?.trim();
     const rows = await prisma.personProfile.findMany({
-      where: {
-        userId,
-        ...(q
-          ? {
-              OR: [
-                { displayNameOverride: { contains: q, mode: "insensitive" } },
-                { givenName: { contains: q, mode: "insensitive" } },
-                { surname: { contains: q, mode: "insensitive" } },
-                { nicknames: { contains: q, mode: "insensitive" } },
-                { personNames: { some: { givenName: { contains: q, mode: "insensitive" } } } },
-                { personNames: { some: { surname: { contains: q, mode: "insensitive" } } } },
-                { externalIdentities: { some: { displayName: { contains: q, mode: "insensitive" } } } }
-              ]
-            }
-          : {})
-      },
+      where: q ? buildPersonListSearchWhere(userId, q) : { userId },
       include: {
         externalIdentities: true,
         thumbnails: { orderBy: { updatedAt: "desc" }, take: 1 }
@@ -160,6 +164,32 @@ export class PersonService {
     });
 
     return rows.map((row) => personToJson(row));
+  }
+
+  /**
+   * Paginated people search for Profile UI. Results are ranked in-memory for deterministic ordering.
+   */
+  async listSearchPaged(
+    userId: string,
+    query: string,
+    limit: number,
+    offset: number
+  ): Promise<{ people: PersonRecord[]; nextOffset: number | null }> {
+    const q = query.trim();
+    const rows = await prisma.personProfile.findMany({
+      where: buildPersonListSearchWhere(userId, q),
+      include: {
+        externalIdentities: true,
+        thumbnails: { orderBy: { updatedAt: "desc" }, take: 1 }
+      }
+    });
+    const records = rows.map((row) => personToJson(row));
+    const sorted = [...records].sort((left, right) =>
+      comparePersonSearchSortKeys(personRecordSearchSortKey(left, q), personRecordSearchSortKey(right, q))
+    );
+    const page = sorted.slice(offset, offset + limit);
+    const nextOffset = offset + page.length < sorted.length ? offset + limit : null;
+    return { people: page, nextOffset };
   }
 
   async get(userId: string, personId: string): Promise<PersonWithIncludes> {

@@ -2,13 +2,16 @@
  * @file Three.js scene layer: AnimatedNodes.tsx.
  */
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import type { Texture } from "three";
 import type { Person } from "../../../lib/api";
+import { useGraphScene } from "../GraphSceneContext";
 import { NodeActionButtons, type AddRelativeSlot } from "../NodeActionButtons";
 import type { GraphVisibilityBucket } from "../graphVisibility";
 import { PersonNode, PersonNodeFallback, PersonNodeMinimal } from "../PersonNode";
 import type { NodePosition } from "../layout";
+import { logThumbnailRenderProfile } from "../thumbnailPerfProfiler";
+import { NodeInstancedMesh, type NodeRenderTier } from "./NodeInstancedMesh";
 import { useAnimatedNodeTransforms } from "./useAnimatedNodeTransforms";
 
 type DisplayPerson = {
@@ -24,8 +27,6 @@ type Props = {
   highlightedPersonIds: Set<string>;
   thumbnailNodeIds: Set<string>;
   thumbnailTextures: Map<string, Texture>;
-  prioritizedNodeIds: Set<string>;
-  visibilityBucketByPersonId: Map<string, GraphVisibilityBucket>;
   onNodeClick: (personId: string, event: { stopPropagation: () => void }) => void;
   onNodeHover: (personId: string, hovered: boolean) => void;
   onNodeActionOpen: (slot: AddRelativeSlot) => void;
@@ -82,12 +83,11 @@ export const AnimatedNodes = ({
   highlightedPersonIds,
   thumbnailNodeIds,
   thumbnailTextures,
-  prioritizedNodeIds,
-  visibilityBucketByPersonId,
   onNodeClick,
   onNodeHover,
   onNodeActionOpen
 }: Props) => {
+  const { prioritizedNodeIds, renderVisibilityBucketByPersonId } = useGraphScene();
   const largeGraphTierEnabled = shouldUseLargeGraphTier(displayVisiblePeople.length);
   const displayPositions = useMemo(
     () =>
@@ -97,20 +97,104 @@ export const AnimatedNodes = ({
       })),
     [displayVisiblePeople]
   );
-  const { registerGroupRef } = useAnimatedNodeTransforms({
+  const { currentPositionByPersonIdRef, registerGroupRef } = useAnimatedNodeTransforms({
     displayPositions,
     prioritizedPersonIds: prioritizedNodeIds,
     reduceWorkForLargeGraph: largeGraphTierEnabled
   });
+  const peopleByTier = useMemo(() => {
+    const next: Record<NodeRenderTier, DisplayPerson[]> = {
+      detailed: [],
+      thumbnail: [],
+      minimal: []
+    };
+    for (const item of displayVisiblePeople) {
+      const isSelected = selectedPersonId === item.person.id;
+      const isHovered = hoveredPersonId === item.person.id;
+      const isHighlighted = highlightedPersonIds.has(item.person.id);
+      const isPriorityNode =
+        isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(item.person.id);
+      const visibilityBucket = renderVisibilityBucketByPersonId.get(item.person.id) ?? "near";
+      const renderTier = resolveNodeRenderTier({
+        visibilityBucket,
+        isPriorityNode,
+        largeGraphTierEnabled
+      });
+      next[renderTier].push(item);
+    }
+    return next;
+  }, [
+    displayVisiblePeople,
+    highlightedPersonIds,
+    hoveredPersonId,
+    largeGraphTierEnabled,
+    prioritizedNodeIds,
+    selectedPersonId,
+    renderVisibilityBucketByPersonId
+  ]);
+
+  useEffect(() => {
+    let nearBucketCount = 0;
+    let midBucketCount = 0;
+    let farBucketCount = 0;
+    let culledBucketCount = 0;
+    for (const item of displayVisiblePeople) {
+      const bucket = renderVisibilityBucketByPersonId.get(item.person.id) ?? "near";
+      if (bucket === "near") {
+        nearBucketCount += 1;
+      } else if (bucket === "mid") {
+        midBucketCount += 1;
+      } else if (bucket === "far") {
+        farBucketCount += 1;
+      } else {
+        culledBucketCount += 1;
+      }
+    }
+    logThumbnailRenderProfile({
+      visiblePeopleCount: displayVisiblePeople.length,
+      detailedNodeCount: peopleByTier.detailed.length,
+      thumbnailTierNodeCount: peopleByTier.thumbnail.length,
+      minimalNodeCount: peopleByTier.minimal.length,
+      visibleThumbnailNodeCount: thumbnailNodeIds.size,
+      nearBucketCount,
+      midBucketCount,
+      farBucketCount,
+      culledBucketCount
+    });
+  }, [displayVisiblePeople, peopleByTier, renderVisibilityBucketByPersonId, thumbnailNodeIds.size]);
 
   return (
     <>
+      <NodeInstancedMesh
+        people={peopleByTier.detailed}
+        currentPositionByPersonIdRef={currentPositionByPersonIdRef}
+        selectedPersonId={selectedPersonId}
+        hoveredPersonId={hoveredPersonId}
+        highlightedPersonIds={highlightedPersonIds}
+        tier="detailed"
+      />
+      <NodeInstancedMesh
+        people={peopleByTier.thumbnail}
+        currentPositionByPersonIdRef={currentPositionByPersonIdRef}
+        selectedPersonId={selectedPersonId}
+        hoveredPersonId={hoveredPersonId}
+        highlightedPersonIds={highlightedPersonIds}
+        tier="thumbnail"
+      />
+      <NodeInstancedMesh
+        people={peopleByTier.minimal}
+        currentPositionByPersonIdRef={currentPositionByPersonIdRef}
+        selectedPersonId={selectedPersonId}
+        hoveredPersonId={hoveredPersonId}
+        highlightedPersonIds={highlightedPersonIds}
+        tier="minimal"
+      />
       {displayVisiblePeople.map(({ person }) => {
         const isSelected = selectedPersonId === person.id;
         const isHovered = hoveredPersonId === person.id;
         const isHighlighted = highlightedPersonIds.has(person.id);
         const isPriorityNode = isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(person.id);
-        const visibilityBucket = visibilityBucketByPersonId.get(person.id) ?? "near";
+        const visibilityBucket = renderVisibilityBucketByPersonId.get(person.id) ?? "near";
         const renderTier = resolveNodeRenderTier({
           visibilityBucket,
           isPriorityNode,
@@ -128,6 +212,7 @@ export const AnimatedNodes = ({
                 isHovered={isHovered}
                 isHighlighted={isHighlighted}
                 showLabel={false}
+                instancedVisuals
                 onClick={onNodeClick}
                 onHover={onNodeHover}
               />
@@ -140,6 +225,7 @@ export const AnimatedNodes = ({
                     isHovered={isHovered}
                     isHighlighted={isHighlighted}
                     showLabel={showLabel}
+                    instancedVisuals
                     onClick={onNodeClick}
                     onHover={onNodeHover}
                   />
@@ -152,6 +238,7 @@ export const AnimatedNodes = ({
                   isHighlighted={isHighlighted}
                   showLabel={showLabel}
                   preloadedTexture={thumbnailTextures.get(person.id)}
+                  instancedVisuals
                   onClick={onNodeClick}
                   onHover={onNodeHover}
                 />
@@ -163,6 +250,7 @@ export const AnimatedNodes = ({
                 isHovered={isHovered}
                 isHighlighted={isHighlighted}
                 showLabel={showLabel}
+                instancedVisuals
                 onClick={onNodeClick}
                 onHover={onNodeHover}
               />

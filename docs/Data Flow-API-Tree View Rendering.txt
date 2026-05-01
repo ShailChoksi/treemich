@@ -1,0 +1,81 @@
+Full audit (performance, files, people.tsx split, gaps): docs/frontend-tree-performance-and-people-page.md
+
+---
+Pipeline summary:
+
+1. App.tsx mounts → calls getCurrentUser()
+2. App.tsx renders <PeoplePage> (lazy-loaded)
+3. PeoplePage mounts → calls refreshGraphData()
+   
+   refreshGraphData():
+   a. GET /api/people → sorted PersonRecord[]
+   b. GET /api/relationships → paginated RelationshipRecord[] (cursor-based, 1000/page)
+   c. GET /api/user/preferences → UserPreferences
+   d. POST /api/graph/layout {
+        people: [{id, name}],
+        relationships: filtered topology edges,
+        viewMode: "family",
+        familyViewStyle: "generationTree",
+        selectedPersonId, primaryFamilyUnitByPersonId
+      }
+      → returns GraphLayoutResponse { positionsByPersonId, layoutRevision, algorithmVersion }
+
+4. GraphContainer → passes data down as props to PeopleGraph3D
+   
+5. PeopleGraph3DComponent (memo):
+   a. Maps people → filteredPeople (by provider filter)
+   b. Maps relationships → filteredRelationships
+   c. Calls useGraphLayoutState({
+        people, relationships,
+        serverPositionsByPersonId (from step 3d),
+        filterVisibility, selectedPersonId, hoveredPersonId,
+        focusPersonId, pinnedPersonId,
+        cameraPosition, renderLimit: 120
+      })
+
+6. useGraphLayoutState internally:
+   a. Filters relationships by layer visibility
+   b. Builds topology revision (for cache key comparison)
+   c. Checks server layout → if complete + matching revision → use server positions
+   d. Otherwise, checks useGraphLayoutWorker:
+      - If >320 people + Worker available → posts to layout.worker.ts → receives positions
+      - Falls back to sync positionPeople() if worker fails
+   e. Sync path: topologyLayoutCacheRef (cap 8) → positionPeople() → cache write
+   f. applies pinned-person offset search
+   g. subtracts focus position → display coordinates
+   h. builds graphBounds from display positions
+   i. runs computeCameraVisibility() → 4 buckets (near/mid/far/culled)
+   j. builds renderVisiblePeople, renderVisibleRelationshipLines
+   k. progressive render: starts at 120, increases by 120 every 150ms
+  
+    Layout algorithm (positionPeople →):
+    - family tree mode: Buchheim tidy tree layout (via familyTreeCore.ts family of files)
+    - Z-axis: generation depth → stacked in Z
+    - Non-connected people: clustered by surname, placed in photo mode positions
+
+7. GraphCanvasScene:
+   a. Creates R3F Canvas with WebGL2 renderer
+   b. Restores persisted UI snapshot (camera position/orientation)
+   c. Renders:
+      - OrbitControls with damping
+      - <Line> for each visible relationship (color/opacity per kind)
+      - <AnimatedNodes> for each visible person
+   d. Starts thumbnail loading: Worker → fetch → decode → createBitmap → texture → cache
+      - Ordered by: renderNearPersonIds → prioritizedNodeIds → nearCameraNodeIds → visibleByDistance
+      - Batches of 5, every 750ms
+   e. useAnimatedNodeTransforms: per-frame lerp of group positions toward target
+      - large graph mode (>280): skips every other frame for non-priority nodes
+      - lerp alpha: 1 - exp(-delta * 9), capped at 0.22 for non-priority in large mode
+
+8. Thumbnail display on nodes:
+   - useThumbnailLoader → seed from module cache
+   - New textures from worker → setCachedTexture + setCachedBitmap + evictToCap
+   - PersonNode: checks cache first → preloadedTexture; if none, fallback TextureLoader
+   - FadeInTextureMaterial: 300ms fade from gray to photo on initial load
+   - Missing thumbnails: show initials (billboarded Text)
+
+9. User interaction re-renders:
+   - Orbit change → updates camera position (throttled 90ms) → useGraphLayoutState recomputeVisibility → scene updates
+   - Node click → set selectedPersonId → detail panel loads via lazy effects
+   - Search → highlights + camera focus
+   - Layout can be server-driven (POST /graph/layout) or local

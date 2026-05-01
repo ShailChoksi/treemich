@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RelationshipService } from "../relationships/service.js";
-import type { PersonService } from "../people/service.js";
+import type { ProfileResolver } from "../people/profileResolver.js";
 
 const { findManyMock } = vi.hoisted(() => ({ findManyMock: vi.fn() }));
 
@@ -16,7 +16,7 @@ const { FamilyService } = await import("./service.js");
 
 describe("FamilyService.findAdoptedChildPersonIds", () => {
   const relationshipService = {} as unknown as RelationshipService;
-  const personService = {} as unknown as PersonService;
+  const profileResolver = {} as unknown as ProfileResolver;
 
   it("returns distinct adopted child ids for matching parents", async () => {
     findManyMock.mockResolvedValueOnce([
@@ -25,7 +25,7 @@ describe("FamilyService.findAdoptedChildPersonIds", () => {
       { childPersonId: "c2" }
     ]);
 
-    const service = new FamilyService(relationshipService, personService);
+    const service = new FamilyService(relationshipService, profileResolver);
     const ids = await service.findAdoptedChildPersonIds("user-1", ["p1", "p2"]);
 
     expect(ids).toEqual(["c1", "c2"]);
@@ -44,7 +44,7 @@ describe("FamilyService.findAdoptedChildPersonIds", () => {
 
   it("returns empty list when no parent ids", async () => {
     findManyMock.mockClear();
-    const service = new FamilyService(relationshipService, personService);
+    const service = new FamilyService(relationshipService, profileResolver);
     const ids = await service.findAdoptedChildPersonIds("user-1", []);
     expect(ids).toEqual([]);
     expect(findManyMock).toHaveBeenCalledTimes(0);
@@ -57,8 +57,8 @@ describe("FamilyService.syncDerivedEdges", () => {
     const relationshipService = {
       upsertRelationship: upsertRelationshipMock
     } as unknown as RelationshipService;
-    const personService = {} as unknown as PersonService;
-    const service = new FamilyService(relationshipService, personService);
+    const profileResolver = {} as unknown as ProfileResolver;
+    const service = new FamilyService(relationshipService, profileResolver);
     const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
     const createMany = vi.fn().mockResolvedValue({ count: 4 });
 

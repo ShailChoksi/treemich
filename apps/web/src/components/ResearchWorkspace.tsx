@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ResearchTaskRecord, ValidationFindingRecord, ValidationFindingStatus } from "../lib/api";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
 import type { Person } from "../lib/api";
@@ -11,6 +11,7 @@ type Props = {
   findingsLoading: boolean;
   validationEngineDisabled: boolean;
   onRefreshTasks: () => Promise<void>;
+  onRefreshFindings: () => Promise<void>;
   onRecomputeFindings: () => Promise<void>;
   onTaskUpdate: (
     taskId: string,
@@ -47,6 +48,7 @@ export const ResearchWorkspace = ({
   findingsLoading,
   validationEngineDisabled,
   onRefreshTasks,
+  onRefreshFindings,
   onRecomputeFindings,
   onTaskUpdate,
   onTaskDelete,
@@ -57,6 +59,15 @@ export const ResearchWorkspace = ({
   const [findingStatusFilter, setFindingStatusFilter] = useState<"ACTIVE" | "ALL">("ACTIVE");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void Promise.resolve(onRefreshTasks()).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : "Could not load research tasks");
+    });
+    void Promise.resolve(onRefreshFindings()).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : "Could not load validation findings");
+    });
+  }, [onRefreshFindings, onRefreshTasks]);
 
   const visibleTasks = useMemo(
     () =>

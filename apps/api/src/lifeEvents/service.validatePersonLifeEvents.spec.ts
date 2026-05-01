@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpNotFoundError } from "./errors.js";
 
-const personProfileFindFirstMock = vi.fn();
-const personProfileFindUniqueMock = vi.fn();
-const personExternalIdentityFindFirstMock = vi.fn().mockResolvedValue(null);
+const mockProfileResolver = {
+  resolveProfile: vi.fn()
+};
+
 const lifeEventFindManyMock = vi.fn();
 
 vi.mock("../db/client.js", () => ({
   prisma: {
-    personProfile: { findFirst: personProfileFindFirstMock, findUnique: personProfileFindUniqueMock },
-    personExternalIdentity: { findFirst: personExternalIdentityFindFirstMock },
     lifeEvent: { findMany: lifeEventFindManyMock }
   }
 }));
@@ -19,11 +19,10 @@ describe("LifeEventService.validatePersonLifeEvents", () => {
   });
 
   it("returns empty findings when the person has no Treemich profile", async () => {
-    personProfileFindFirstMock.mockResolvedValueOnce(null);
-    personProfileFindUniqueMock.mockResolvedValueOnce(null);
+    mockProfileResolver.resolveProfile.mockRejectedValueOnce(new HttpNotFoundError("Person not found"));
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockProfileResolver);
     const result = await service.validatePersonLifeEvents("user-1", "p-missing");
 
     expect(result).toEqual({ findings: [] });
@@ -31,8 +30,7 @@ describe("LifeEventService.validatePersonLifeEvents", () => {
   });
 
   it("maps listPersonLifeEvents rows through computePersonLifeEventFindings", async () => {
-    personProfileFindFirstMock.mockResolvedValueOnce({ id: "pp-1" });
-    personProfileFindUniqueMock.mockResolvedValueOnce({ id: "pp-1" });
+    mockProfileResolver.resolveProfile.mockResolvedValueOnce("pp-1");
     lifeEventFindManyMock.mockResolvedValueOnce([
       {
         id: "e-birth",
@@ -55,7 +53,7 @@ describe("LifeEventService.validatePersonLifeEvents", () => {
     ]);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockProfileResolver);
     const result = await service.validatePersonLifeEvents("user-1", "p1");
 
     expect(result.findings).toHaveLength(1);
@@ -68,8 +66,7 @@ describe("LifeEventService.validatePersonLifeEvents", () => {
   });
 
   it("returns empty findings when birth and death dates are consistent", async () => {
-    personProfileFindFirstMock.mockResolvedValueOnce({ id: "pp-1" });
-    personProfileFindUniqueMock.mockResolvedValueOnce({ id: "pp-1" });
+    mockProfileResolver.resolveProfile.mockResolvedValueOnce("pp-1");
     lifeEventFindManyMock.mockResolvedValueOnce([
       {
         id: "e-birth",
@@ -92,7 +89,7 @@ describe("LifeEventService.validatePersonLifeEvents", () => {
     ]);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockProfileResolver);
     const result = await service.validatePersonLifeEvents("user-1", "p1");
 
     expect(result.findings).toEqual([]);

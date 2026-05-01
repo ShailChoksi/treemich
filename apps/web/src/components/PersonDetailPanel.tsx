@@ -25,7 +25,7 @@ import { LifeEventsSection } from "./personDetail/LifeEventsSection";
 import { PersonNamesSection } from "./personDetail/PersonNamesSection";
 import { PersonTimelineSection } from "./personDetail/PersonTimelineSection";
 import { FamiliesSection } from "./personDetail/FamiliesSection";
-import { ResearchTasksSection } from "./personDetail/ResearchTasksSection";
+import { ConnectedResearchTasksSection, ResearchTasksSection } from "./personDetail/ResearchTasksSection";
 import { SpouseLifeEventsRichPane } from "./personDetail/SpouseLifeEventsRichPane";
 import { computeExtendedFamily, computeInLawFamily } from "./graph/extendedFamily";
 import { inverseRelationshipType } from "./graph/layout";
@@ -34,6 +34,7 @@ import {
   getSuggestionRelationshipLabel,
   type RelationshipSuggestion
 } from "./graph/relationshipSuggestions";
+import { usePersonDetailPanelProps } from "../pages/usePersonDetailPanelProps";
 import { CollapsibleSection } from "./personDetail/CollapsibleSection";
 import {
   buildPrimaryFamilyOptions,
@@ -53,7 +54,26 @@ export {
   indexRelationshipsByPersonId
 } from "./personDetail/personDetailHelpers";
 
-type Props = {
+const DEFAULT_COLLAPSED_SECTIONS = {
+  profile: false,
+  names: true,
+  relatives: false,
+  inLaws: false,
+  suggestions: false,
+  friends: false,
+  pets: false,
+  editRelationship: false,
+  removeRelationship: false,
+  lifeEvents: true,
+  timeline: true,
+  researchTasks: true,
+  families: true
+} as const;
+
+type SectionCollapseKey = keyof typeof DEFAULT_COLLAPSED_SECTIONS;
+type SectionCollapsedState = Record<SectionCollapseKey, boolean>;
+
+export type PersonDetailPanelProps = {
   person: Person | null;
   people: Person[];
   relationships: RelationshipRecord[];
@@ -140,27 +160,13 @@ type Props = {
     patch: Partial<Pick<ResearchTaskRecord, "title" | "status" | "dueDate" | "notes" | "personId">>
   ) => Promise<void>;
   onResearchTaskDelete?: (taskId: string) => Promise<void>;
+  /** When set, merged into collapsed-section state when the selected person changes (true = collapsed). */
+  sectionCollapsedOverrides?: Partial<SectionCollapsedState>;
 };
 
-const maxVisibleSuggestions = 5;
-const DEFAULT_COLLAPSED_SECTIONS = {
-  profile: false,
-  names: true,
-  relatives: false,
-  inLaws: false,
-  suggestions: false,
-  friends: false,
-  pets: false,
-  editRelationship: false,
-  removeRelationship: false,
-  lifeEvents: true,
-  timeline: true,
-  researchTasks: true,
-  families: true
-} as const;
+type Props = PersonDetailPanelProps;
 
-type SectionCollapseKey = keyof typeof DEFAULT_COLLAPSED_SECTIONS;
-type SectionCollapsedState = Record<SectionCollapseKey, boolean>;
+const maxVisibleSuggestions = 5;
 
 /**
  * People-page sidebar: profile quick edit, relatives, life events, timeline, names, tasks, validation.
@@ -230,7 +236,8 @@ const PersonDetailPanelComponent = ({
   onFamilyLifeEventDelete,
   onResearchTaskCreate,
   onResearchTaskUpdate,
-  onResearchTaskDelete
+  onResearchTaskDelete,
+  sectionCollapsedOverrides
 }: Props) => {
   const [editingRelationshipKey, setEditingRelationshipKey] = useState<string | null>(null);
   const [editingRelationshipType, setEditingRelationshipType] = useState<RelationshipType>(
@@ -244,8 +251,10 @@ const PersonDetailPanelComponent = ({
   const [isSavingProviderLink, setIsSavingProviderLink] = useState(false);
   const [immichProviderPersonId, setImmichProviderPersonId] = useState("");
   const [visibleSuggestionCount, setVisibleSuggestionCount] = useState(maxVisibleSuggestions);
-  const [collapsedSections, setCollapsedSections] =
-    useState<SectionCollapsedState>(DEFAULT_COLLAPSED_SECTIONS);
+  const [collapsedSections, setCollapsedSections] = useState<SectionCollapsedState>(() => ({
+    ...DEFAULT_COLLAPSED_SECTIONS,
+    ...sectionCollapsedOverrides
+  }));
   const relationshipEditorFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const relationshipDeleteConfirmRef = useRef<HTMLButtonElement | null>(null);
   const relationshipActionReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -389,8 +398,8 @@ const PersonDetailPanelComponent = ({
     setPendingDeleteKey(null);
     setShowDeletePersonConfirm(false);
     setVisibleSuggestionCount(maxVisibleSuggestions);
-    setCollapsedSections(DEFAULT_COLLAPSED_SECTIONS);
-  }, [person?.id]);
+    setCollapsedSections({ ...DEFAULT_COLLAPSED_SECTIONS, ...sectionCollapsedOverrides });
+  }, [person?.id, sectionCollapsedOverrides]);
 
   useEffect(() => {
     if (editingRelationshipKey && !activeRelationship) {
@@ -823,7 +832,7 @@ const PersonDetailPanelComponent = ({
               <PersonTimelineSection timeline={personTimeline} />
             </CollapsibleSection>
           ) : null}
-          {person && onResearchTaskCreate && onResearchTaskUpdate && onResearchTaskDelete ? (
+          {person ? (
             <CollapsibleSection
               sectionKey="research-tasks"
               title="Research tasks"
@@ -831,14 +840,21 @@ const PersonDetailPanelComponent = ({
               isCollapsed={collapsedSections.researchTasks}
               onToggleCollapsed={() => toggleSectionCollapsed("researchTasks")}
             >
-              <ResearchTasksSection
-                personId={person.id}
-                tasks={researchTasks}
-                disabled={isSavingProfile || isSavingRelationship}
-                onCreate={onResearchTaskCreate}
-                onUpdate={onResearchTaskUpdate}
-                onDelete={onResearchTaskDelete}
-              />
+              {onResearchTaskCreate && onResearchTaskUpdate && onResearchTaskDelete ? (
+                <ResearchTasksSection
+                  personId={person.id}
+                  tasks={researchTasks}
+                  disabled={isSavingProfile || isSavingRelationship}
+                  onCreate={onResearchTaskCreate}
+                  onUpdate={onResearchTaskUpdate}
+                  onDelete={onResearchTaskDelete}
+                />
+              ) : (
+                <ConnectedResearchTasksSection
+                  personId={person.id}
+                  disabled={isSavingProfile || isSavingRelationship}
+                />
+              )}
             </CollapsibleSection>
           ) : null}
           {person && families !== undefined ? (
@@ -1137,5 +1153,10 @@ const PersonDetailPanelComponent = ({
   );
 };
 
-/** Memoized sidebar panel; see `PersonDetailPanelComponent` for the full prop contract. */
-export const PersonDetailPanel = memo(PersonDetailPanelComponent);
+/** Memoized sidebar when props are supplied explicitly (tests, stories). */
+export const PersonDetailPanelWithProps = memo(PersonDetailPanelComponent);
+
+const PersonDetailPanelConnected = () => <PersonDetailPanelWithProps {...usePersonDetailPanelProps()} />;
+
+/** Default people-page sidebar: reads graph + detail context via {@link usePersonDetailPanelProps}. */
+export const PersonDetailPanel = memo(PersonDetailPanelConnected);

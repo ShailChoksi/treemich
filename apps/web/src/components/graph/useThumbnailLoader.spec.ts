@@ -329,6 +329,63 @@ describe("useThumbnailLoader hook", () => {
     }
   });
 
+  it("starts the next successful thumbnail batch without the old 750ms idle delay", async () => {
+    const firstBatchIds = Array.from({ length: 25 }, (_, index) => `person-${index}`);
+    const finalId = "person-25";
+    const peopleIds = [...firstBatchIds, finalId];
+    vi.mocked(loadThumbnailBatch)
+      .mockResolvedValueOnce(
+        firstBatchIds.map((personId) => ({ personId, status: "fulfilled", bitmap: makeFakeBitmap() }))
+      )
+      .mockResolvedValueOnce([{ personId: finalId, status: "fulfilled", bitmap: makeFakeBitmap() }]);
+
+    const Probe = () => {
+      useThumbnailLoader({
+        peopleIds,
+        prioritizedNodeIds: new Set<string>(),
+        renderNearPersonIds: peopleIds,
+        displayVisiblePeople: peopleIds.map((id, i) => ({
+          person: { id },
+          displayPosition: [i * 2, 0, 0] as [number, number, number]
+        })),
+        cameraSampleRef: { current: { x: 0, y: 0, z: 0 } } as unknown as MutableRefObject<Vector3>
+      });
+      return null;
+    };
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+      act(() => {
+        root.render(createElement(Probe));
+      });
+      expect(vi.mocked(loadThumbnailBatch)).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(vi.mocked(loadThumbnailBatch)).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        vi.advanceTimersByTime(160);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(vi.mocked(loadThumbnailBatch)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(loadThumbnailBatch).mock.calls[1]?.[0]).toEqual([
+        { personId: finalId, url: `/api/people/${finalId}/thumbnail` }
+      ]);
+    } finally {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
   it("applies exponential backoff when the worker reports failures", async () => {
     const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);

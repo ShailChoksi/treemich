@@ -39,6 +39,8 @@ vi.mock("../db/client.js", () => ({
   }
 }));
 
+const mockResolver = { resolveProfile: vi.fn().mockResolvedValue("pp-1") };
+
 describe("LifeEventService.createRelationshipLifeEvent duplicate guard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -70,7 +72,7 @@ describe("LifeEventService.createRelationshipLifeEvent duplicate guard", () => {
     lifeEventFindFirstMock.mockResolvedValueOnce({ id: "existing-m" });
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
 
     await expect(
       service.createRelationshipLifeEvent("user-1", "rel-1", {
@@ -97,7 +99,7 @@ describe("LifeEventService.createRelationshipLifeEvent duplicate guard", () => {
     lifeEventFindFirstMock.mockResolvedValueOnce(null);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
 
     await service.createRelationshipLifeEvent("user-1", "rel-1", {
       eventType: "MARRIAGE",

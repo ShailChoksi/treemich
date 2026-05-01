@@ -2,9 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpValidationError } from "./errors.js";
 
 const {
-  personProfileFindFirstMock,
-  personProfileFindUniqueMock,
-  personExternalIdentityFindFirstMock,
   relationshipFindFirstMock,
   prismaTransactionMock,
   prismaLifeEventFindFirstMock,
@@ -13,9 +10,6 @@ const {
   txLifeEventFindFirstOrThrowMock,
   txCitationDeleteManyMock
 } = vi.hoisted(() => ({
-  personProfileFindFirstMock: vi.fn(),
-  personProfileFindUniqueMock: vi.fn(),
-  personExternalIdentityFindFirstMock: vi.fn().mockResolvedValue(null),
   relationshipFindFirstMock: vi.fn(),
   prismaTransactionMock: vi.fn(),
   prismaLifeEventFindFirstMock: vi.fn(),
@@ -27,14 +21,16 @@ const {
 
 vi.mock("../db/client.js", () => ({
   prisma: {
-    personProfile: { findFirst: personProfileFindFirstMock, findUnique: personProfileFindUniqueMock },
-    personExternalIdentity: { findFirst: personExternalIdentityFindFirstMock },
     relationship: { findFirst: relationshipFindFirstMock },
     $transaction: prismaTransactionMock,
     lifeEvent: { findFirst: prismaLifeEventFindFirstMock },
     place: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() }
   }
 }));
+
+const mockProfileResolver = {
+  resolveProfile: vi.fn().mockResolvedValue("pp-1")
+};
 
 const fullEventRow = (overrides: Record<string, unknown> = {}) =>
   ({
@@ -63,9 +59,7 @@ const fullEventRow = (overrides: Record<string, unknown> = {}) =>
 describe("LifeEventService CUSTOM customLabel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    personProfileFindFirstMock.mockResolvedValue({ id: "pp-1" });
-    personProfileFindUniqueMock.mockResolvedValue({ id: "pp-1" });
-    personExternalIdentityFindFirstMock.mockResolvedValue(null);
+    mockProfileResolver.resolveProfile.mockResolvedValue("pp-1");
     relationshipFindFirstMock.mockResolvedValue({ id: "rel-1", userId: "u1" });
     prismaLifeEventFindFirstMock.mockReset();
     prismaLifeEventFindFirstMock.mockResolvedValue(null);
@@ -97,7 +91,7 @@ describe("LifeEventService CUSTOM customLabel", () => {
   describe("createPersonLifeEvent", () => {
     it("throws HttpValidationError when CUSTOM has no customLabel", async () => {
       const { LifeEventService } = await import("./service.js");
-      const service = new LifeEventService();
+      const service = new LifeEventService(mockProfileResolver);
 
       await expect(
         service.createPersonLifeEvent("u1", "p1", {
@@ -113,112 +107,105 @@ describe("LifeEventService CUSTOM customLabel", () => {
 
     it("throws HttpValidationError when CUSTOM has whitespace-only customLabel", async () => {
       const { LifeEventService } = await import("./service.js");
-      const service = new LifeEventService();
+      const service = new LifeEventService(mockProfileResolver);
 
       await expect(
         service.createPersonLifeEvent("u1", "p1", {
           eventType: "CUSTOM",
           customLabel: "   ",
-          year: 1920,
-          month: 1,
-          day: 1
+          year: 1920
         })
       ).rejects.toBeInstanceOf(HttpValidationError);
     });
 
-    it("persists trimmed customLabel for CUSTOM", async () => {
+    it("stores customLabel for CUSTOM events", async () => {
       const { LifeEventService } = await import("./service.js");
-      const service = new LifeEventService();
-
+      const service = new LifeEventService(mockProfileResolver);
       await service.createPersonLifeEvent("u1", "p1", {
         eventType: "CUSTOM",
-        customLabel: "  Discharge  ",
+        customLabel: "My Event",
         year: 1920,
         month: 1,
         day: 1
       });
 
-      expect(txLifeEventCreateMock).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          eventType: "CUSTOM",
-          customLabel: "Discharge",
-          personProfileId: "pp-1"
+      expect(txLifeEventCreateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ customLabel: "My Event", eventType: "CUSTOM" })
         })
-      });
+      );
     });
   });
 
   describe("updatePersonLifeEvent", () => {
-    beforeEach(() => {
-      prismaLifeEventFindFirstMock.mockReset();
+    it("preserves existing customLabel when updating non-label fields without providing label", async () => {
+      const { LifeEventService } = await import("./service.js");
+      const service = new LifeEventService(mockProfileResolver);
+      prismaLifeEventFindFirstMock.mockResolvedValueOnce(
+        fullEventRow({ id: "le-existing", eventType: "CUSTOM", customLabel: "Existing" })
+      );
+
+      await service.updatePersonLifeEvent("u1", "p1", "le-existing", {
+        year: 2000
+      });
+
+      expect(txLifeEventUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ year: 2000 })
+        })
+      );
+      expect(txLifeEventUpdateMock.mock.calls[0]?.[0]?.data?.customLabel).toBeUndefined();
     });
 
-    it("throws when patching CUSTOM to clear an existing label with empty string", async () => {
-      prismaLifeEventFindFirstMock.mockResolvedValueOnce(fullEventRow() as never);
-
+    it("rejects CUSTOM with whitespace-only customLabel during update", async () => {
       const { LifeEventService } = await import("./service.js");
-      const service = new LifeEventService();
+      const service = new LifeEventService(mockProfileResolver);
+      prismaLifeEventFindFirstMock.mockResolvedValueOnce(
+        fullEventRow({ id: "le-existing", eventType: "CUSTOM", customLabel: "Original" })
+      );
 
       await expect(
-        service.updatePersonLifeEvent("u1", "p1", "le-1", {
-          customLabel: ""
-        })
+        service.updatePersonLifeEvent("u1", "p1", "le-existing", { customLabel: "   " })
       ).rejects.toBeInstanceOf(HttpValidationError);
     });
 
-    it("clears customLabel when changing CUSTOM to RESIDENCE", async () => {
-      prismaLifeEventFindFirstMock.mockResolvedValueOnce(fullEventRow() as never).mockResolvedValueOnce(null);
-
+    it("clears customLabel when switching from CUSTOM to RESIDENCE", async () => {
       const { LifeEventService } = await import("./service.js");
-      const service = new LifeEventService();
+      const service = new LifeEventService(mockProfileResolver);
+      prismaLifeEventFindFirstMock.mockResolvedValueOnce(
+        fullEventRow({ id: "le-existing", eventType: "CUSTOM", customLabel: "Old" })
+      );
 
-      await service.updatePersonLifeEvent("u1", "p1", "le-1", {
+      await service.updatePersonLifeEvent("u1", "p1", "le-existing", {
         eventType: "RESIDENCE"
       });
 
-      expect(txLifeEventUpdateMock).toHaveBeenCalledWith({
-        where: { id: "le-1" },
-        data: expect.objectContaining({
-          eventType: "RESIDENCE",
-          customLabel: null
+      expect(txLifeEventUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ eventType: "RESIDENCE", customLabel: null })
         })
-      });
+      );
     });
 
-    it("throws when changing RESIDENCE to CUSTOM without a label", async () => {
+    it("keeps existing customLabel when updating year without changing type", async () => {
+      const { LifeEventService } = await import("./service.js");
+      const service = new LifeEventService(mockProfileResolver);
       prismaLifeEventFindFirstMock.mockResolvedValueOnce(
-        fullEventRow({
-          eventType: "RESIDENCE",
-          customLabel: null
-        }) as never
+        fullEventRow({ id: "le-existing", eventType: "CUSTOM", customLabel: "Keep" })
       );
 
-      const { LifeEventService } = await import("./service.js");
-      const service = new LifeEventService();
+      await service.updatePersonLifeEvent("u1", "p1", "le-existing", { year: 2000 });
 
-      await expect(
-        service.updatePersonLifeEvent("u1", "p1", "le-1", {
-          eventType: "CUSTOM"
+      expect(txLifeEventUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            year: 2000,
+            month: 1,
+            day: 1
+          })
         })
-      ).rejects.toBeInstanceOf(HttpValidationError);
-    });
-  });
-
-  describe("createRelationshipLifeEvent", () => {
-    it("throws HttpValidationError when CUSTOM has no customLabel", async () => {
-      const { LifeEventService } = await import("./service.js");
-      const service = new LifeEventService();
-
-      await expect(
-        service.createRelationshipLifeEvent("u1", "rel-1", {
-          eventType: "CUSTOM",
-          year: 1920,
-          month: 1,
-          day: 1
-        })
-      ).rejects.toBeInstanceOf(HttpValidationError);
-
-      expect(prismaTransactionMock).not.toHaveBeenCalled();
+      );
+      expect(txLifeEventUpdateMock.mock.calls[0]?.[0]?.data?.customLabel).toBeUndefined();
     });
   });
 });

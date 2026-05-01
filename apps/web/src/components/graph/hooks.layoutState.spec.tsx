@@ -522,6 +522,44 @@ describe("useGraphLayoutState", () => {
     container.remove();
   });
 
+  it("uses renderLimit as the actual rendered people target before applying LOD tiers", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root: Root = createRoot(container);
+    let displayCount = 0;
+    let renderCount = 0;
+
+    const people = Array.from({ length: 300 }, (_, index) => ({
+      id: `person-${index}`,
+      name: `Person ${index}`,
+      hasRelationship: true
+    })) as Person[];
+
+    const Probe = () => {
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships: [],
+          cameraPosition: [10_000, 0, 0],
+          renderLimit: 300
+        })
+      );
+      displayCount = state.displayVisiblePeople.length;
+      renderCount = state.renderVisiblePeople.length;
+      return null;
+    };
+
+    act(() => {
+      root.render(createElement(Probe));
+    });
+
+    expect(displayCount).toBe(300);
+    expect(renderCount).toBe(300);
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
   it("reuses render-culling line set for visible line output", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);

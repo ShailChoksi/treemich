@@ -707,7 +707,12 @@ describe("validation findings API helpers", () => {
     expect(globalThis.fetch).toHaveBeenNthCalledWith(
       1,
       "/api/validation/recompute",
-      expect.objectContaining({ method: "POST", credentials: "include" })
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: "{}",
+        headers: expect.objectContaining({ "Content-Type": "application/json" })
+      })
     );
     expect(globalThis.fetch).toHaveBeenNthCalledWith(
       2,
@@ -1032,6 +1037,40 @@ describe("people API helpers", () => {
     expect(String(url)).toContain("q=alice");
   });
 
+  it("searchPeople calls GET /people with q, limit, and offset", async () => {
+    const { searchPeople } = await import("./api");
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ people: [{ id: "p1", name: "A" }], nextOffset: 10 }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const result = await searchPeople({ query: "al", limit: 10, offset: 0 });
+
+    expect(result.people).toEqual([{ id: "p1", name: "A" }]);
+    expect(result.nextOffset).toBe(10);
+    const [[url] = []] = vi.mocked(globalThis.fetch).mock.calls;
+    const u = String(url);
+    expect(u).toContain("/api/people");
+    expect(u).toContain("q=al");
+    expect(u).toContain("limit=10");
+    expect(u).toContain("offset=0");
+  });
+
+  it("searchPeople maps missing nextOffset to null", async () => {
+    const { searchPeople } = await import("./api");
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ people: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const result = await searchPeople({ query: "x", limit: 10, offset: 0 });
+    expect(result.nextOffset).toBeNull();
+  });
+
   it("getPeople returns an empty array when the response omits the people key", async () => {
     const { getPeople } = await import("./api");
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(
@@ -1215,7 +1254,12 @@ describe("people API helpers", () => {
     expect(globalThis.fetch).toHaveBeenNthCalledWith(
       1,
       "/api/people/duplicates/recompute",
-      expect.objectContaining({ method: "POST", credentials: "include" })
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: "{}",
+        headers: expect.objectContaining({ "Content-Type": "application/json" })
+      })
     );
     expect(globalThis.fetch).toHaveBeenNthCalledWith(
       2,

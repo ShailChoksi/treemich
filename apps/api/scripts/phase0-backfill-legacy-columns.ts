@@ -13,13 +13,29 @@ import { config } from "dotenv";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
+import { HttpNotFoundError } from "../src/lifeEvents/errors.js";
 import { LifeEventService } from "../src/lifeEvents/service.js";
+import type { ProfileResolver } from "../src/people/profileResolver.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: join(__dirname, "../../../.env") });
 
 const prisma = new PrismaClient();
-const lifeEvents = new LifeEventService();
+
+const profileResolver: ProfileResolver = {
+  resolveProfile: async (userId, personId) => {
+    const profile = await prisma.personProfile.findFirst({
+      where: { id: personId, userId },
+      select: { id: true }
+    });
+    if (!profile) {
+      throw new HttpNotFoundError("Person not found");
+    }
+    return profile;
+  }
+};
+
+const lifeEvents = new LifeEventService(profileResolver);
 
 async function columnExists(table: string, column: string): Promise<boolean> {
   const rows = await prisma.$queryRaw<{ ok: number }[]>`

@@ -1,6 +1,5 @@
 import {
   FamilyChildPedigree,
-  Gender,
   Prisma,
   RelationshipType,
   type PersonProfile,
@@ -10,6 +9,7 @@ import { inverseRelationshipType, type RelationshipType as SharedRelationshipTyp
 import { prisma } from "../db/client.js";
 import type { ImmichClient } from "../integrations/immich/client.js";
 import type { LifeEventService } from "../lifeEvents/service.js";
+import type { ProfileResolver } from "../people/profileResolver.js";
 import {
   buildPhotoCooccurrenceResult,
   buildPhotoCooccurrenceStats,
@@ -22,7 +22,10 @@ type DbClient = Prisma.TransactionClient | typeof prisma;
 const personIdChunkSize = 500;
 
 export class RelationshipService {
-  constructor(private readonly lifeEventService: LifeEventService) {}
+  constructor(
+    private readonly profileResolver: ProfileResolver,
+    private readonly lifeEventService: LifeEventService
+  ) {}
 
   private readonly photoCooccurrenceCacheTtlMs = 90_000;
   private readonly maxPhotoCooccurrenceCacheEntries = 100;
@@ -55,48 +58,16 @@ export class RelationshipService {
     }
   }
 
-  async upsertProfile(
+  private async resolveProfile(
     userId: string,
     personId: string,
-    profile: {
-      gender?: Gender;
-      givenName?: string | null;
-      surname?: string | null;
-      nicknames?: string | null;
-    },
     db: DbClient = prisma
   ): Promise<PersonProfile> {
-    const existing =
-      (await db.personProfile.findFirst({ where: { id: personId, userId } })) ??
-      (
-        await db.personExternalIdentity.findFirst({
-          where: { userId, providerPersonId: personId },
-          include: { person: true }
-        })
-      )?.person ??
-      null;
-
-    if (existing) {
-      return db.personProfile.update({
-        where: { id: existing.id },
-        data: {
-          ...(profile.gender !== undefined ? { gender: profile.gender } : {}),
-          ...(profile.givenName !== undefined ? { givenName: profile.givenName } : {}),
-          ...(profile.surname !== undefined ? { surname: profile.surname } : {}),
-          ...(profile.nicknames !== undefined ? { nicknames: profile.nicknames } : {})
-        }
-      });
-    }
-
-    return db.personProfile.create({
-      data: {
-        userId,
-        ...(profile.gender !== undefined ? { gender: profile.gender } : {}),
-        ...(profile.givenName !== undefined ? { givenName: profile.givenName } : {}),
-        ...(profile.surname !== undefined ? { surname: profile.surname } : {}),
-        ...(profile.nicknames !== undefined ? { nicknames: profile.nicknames } : {})
-      }
+    const canonicalPersonId = await this.profileResolver.resolveProfile(userId, personId, db);
+    const profile = await db.personProfile.findFirstOrThrow({
+      where: { id: canonicalPersonId, userId }
     });
+    return profile;
   }
 
   async upsertRelationship(
@@ -115,8 +86,8 @@ export class RelationshipService {
       isParentChildEdge && options != null && Object.prototype.hasOwnProperty.call(options, "familyId");
 
     const run = async (tx: DbClient) => {
-      const fromProfile = await this.upsertProfile(userId, fromPersonId, {}, tx);
-      const toProfile = await this.upsertProfile(userId, toPersonId, {}, tx);
+      const fromProfile = await this.resolveProfile(userId, fromPersonId, tx);
+      const toProfile = await this.resolveProfile(userId, toPersonId, tx);
       const canonicalFromPersonId = fromProfile.id;
       const canonicalToPersonId = toProfile.id;
 

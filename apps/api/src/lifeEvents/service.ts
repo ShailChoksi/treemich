@@ -23,6 +23,7 @@ import {
   type PartialDateParts
 } from "./dateValue.js";
 import { computePersonLifeEventFindings } from "./personLifeEventValidation.js";
+import type { ProfileResolver } from "../people/profileResolver.js";
 
 const isoFromLifeEventRow = (event: Pick<LifeEvent, "year" | "month" | "day">) =>
   partialDateToIsoString({
@@ -44,16 +45,17 @@ export type LifeEventWithRelations = Prisma.LifeEventGetPayload<{
 }>;
 
 export class LifeEventService {
+  constructor(private readonly profileResolver: ProfileResolver) {}
+
   private async getPersonProfile(userId: string, personId: string) {
-    return (
-      (await prisma.personProfile.findFirst({ where: { userId, id: personId } })) ??
-      (
-        await prisma.personExternalIdentity.findFirst({
-          where: { userId, providerPersonId: personId },
-          include: { person: true }
-        })
-      )?.person
-    );
+    try {
+      return await this.profileResolver.resolveProfile(userId, personId);
+    } catch (error) {
+      if (error instanceof HttpNotFoundError) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   private normalizeText(value: string | null | undefined): string | null {
@@ -366,7 +368,7 @@ export class LifeEventService {
       return [];
     }
     return prisma.lifeEvent.findMany({
-      where: { userId, personProfileId: profile.id },
+      where: { userId, personProfileId: profile },
       orderBy: [{ year: "asc" }, { month: "asc" }, { day: "asc" }, { id: "asc" }],
       include: {
         place: true,
@@ -385,7 +387,7 @@ export class LifeEventService {
     if (!profile) {
       throw new HttpNotFoundError("Person profile not found");
     }
-    await this.assertNoDuplicatePersonEvent(userId, profile.id, body.eventType);
+    await this.assertNoDuplicatePersonEvent(userId, profile, body.eventType);
 
     const placeId = await this.resolvePlaceId(userId, body.placeId ?? null, body.place ?? null);
     const dateData = this.buildDateData(body);
@@ -398,7 +400,7 @@ export class LifeEventService {
           eventType: body.eventType,
           customLabel,
           ...dateData,
-          personProfileId: profile.id,
+          personProfileId: profile,
           relationshipId: null,
           familyId: null,
           placeId,
@@ -411,7 +413,7 @@ export class LifeEventService {
         include: lifeEventQueryInclude
       });
     })) as LifeEventWithRelations;
-    await this.maybeBackfillBirthPlaceCoordinates(userId, profile.id, {});
+    await this.maybeBackfillBirthPlaceCoordinates(userId, profile, {});
     return createdRow;
   }
 
@@ -426,7 +428,7 @@ export class LifeEventService {
       throw new HttpNotFoundError("Person profile not found");
     }
     const existing = await prisma.lifeEvent.findFirst({
-      where: { id: eventId, userId, personProfileId: profile.id }
+      where: { id: eventId, userId, personProfileId: profile }
     });
     if (!existing) {
       throw new HttpNotFoundError("Life event not found");
@@ -434,7 +436,7 @@ export class LifeEventService {
     const nextType = body.eventType ?? existing.eventType;
     this.assertPersonEventAllowed(nextType);
     if (body.eventType && (body.eventType === "BIRTH" || body.eventType === "DEATH")) {
-      await this.assertNoDuplicatePersonEvent(userId, profile.id, body.eventType, eventId);
+      await this.assertNoDuplicatePersonEvent(userId, profile, body.eventType, eventId);
     }
 
     let placeId: string | null | undefined;
@@ -489,7 +491,7 @@ export class LifeEventService {
         include: lifeEventQueryInclude
       });
     })) as LifeEventWithRelations;
-    await this.maybeBackfillBirthPlaceCoordinates(userId, profile.id, {});
+    await this.maybeBackfillBirthPlaceCoordinates(userId, profile, {});
     return updatedRow;
   }
 
@@ -499,7 +501,7 @@ export class LifeEventService {
       throw new HttpNotFoundError("Person profile not found");
     }
     const deleted = await prisma.lifeEvent.deleteMany({
-      where: { id: eventId, userId, personProfileId: profile.id }
+      where: { id: eventId, userId, personProfileId: profile }
     });
     if (deleted.count === 0) {
       throw new HttpNotFoundError("Life event not found");

@@ -1,6 +1,6 @@
 import type { CreateResearchTaskBody, PatchResearchTaskBody, ResearchTaskRecord } from "@treemich/shared";
 import { prisma } from "../db/client.js";
-import { PersonService } from "../people/service.js";
+import type { ProfileResolver } from "../people/profileResolver.js";
 
 const toJson = (row: {
   id: string;
@@ -23,11 +23,11 @@ const toJson = (row: {
 });
 
 export class ResearchTaskService {
-  constructor(private readonly personService = new PersonService()) {}
+  constructor(private readonly profileResolver: ProfileResolver = /* unused default */ null as never) {}
 
   async list(userId: string, personId?: string): Promise<ResearchTaskRecord[]> {
     const resolvedPersonId = personId
-      ? await this.personService.resolvePersonId(userId, personId)
+      ? await this.profileResolver.resolveProfile(userId, personId)
       : undefined;
     const rows = await prisma.researchTask.findMany({
       where: {
@@ -40,7 +40,7 @@ export class ResearchTaskService {
   }
 
   async create(userId: string, body: CreateResearchTaskBody): Promise<ResearchTaskRecord> {
-    const personId = body.personId ? await this.personService.resolvePersonId(userId, body.personId) : null;
+    const personId = body.personId ? await this.profileResolver.resolveProfile(userId, body.personId) : null;
     const created = await prisma.researchTask.create({
       data: {
         userId,
@@ -65,7 +65,7 @@ export class ResearchTaskService {
     }
     const personId =
       body.personId !== undefined && body.personId !== null
-        ? await this.personService.resolvePersonId(userId, body.personId)
+        ? await this.profileResolver.resolveProfile(userId, body.personId)
         : body.personId;
     const updated = await prisma.researchTask.update({
       where: { id: taskId },

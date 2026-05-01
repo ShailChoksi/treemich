@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { AppServices } from "../services.js";
 
@@ -33,6 +33,7 @@ vi.mock("../db/client.js", () => ({
 
 describe("evidence routes", () => {
   let app: FastifyInstance;
+  let buildApp: (typeof import("../app.js"))["buildApp"];
 
   const authContext = {
     user: {
@@ -96,6 +97,10 @@ describe("evidence routes", () => {
     });
     listRepositoriesMock.mockResolvedValue([]);
     listSourcesMock.mockResolvedValue([]);
+  });
+
+  beforeAll(async () => {
+    ({ buildApp } = await import("../app.js"));
   });
 
   beforeEach(async () => {
@@ -194,7 +199,6 @@ describe("evidence routes", () => {
       } as unknown as AppServices["familyService"]
     };
 
-    const { buildApp } = await import("../app.js");
     app = buildApp({ services });
   });
 

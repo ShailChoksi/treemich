@@ -173,6 +173,41 @@ describe("PersonService", () => {
     });
   });
 
+  describe("resolveProfile", () => {
+    it("delegates to resolvePersonId and returns the canonical id", async () => {
+      mocks.personProfileFindFirst.mockResolvedValueOnce({ id: "pp-1" });
+
+      const { PersonService } = await import("./service.js");
+      const service = new PersonService();
+      const id = await service.resolveProfile("user-1", "pp-1");
+
+      expect(id).toBe("pp-1");
+      expect(mocks.personProfileFindFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "pp-1", userId: "user-1" } })
+      );
+      expect(mocks.personExternalIdentityFindFirst).not.toHaveBeenCalled();
+    });
+
+    it("throws HttpNotFoundError when person does not exist", async () => {
+      mocks.personProfileFindFirst.mockResolvedValue(null);
+
+      const { PersonService } = await import("./service.js");
+      await expect(new PersonService().resolveProfile("user-1", "missing-id")).rejects.toThrow(
+        "Person not found"
+      );
+    });
+
+    it("does not fall back to external identity", async () => {
+      mocks.personProfileFindFirst.mockResolvedValue(null);
+
+      const { PersonService } = await import("./service.js");
+      await expect(new PersonService().resolveProfile("user-1", "immich-abc")).rejects.toThrow(
+        "Person not found"
+      );
+      expect(mocks.personExternalIdentityFindFirst).not.toHaveBeenCalled();
+    });
+  });
+
   describe("get", () => {
     it("returns the person with external identities", async () => {
       mocks.personProfileFindFirst

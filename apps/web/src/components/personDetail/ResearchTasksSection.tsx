@@ -9,6 +9,7 @@ import {
 } from "@treemich/shared";
 import { useMemo, useState } from "react";
 import type { ResearchTaskRecord } from "../../lib/api";
+import { usePeopleReview } from "../../pages/PeopleReviewContext";
 
 type Props = {
   personId: string;
@@ -153,5 +154,25 @@ export const ResearchTasksSection = ({ personId, tasks, disabled, onCreate, onUp
         ))}
       </ul>
     </div>
+  );
+};
+
+export const ConnectedResearchTasksSection = ({
+  personId,
+  disabled
+}: {
+  personId: string;
+  disabled?: boolean;
+}) => {
+  const review = usePeopleReview();
+  return (
+    <ResearchTasksSection
+      personId={personId}
+      tasks={review.researchTasksByPersonId[personId]}
+      disabled={disabled}
+      onCreate={review.handleResearchTaskCreate}
+      onUpdate={review.handleResearchTaskUpdate}
+      onDelete={review.handleResearchTaskDelete}
+    />
   );
 };

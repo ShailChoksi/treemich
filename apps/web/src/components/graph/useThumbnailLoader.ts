@@ -22,12 +22,15 @@ import {
   setCachedBitmap,
   hasCachedValue,
   evictToCap,
+  getCachedBitmapSize,
+  getCachedTextureSize,
   removeCachedTexture
 } from "./thumbnailCache";
+import { logThumbnailLoaderProfile } from "./thumbnailPerfProfiler";
 
 const CAMERA_THUMBNAIL_BATCH = 10;
-const THUMBNAIL_BATCH_SIZE = 5;
-const THUMBNAIL_BATCH_INTERVAL_MS = 750;
+const THUMBNAIL_BATCH_SIZE = 25;
+const THUMBNAIL_BATCH_INTERVAL_MS = 150;
 const CAMERA_SAMPLE_INTERVAL_MS = 140;
 const THUMBNAIL_BACKOFF_BASE_MS = 1000;
 const THUMBNAIL_BACKOFF_MAX_MS = 4000;
@@ -438,6 +441,28 @@ export const useThumbnailLoader = ({
     const loaded = thumbnailLoadOrder.filter((id) => thumbnailNodeIds.has(id) || hasCachedValue(id)).length;
     return { loaded, total };
   }, [thumbnailLoadOrder, thumbnailNodeIds]);
+
+  useEffect(() => {
+    logThumbnailLoaderProfile({
+      requestedIdsCount: thumbnailLoadOrder.length,
+      loadedTextureCount: thumbnailTextures.size,
+      loadedProgressCount: thumbnailProgress.loaded,
+      totalProgressCount: thumbnailProgress.total,
+      textureCacheSize: getCachedTextureSize(),
+      bitmapCacheSize: getCachedBitmapSize(),
+      visiblePeopleCount: displayVisiblePeople.length,
+      nearBucketCount: renderNearPersonIds.length,
+      nearCameraCount: nearCameraNodeIds.length
+    });
+  }, [
+    displayVisiblePeople.length,
+    nearCameraNodeIds.length,
+    renderNearPersonIds.length,
+    thumbnailLoadOrder.length,
+    thumbnailProgress.loaded,
+    thumbnailProgress.total,
+    thumbnailTextures.size
+  ]);
 
   return {
     thumbnailNodeIds,

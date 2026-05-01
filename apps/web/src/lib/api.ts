@@ -340,6 +340,29 @@ export const getPeople = async (query?: string): Promise<Person[]> => {
   return json.people ?? [];
 };
 
+export type SearchPeopleParams = {
+  query: string;
+  limit: number;
+  offset: number;
+};
+
+/** Paginated `GET /people?q=&limit=&offset=` for Profile search (requires non-empty `query`). */
+export const searchPeople = async (
+  params: SearchPeopleParams
+): Promise<{ people: Person[]; nextOffset: number | null }> => {
+  const url = new URL(`${treemichApi}/people`, window.location.href);
+  url.searchParams.set("q", params.query);
+  url.searchParams.set("limit", String(params.limit));
+  url.searchParams.set("offset", String(params.offset));
+  const response = await fetchWithRetry(url.toString(), { cache: "no-store" });
+  await ensureOk(response, `Failed to search people (${response.status})`);
+  const json = (await response.json()) as { people?: Person[]; nextOffset?: number | null };
+  return {
+    people: json.people ?? [],
+    nextOffset: json.nextOffset === undefined || json.nextOffset === null ? null : json.nextOffset
+  };
+};
+
 /** `POST /people` — creates a new Treemich person without requiring an Immich account. */
 export const createPerson = async (body: CreatePersonBody): Promise<Person> => {
   const response = await fetch(
@@ -405,7 +428,11 @@ export const getDuplicateCandidates = async (
 export const recomputeDuplicateCandidates = async (): Promise<PersonDuplicateRecomputeResponse> => {
   const response = await fetch(
     `${treemichApi}/people/duplicates/recompute`,
-    withSession({ method: "POST", headers: { "Content-Type": "application/json" } })
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    })
   );
   await ensureOk(response, "Failed to recompute duplicate candidates");
   return (await response.json()) as PersonDuplicateRecomputeResponse;
@@ -1363,7 +1390,11 @@ export const recomputeValidationFindings = async (): Promise<{
 }> => {
   const response = await fetch(
     `${treemichApi}/validation/recompute`,
-    withSession({ method: "POST", headers: { "Content-Type": "application/json" } })
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    })
   );
   await ensureOk(response, "Failed to recompute validation findings");
   return (await response.json()) as {

@@ -38,6 +38,8 @@ vi.mock("../config/env.js", () => ({
   isProfilePlaceGeocodingEnabled: isProfilePlaceGeocodingEnabledMock
 }));
 
+const mockResolver = { resolveProfile: vi.fn().mockResolvedValue("pp-1") };
+
 describe("LifeEventService.syncPersonProfileFieldsToLifeEvents geocoding", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -94,7 +96,7 @@ describe("LifeEventService.syncPersonProfileFieldsToLifeEvents geocoding", () =>
     vi.stubGlobal("fetch", fetchMock);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     await service.syncPersonProfileFieldsToLifeEvents("user-1", "pp-1", {
       birthCity: "Boston",
       birthCountry: "USA"
@@ -118,7 +120,7 @@ describe("LifeEventService.syncPersonProfileFieldsToLifeEvents geocoding", () =>
     });
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     await service.syncPersonProfileFieldsToLifeEvents("user-1", "pp-1", {
       birthCity: "Paris",
       birthCountry: "FR"
@@ -138,7 +140,7 @@ describe("LifeEventService.syncPersonProfileFieldsToLifeEvents geocoding", () =>
     isProfilePlaceGeocodingEnabledMock.mockReturnValue(false);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     await service.syncPersonProfileFieldsToLifeEvents("user-1", "pp-1", {
       birthCity: "Boston",
       birthCountry: "USA"
@@ -165,7 +167,7 @@ describe("LifeEventService.syncPersonProfileFieldsToLifeEvents geocoding", () =>
     });
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     await service.syncPersonProfileFieldsToLifeEvents("user-1", "pp-1", {
       birthCity: "Boston",
       birthCountry: "USA"
@@ -184,7 +186,7 @@ describe("LifeEventService.syncPersonProfileFieldsToLifeEvents geocoding", () =>
     vi.stubGlobal("fetch", fetchMock);
 
     const { LifeEventService } = await import("./service.js");
-    const service = new LifeEventService();
+    const service = new LifeEventService(mockResolver);
     await expect(
       service.syncPersonProfileFieldsToLifeEvents("user-1", "pp-1", {
         birthCity: "Unknownville",

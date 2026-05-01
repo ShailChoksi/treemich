@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import AdmZip from "adm-zip";
 import { HttpConflictError, HttpNotFoundError, HttpValidationError } from "../src/lifeEvents/errors.js";
@@ -155,10 +155,12 @@ vi.mock("../src/db/client.js", () => ({
 
 describe("Treemich API routes", () => {
   let app: FastifyInstance;
+  let buildApp: (typeof import("../src/app.js"))["buildApp"];
   const defaultCooccurrencePreferences = {
     refreshEnabled: true,
     refreshIntervalDays: 7
   };
+  const defaultGraphRenderLimit = 120;
   const defaultShowSingleFamilyTree = false;
   const authContext = {
     user: {
@@ -341,6 +343,10 @@ describe("Treemich API routes", () => {
     });
   });
 
+  beforeAll(async () => {
+    ({ buildApp } = await import("../src/app.js"));
+  });
+
   beforeEach(async () => {
     const services: AppServices = {
       authService: {
@@ -405,7 +411,6 @@ describe("Treemich API routes", () => {
       } as unknown as AppServices["familyService"]
     };
 
-    const { buildApp } = await import("../src/app.js");
     app = buildApp({ services });
   });
 
@@ -1569,6 +1574,7 @@ describe("Treemich API routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
+        graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
@@ -1598,6 +1604,7 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         familyViewStyle: "centeredRelationshipMap",
+        graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         graphFilterVisibility: {
@@ -1624,6 +1631,7 @@ describe("Treemich API routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
+        graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
@@ -1654,6 +1662,7 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...savedPrefs,
+        graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
@@ -1693,6 +1702,7 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...merged,
+        graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
@@ -1730,7 +1740,35 @@ describe("Treemich API routes", () => {
       const json = response.json();
       expect(json.graphFilterVisibility).toEqual(existingFilters);
       expect(json.familyViewStyle).toBe("hybridTreeList");
+      expect(json.graphRenderLimit).toBe(defaultGraphRenderLimit);
       expect(json.showSingleFamilyTree).toBe(defaultShowSingleFamilyTree);
+    });
+
+    it("persists graph render limit preferences", async () => {
+      const existing = { familyViewStyle: "generationTree" };
+      const merged = { ...existing, graphRenderLimit: 240 };
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: existing });
+      treemichUserUpdateMock.mockResolvedValueOnce({ preferences: merged });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { graphRenderLimit: 240 }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        ...merged,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true
+      });
+      expect(treemichUserUpdateMock).toHaveBeenCalledWith({
+        where: { id: "user-1" },
+        data: { preferences: merged },
+        select: { preferences: true }
+      });
     });
 
     it("persists dismissed suggestion keys alongside existing preferences", async () => {
@@ -1760,6 +1798,7 @@ describe("Treemich API routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
         ...merged,
+        graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
@@ -1804,6 +1843,7 @@ describe("Treemich API routes", () => {
       expect(setResponse.statusCode).toBe(200);
       expect(setResponse.json()).toEqual({
         ...merged,
+        graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
@@ -1827,6 +1867,7 @@ describe("Treemich API routes", () => {
       expect(clearResponse.statusCode).toBe(200);
       expect(clearResponse.json()).toEqual({
         ...cleared,
+        graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
@@ -1862,6 +1903,16 @@ describe("Treemich API routes", () => {
             pets: true
           }
         }
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("rejects graph render limits outside supported bounds", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { graphRenderLimit: 5 }
       });
 
       expect(response.statusCode).toBe(400);

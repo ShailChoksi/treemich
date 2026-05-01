@@ -267,6 +267,10 @@ describe("GEDCOM export/import semantic apply coverage", () => {
       lineLog: []
     });
 
+    const personService = {
+      create: vi.fn(),
+      update: vi.fn()
+    };
     const services = {
       evidenceService: {
         createRepository: vi.fn(),
@@ -274,7 +278,7 @@ describe("GEDCOM export/import semantic apply coverage", () => {
         createMediaObject: vi.fn(),
         createMediaLink: vi.fn()
       },
-      relationshipService: { upsertProfile: vi.fn() },
+      personService,
       lifeEventService: {
         createPersonLifeEvent: vi.fn(),
         createRelationshipLifeEvent: vi.fn(),
@@ -296,7 +300,8 @@ describe("GEDCOM export/import semantic apply coverage", () => {
         })
       ])
     );
-    expect(services.relationshipService.upsertProfile).not.toHaveBeenCalled();
+    expect(personService.create).not.toHaveBeenCalled();
+    expect(personService.update).not.toHaveBeenCalled();
   });
 
   it("creates new people for unmatched INDI rows when unmatchedIndiPolicy is CREATE", async () => {

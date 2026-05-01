@@ -42,13 +42,13 @@ export type AppServices = {
   reportService?: ReportDataService;
 };
 
-/** Constructs default service instances (shared `LifeEventService` wired into `RelationshipService`). */
+/** Constructs default service instances. */
 export const buildServices = (): AppServices => {
-  const lifeEventService = new LifeEventService();
   const personService = new PersonService();
-  const relationshipService = new RelationshipService(lifeEventService);
+  const lifeEventService = new LifeEventService(personService);
+  const relationshipService = new RelationshipService(personService, lifeEventService);
   return {
-    authService: new AuthService(),
+    authService: new AuthService({ personService }),
     cooccurrenceService: new CooccurrenceService(),
     immichClientFactory: new ImmichClientFactory(),
     personService,
@@ -56,7 +56,7 @@ export const buildServices = (): AppServices => {
     relationshipService,
     familyService: new FamilyService(relationshipService, personService),
     lifeEventService,
-    personNameService: new PersonNameService(),
+    personNameService: new PersonNameService(personService),
     researchTaskService: new ResearchTaskService(personService),
     evidenceService: new EvidenceService(),
     validationFindingService: new ValidationFindingService(),
