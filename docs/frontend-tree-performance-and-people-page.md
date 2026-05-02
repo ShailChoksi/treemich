@@ -35,6 +35,7 @@ The tree is **not** DOM/SVG virtualization; it is a **3D scene** of meshes, line
 | `apps/web/src/components/graph/GraphSceneContext.tsx`       | Inner scene context for thumbnail/render LOD data (`peopleIds`, thumbnail cache keys, priority ids, near ids, camera LOD buckets)                                 |
 | `apps/web/src/components/graph/scene/AnimatedNodes.tsx`     | Maps visible people to tiered node groups (detailed / thumbnail / minimal), renders instanced disk/ring geometry plus per-person overlays                         |
 | `apps/web/src/components/graph/scene/NodeInstancedMesh.tsx` | Instanced disk/ring geometry per LOD tier; display-only, no raycasting; uses animated node positions to stay aligned with hit meshes                              |
+| `apps/web/src/components/graph/scene/graphRenderTiers.ts`   | Pure node render-tier policy; keep unit coverage aligned when changing large-graph or thumbnail-tier thresholds                                                   |
 | `apps/web/src/components/graph/PersonNode.tsx`              | Per-person Three content that remains non-instanced: hit mesh, labels, halo, thumbnail texture quad; `memo` on variants                                           |
 
 ### Layout and visibility
@@ -96,7 +97,7 @@ The tree is **not** DOM/SVG virtualization; it is a **3D scene** of meshes, line
 ## 3. Data flow: API → tree (explicit)
 
 1. **`App.tsx`** loads user, lazy-loads **`PeoplePage`**.
-2. **`PeoplePage`** mounts providers: `ToastProvider` → `PeopleGraphDataProvider` → **`PersonDetailProviderTree`** → page shell.
+2. **`PeoplePage`** mounts providers: `ToastProvider` → `PeopleGraphDataProvider` → **`PeopleReviewProvider`** → **`PersonDetailProviderTree`** → page shell.
 3. **`PeopleGraphDataProvider`** on mount calls **`refreshGraphData()`**.
 4. **`refreshGraphData`** (in `PeopleGraphDataContext.tsx`):
    - `Promise.all([ getPeople(), getRelationships(), getUserPreferences().catch(...) ])`
@@ -116,6 +117,32 @@ The tree is **not** DOM/SVG virtualization; it is a **3D scene** of meshes, line
 9. **`GraphCanvasScene`** mounts Canvas, applies **low-level** `initialCameraState` from `PeopleGraph3D` (saved snapshot restore only — no competing policy vs `useGraphCameraOrchestrator`), signals **`onCanvasCameraSystemReady`** once refs exist, renders 2-point relationship edges as batched `THREE.LineSegments` grouped by style and keeps longer trunk polylines as Drei `<Line>`.
 10. **`AnimatedNodes`** renders display-only `InstancedMesh` disk/ring geometry per LOD tier, plus per-person meshes for hit areas, labels, halos, and unique thumbnail texture quads.
 11. **Thumbnails:** worker → bitmap → texture → module cache → `PersonNode` reads cache / fade-in material.
+
+---
+
+## 3a. Scene context and render-tier contract
+
+`GraphSceneProvider` is intentionally a **scene-local** seam. `PeopleGraph3D` computes and memoises the value, while `GraphCanvasScene` and `AnimatedNodes` consume it inside the R3F scene. Keep it limited to data that is already derived for rendering:
+
+| Field                              | Current consumers                   | Intent / constraint                                                                     |
+| ---------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
+| `peopleIds`                        | `GraphCanvasScene` thumbnail hook   | Stable set of people eligible for thumbnail loading.                                    |
+| `thumbnailCacheKeys`               | `GraphCanvasScene` thumbnail hook   | Optional cache-busting keys from person thumbnail metadata.                              |
+| `prioritizedNodeIds`               | `GraphCanvasScene`, `AnimatedNodes` | Selected, hovered, focused, and pinned nodes get thumbnail priority and full animation work. |
+| `renderNearPersonIds`              | `GraphCanvasScene` thumbnail hook   | Camera-near ids for thumbnail request ordering.                                         |
+| `renderVisibilityBucketByPersonId` | `AnimatedNodes`                     | Camera LOD bucket used by `resolveNodeRenderTier` (`near`, `mid`, `far`, `culled`).     |
+
+Do not move mutation handlers, camera refs, or API-loading state into `GraphSceneContext` just to reduce prop count; the context should remain a render-data seam. If a future split needs more context, add fields only after verifying they are derived from the same layout/visibility snapshot. Nodes, hit meshes, instanced backgrounds, and relationship lines must continue to agree on one positional snapshot.
+
+Render-tier rules currently live in `scene/graphRenderTiers.ts`:
+
+- priority nodes are always `detailed`;
+- `culled` nodes are `minimal`;
+- nodes with thumbnails use the `thumbnail` tier for per-person texture rendering;
+- non-thumbnail `mid` / `far` nodes also use the `thumbnail` tier's lighter geometry;
+- large-graph mode begins at **280 visible people** and reduces non-priority detail/animation work.
+
+`shouldRenderInstancedVisualForNode` returns false for thumbnail-backed nodes, so `NodeInstancedMesh` supplies disk/ring visuals only where the per-person thumbnail mesh is not already drawing the node body. Keep `AnimatedNodes`, `NodeInstancedMesh`, and `PersonNode` tests together when changing these thresholds or visual ownership rules.
 
 ---
 
@@ -183,7 +210,7 @@ The important invariant: **anything that changes topology must use Tier C** beca
 
 | File                                                                    | What it covers                                                                                          |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `apps/web/src/pages/people.spec.ts`                                     | Re-exports from `lifeEventUi` and selection helpers                                                     |
+| `apps/web/src/pages/people.spec.ts`                                     | Re-exports from `lifeEventUi`                                                                           |
 | `apps/web/src/pages/people-selection.spec.ts`                           | `findBestPersonMatchByName`, `resolvePeopleSelection`                                                   |
 | `apps/web/src/pages/people-page.integration.spec.tsx`                   | Integration around `PeoplePage` / workspaces (bundled `PeopleGraph3D` mock)                             |
 | `apps/web/src/pages/PeopleGraphDataContext.spec.tsx`                    | Graph data provider load path, refresh tiers, **`retryGraphData`**                                      |
@@ -191,6 +218,10 @@ The important invariant: **anything that changes topology must use Tier C** beca
 | `apps/web/src/pages/PersonDetailContext.spec.tsx`                       | Detail provider draft/life-event behavior and Tier-B relationship life-event reconciliation             |
 | `apps/web/src/components/PeopleGraph3D.spec.tsx`                        | Graph component behavior                                                                                |
 | `apps/web/src/components/graph/hooks.layoutState.spec.tsx`              | Layout state, worker fallback/staleness, server layout preference, progressive reveal, culling          |
+| `apps/web/src/components/graph/hooks.graphMisc.spec.tsx`                | Render-tier policy, instanced visual ownership, large-graph animation frame skipping                     |
+| `apps/web/src/components/graph/useGraphCameraOrchestrator.spec.tsx`     | Startup camera orchestration and focus-request consumption                                              |
+| `apps/web/src/components/graph/graphCameraPolicy.spec.ts`               | Pure camera startup/persistence policy and UI snapshot intent helpers                                   |
+| `apps/web/src/lib/workspaceUiState.spec.ts`                             | Graph UI snapshot v2 parsing and v1 camera snapshot migration                                           |
 | `apps/web/src/components/graph/useGraphProgressiveRenderLimit.spec.tsx` | Progressive cap timing and topology reset                                                               |
 | `apps/web/src/components/graph/graphRelationshipLines.spec.ts`          | Relationship line construction, `partitionLinesByStyle`, **`relationshipLineStyleKey`** dashed vs solid |
 | `apps/web/src/components/graph/scene/NodeInstancedMesh.spec.ts`         | Instanced node layer ordering for disk/ring vs thumbnails                                               |
@@ -260,10 +291,10 @@ The original monolithic `people.tsx` gap has been partially resolved. Current ro
 
 | File                                            | Current role                                                                                            | Approx. size |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------ |
-| `apps/web/src/pages/people.tsx`                 | Page shell, workspace layout, `GraphContainer` bundle memos, `DetailContainer`, review workspace wiring | ~705 lines   |
-| `apps/web/src/pages/PeopleGraphDataContext.tsx` | Graph data, selection, server layout, refresh tiers, graph mutations                                    | ~765 lines   |
+| `apps/web/src/pages/people.tsx`                 | Page shell, workspace layout, `GraphContainer` bundle memos, `DetailContainer`, review workspace wiring | ~890 lines   |
+| `apps/web/src/pages/PeopleGraphDataContext.tsx` | Graph data, selection, server layout, refresh tiers, graph mutations                                    | ~840 lines   |
 | `apps/web/src/pages/PeopleReviewContext.tsx`    | Page-scoped research, validation, duplicate review state/handlers                                       | ~275 lines   |
-| `apps/web/src/pages/PersonDetailContext.tsx`    | Detail panel state, person-scoped lazy loads, profile/life-event/family/relationship edits              | ~1110 lines  |
+| `apps/web/src/pages/PersonDetailContext.tsx`    | Detail panel state, person-scoped lazy loads, profile/life-event/family/relationship edits              | ~1060 lines  |
 
 ### 9.1 Current shell state (`people.tsx`)
 
@@ -299,4 +330,4 @@ Workspace chrome: `activeWorkspace`, `leftPaneOpen`, `contextPaneOpen`, `layoutR
 
 ---
 
-_Last updated: April 30, 2026 — `PeopleReviewProvider`, connected research section, graph scene context, explicit Tier-B relationship life-event tests, line material constants, T1 thumbnail profiling/atlas gate, refreshed line counts, and April 30 architecture review decisions._
+_Last updated: May 2, 2026 — scene-context/render-tier contract, camera ownership references, expanded test map, and refreshed PeoplePage file-size notes._
