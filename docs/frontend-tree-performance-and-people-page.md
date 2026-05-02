@@ -124,13 +124,13 @@ The tree is **not** DOM/SVG virtualization; it is a **3D scene** of meshes, line
 
 `GraphSceneProvider` is intentionally a **scene-local** seam. `PeopleGraph3D` computes and memoises the value, while `GraphCanvasScene` and `AnimatedNodes` consume it inside the R3F scene. Keep it limited to data that is already derived for rendering:
 
-| Field                              | Current consumers                   | Intent / constraint                                                                     |
-| ---------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
-| `peopleIds`                        | `GraphCanvasScene` thumbnail hook   | Stable set of people eligible for thumbnail loading.                                    |
-| `thumbnailCacheKeys`               | `GraphCanvasScene` thumbnail hook   | Optional cache-busting keys from person thumbnail metadata.                              |
+| Field                              | Current consumers                   | Intent / constraint                                                                          |
+| ---------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| `peopleIds`                        | `GraphCanvasScene` thumbnail hook   | Stable set of people eligible for thumbnail loading.                                         |
+| `thumbnailCacheKeys`               | `GraphCanvasScene` thumbnail hook   | Optional cache-busting keys from person thumbnail metadata.                                  |
 | `prioritizedNodeIds`               | `GraphCanvasScene`, `AnimatedNodes` | Selected, hovered, focused, and pinned nodes get thumbnail priority and full animation work. |
-| `renderNearPersonIds`              | `GraphCanvasScene` thumbnail hook   | Camera-near ids for thumbnail request ordering.                                         |
-| `renderVisibilityBucketByPersonId` | `AnimatedNodes`                     | Camera LOD bucket used by `resolveNodeRenderTier` (`near`, `mid`, `far`, `culled`).     |
+| `renderNearPersonIds`              | `GraphCanvasScene` thumbnail hook   | Camera-near ids for thumbnail request ordering.                                              |
+| `renderVisibilityBucketByPersonId` | `AnimatedNodes`                     | Camera LOD bucket used by `resolveNodeRenderTier` (`near`, `mid`, `far`, `culled`).          |
 
 Do not move mutation handlers, camera refs, or API-loading state into `GraphSceneContext` just to reduce prop count; the context should remain a render-data seam. If a future split needs more context, add fields only after verifying they are derived from the same layout/visibility snapshot. Nodes, hit meshes, instanced backgrounds, and relationship lines must continue to agree on one positional snapshot.
 
@@ -218,7 +218,7 @@ The important invariant: **anything that changes topology must use Tier C** beca
 | `apps/web/src/pages/PersonDetailContext.spec.tsx`                       | Detail provider draft/life-event behavior and Tier-B relationship life-event reconciliation             |
 | `apps/web/src/components/PeopleGraph3D.spec.tsx`                        | Graph component behavior                                                                                |
 | `apps/web/src/components/graph/hooks.layoutState.spec.tsx`              | Layout state, worker fallback/staleness, server layout preference, progressive reveal, culling          |
-| `apps/web/src/components/graph/hooks.graphMisc.spec.tsx`                | Render-tier policy, instanced visual ownership, large-graph animation frame skipping                     |
+| `apps/web/src/components/graph/hooks.graphMisc.spec.tsx`                | Render-tier policy, instanced visual ownership, large-graph animation frame skipping                    |
 | `apps/web/src/components/graph/useGraphCameraOrchestrator.spec.tsx`     | Startup camera orchestration and focus-request consumption                                              |
 | `apps/web/src/components/graph/graphCameraPolicy.spec.ts`               | Pure camera startup/persistence policy and UI snapshot intent helpers                                   |
 | `apps/web/src/lib/workspaceUiState.spec.ts`                             | Graph UI snapshot v2 parsing and v1 camera snapshot migration                                           |
