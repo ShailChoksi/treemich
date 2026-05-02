@@ -313,6 +313,94 @@ describe("deterministic family layout invariants", () => {
     expect(yOf("H") < yOf("G")).toBe(true);
   });
 
+  it("keeps birth-family siblings on the same generation when a spouse has deeper ancestry", () => {
+    const people: Person[] = [
+      { id: "birth-parent-a", name: "Birth Parent A" },
+      { id: "birth-parent-b", name: "Birth Parent B" },
+      { id: "birth-sibling-a", name: "Birth Sibling A" },
+      { id: "birth-sibling-b", name: "Birth Sibling B" },
+      { id: "birth-sibling-c", name: "Birth Sibling C" },
+      { id: "spouse-great-great", name: "Spouse Great Great" },
+      { id: "spouse-great", name: "Spouse Great" },
+      { id: "spouse-grand", name: "Spouse Grand" },
+      { id: "spouse-grand-partner", name: "Spouse Grand Partner" },
+      { id: "spouse-parent", name: "Spouse Parent" },
+      { id: "spouse-parent-sibling", name: "Spouse Parent Sibling" },
+      { id: "deep-spouse", name: "Deep Spouse" },
+      { id: "deep-spouse-sibling-a", name: "Deep Spouse Sibling A" },
+      { id: "deep-spouse-sibling-b", name: "Deep Spouse Sibling B" },
+      { id: "shared-child-a", name: "Shared Child A" },
+      { id: "shared-child-b", name: "Shared Child B" },
+      { id: "child-spouse-parent-a", name: "Child Spouse Parent A" },
+      { id: "child-spouse-parent-b", name: "Child Spouse Parent B" },
+      { id: "child-spouse", name: "Child Spouse" },
+      { id: "grandchild", name: "Grandchild" },
+      { id: "grandchild-spouse-parent-a", name: "Grandchild Spouse Parent A" },
+      { id: "grandchild-spouse-parent-b", name: "Grandchild Spouse Parent B" },
+      { id: "grandchild-spouse", name: "Grandchild Spouse" }
+    ];
+    const relationships: RelationshipRecord[] = [
+      { fromPersonId: "birth-parent-a", toPersonId: "birth-parent-b", type: "SPOUSE_OF" },
+      { fromPersonId: "birth-parent-a", toPersonId: "birth-sibling-a", type: "PARENT_OF" },
+      { fromPersonId: "birth-parent-b", toPersonId: "birth-sibling-a", type: "PARENT_OF" },
+      { fromPersonId: "birth-parent-a", toPersonId: "birth-sibling-b", type: "PARENT_OF" },
+      { fromPersonId: "birth-parent-b", toPersonId: "birth-sibling-b", type: "PARENT_OF" },
+      { fromPersonId: "birth-parent-a", toPersonId: "birth-sibling-c", type: "PARENT_OF" },
+      { fromPersonId: "birth-parent-b", toPersonId: "birth-sibling-c", type: "PARENT_OF" },
+      { fromPersonId: "spouse-great-great", toPersonId: "spouse-great", type: "PARENT_OF" },
+      { fromPersonId: "spouse-great", toPersonId: "spouse-grand", type: "PARENT_OF" },
+      { fromPersonId: "spouse-grand", toPersonId: "spouse-parent", type: "PARENT_OF" },
+      { fromPersonId: "spouse-grand-partner", toPersonId: "spouse-parent", type: "PARENT_OF" },
+      { fromPersonId: "spouse-grand", toPersonId: "spouse-parent-sibling", type: "PARENT_OF" },
+      { fromPersonId: "spouse-grand-partner", toPersonId: "spouse-parent-sibling", type: "PARENT_OF" },
+      { fromPersonId: "spouse-parent", toPersonId: "deep-spouse", type: "PARENT_OF" },
+      { fromPersonId: "deep-spouse", toPersonId: "deep-spouse-sibling-a", type: "SIBLING_OF" },
+      { fromPersonId: "deep-spouse", toPersonId: "deep-spouse-sibling-b", type: "SIBLING_OF" },
+      { fromPersonId: "birth-sibling-a", toPersonId: "deep-spouse", type: "SPOUSE_OF" },
+      { fromPersonId: "birth-sibling-a", toPersonId: "shared-child-a", type: "PARENT_OF" },
+      { fromPersonId: "deep-spouse", toPersonId: "shared-child-a", type: "PARENT_OF" },
+      { fromPersonId: "birth-sibling-a", toPersonId: "shared-child-b", type: "PARENT_OF" },
+      { fromPersonId: "deep-spouse", toPersonId: "shared-child-b", type: "PARENT_OF" },
+      { fromPersonId: "child-spouse-parent-a", toPersonId: "child-spouse", type: "PARENT_OF" },
+      { fromPersonId: "child-spouse-parent-b", toPersonId: "child-spouse", type: "PARENT_OF" },
+      { fromPersonId: "shared-child-a", toPersonId: "child-spouse", type: "SPOUSE_OF" },
+      { fromPersonId: "shared-child-a", toPersonId: "grandchild", type: "PARENT_OF" },
+      { fromPersonId: "child-spouse", toPersonId: "grandchild", type: "PARENT_OF" },
+      { fromPersonId: "grandchild-spouse-parent-a", toPersonId: "grandchild-spouse", type: "PARENT_OF" },
+      { fromPersonId: "grandchild-spouse-parent-b", toPersonId: "grandchild-spouse", type: "PARENT_OF" },
+      { fromPersonId: "grandchild", toPersonId: "grandchild-spouse", type: "SPOUSE_OF" }
+    ];
+
+    const positions = getPositionById(people, relationships, {});
+    const yOf = (id: string) => positions.get(id)?.[1] ?? 0;
+
+    expect(yOf("birth-sibling-a")).toBeCloseTo(yOf("birth-sibling-b"));
+    expect(yOf("birth-sibling-a")).toBeCloseTo(yOf("birth-sibling-c"));
+    expect(yOf("deep-spouse")).toBeCloseTo(yOf("birth-sibling-a"));
+    expect(yOf("spouse-parent")).toBeCloseTo(yOf("birth-parent-a"));
+    expect(yOf("spouse-parent")).toBeCloseTo(yOf("birth-parent-b"));
+    expect(yOf("spouse-parent-sibling")).toBeCloseTo(yOf("spouse-parent"));
+    expect(yOf("spouse-grand") > yOf("spouse-parent")).toBe(true);
+    expect(yOf("spouse-grand-partner")).toBeCloseTo(yOf("spouse-grand"));
+    expect(yOf("spouse-grand") > yOf("spouse-parent-sibling")).toBe(true);
+    expect(yOf("spouse-great") > yOf("spouse-grand")).toBe(true);
+    expect(yOf("spouse-great") > yOf("spouse-grand-partner")).toBe(true);
+    expect(yOf("spouse-great-great") > yOf("spouse-great")).toBe(true);
+    expect(yOf("deep-spouse-sibling-a")).toBeCloseTo(yOf("deep-spouse"));
+    expect(yOf("deep-spouse-sibling-b")).toBeCloseTo(yOf("deep-spouse"));
+    expect(yOf("shared-child-a") < yOf("birth-sibling-a")).toBe(true);
+    expect(yOf("shared-child-a") < yOf("deep-spouse")).toBe(true);
+    expect(yOf("shared-child-a")).toBeCloseTo(yOf("shared-child-b"));
+    expect(yOf("child-spouse")).toBeCloseTo(yOf("shared-child-a"));
+    expect(yOf("child-spouse-parent-a") > yOf("child-spouse")).toBe(true);
+    expect(yOf("child-spouse-parent-b") > yOf("child-spouse")).toBe(true);
+    expect(yOf("shared-child-b") < yOf("birth-sibling-a")).toBe(true);
+    expect(yOf("shared-child-b") < yOf("deep-spouse")).toBe(true);
+    expect(yOf("grandchild") < yOf("shared-child-a")).toBe(true);
+    expect(yOf("grandchild") < yOf("child-spouse")).toBe(true);
+    expect(yOf("grandchild-spouse")).toBeCloseTo(yOf("grandchild"));
+  });
+
   it("rotates the smaller spouse family perpendicular into the Z axis", () => {
     // Big side: A has parents (pa1, pa2), grandparents (gpa1..gpa4), and a sibling.
     // Small side: B has a single parent (pb1).

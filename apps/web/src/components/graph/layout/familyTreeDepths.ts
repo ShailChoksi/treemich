@@ -124,6 +124,15 @@ export const alignCoupleDepths = (
   parentsByChild: Map<string, Set<string>>,
   depthByPerson: Map<string, number>
 ) => {
+  const hasInComponentParents = (personId: string) =>
+    [...(parentsByChild.get(personId) ?? [])].some((parentId) => componentSet.has(parentId));
+  const alignPersonDepth = (personId: string, targetDepth: number) => {
+    if ((depthByPerson.get(personId) ?? 0) === targetDepth) {
+      return false;
+    }
+    depthByPerson.set(personId, targetDepth);
+    return true;
+  };
   const passLimit = Math.max(componentSet.size, 1);
   for (let pass = 0; pass < passLimit; pass += 1) {
     let changed = false;
@@ -134,15 +143,22 @@ export const alignCoupleDepths = (
       }
       const left = depthByPerson.get(pair.firstPersonId) ?? 0;
       const right = depthByPerson.get(pair.secondPersonId) ?? 0;
+      const leftHasParents = hasInComponentParents(pair.firstPersonId);
+      const rightHasParents = hasInComponentParents(pair.secondPersonId);
+      if (leftHasParents && rightHasParents) {
+        continue;
+      }
+      if (leftHasParents) {
+        changed = alignPersonDepth(pair.secondPersonId, left) || changed;
+        continue;
+      }
+      if (rightHasParents) {
+        changed = alignPersonDepth(pair.firstPersonId, right) || changed;
+        continue;
+      }
       const aligned = Math.max(left, right);
-      if (left !== aligned) {
-        depthByPerson.set(pair.firstPersonId, aligned);
-        changed = true;
-      }
-      if (right !== aligned) {
-        depthByPerson.set(pair.secondPersonId, aligned);
-        changed = true;
-      }
+      changed = alignPersonDepth(pair.firstPersonId, aligned) || changed;
+      changed = alignPersonDepth(pair.secondPersonId, aligned) || changed;
     }
 
     for (const parentIds of parentsByChild.values()) {
@@ -150,12 +166,20 @@ export const alignCoupleDepths = (
       if (inComponent.length < 2) {
         continue;
       }
+      const withParents = inComponent.filter((id) => hasInComponentParents(id));
+      if (withParents.length > 0) {
+        const aligned = Math.max(...withParents.map((id) => depthByPerson.get(id) ?? 0));
+        for (const parentId of inComponent) {
+          if (hasInComponentParents(parentId)) {
+            continue;
+          }
+          changed = alignPersonDepth(parentId, aligned) || changed;
+        }
+        continue;
+      }
       const aligned = Math.max(...inComponent.map((id) => depthByPerson.get(id) ?? 0));
       for (const parentId of inComponent) {
-        if ((depthByPerson.get(parentId) ?? 0) !== aligned) {
-          depthByPerson.set(parentId, aligned);
-          changed = true;
-        }
+        changed = alignPersonDepth(parentId, aligned) || changed;
       }
     }
 

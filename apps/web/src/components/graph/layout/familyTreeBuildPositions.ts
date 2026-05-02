@@ -11,16 +11,16 @@ import { separateOverlappingComponents } from "./familyTreeOverlap";
 import { applyPerpendicularMinorSpouseBranches } from "./familyTreeSpouseBranches";
 import { sortPersonIdsByName } from "./familyTreeNaming";
 import { buildFamilyUnitTreeEdges, buildFamilyUnitsForComponent, type FamilyUnit } from "./familyTreeUnits";
+import { solveVisualDepthsForComponent } from "./familyTreeVisualRows";
 import type { ParentChildEdge, SiblingPair, SpousePair } from "./familyTreeTypes";
 
 export const buildTreePositions = (
   people: Person[],
   parentChildEdges: ParentChildEdge[],
   spousePairs: SpousePair[],
-  _siblingPairs: SiblingPair[],
+  siblingPairs: SiblingPair[],
   primaryFamilyUnitByPersonId?: Record<string, string>
 ) => {
-  void _siblingPairs;
   const peopleById = new Map(people.map((person) => [person.id, person]));
   const childrenByParent = new Map<string, Set<string>>();
   const parentsByChild = new Map<string, Set<string>>();
@@ -51,6 +51,13 @@ export const buildTreePositions = (
     undirected.get(pair.firstPersonId)?.add(pair.secondPersonId);
     undirected.get(pair.secondPersonId)?.add(pair.firstPersonId);
   }
+  for (const pair of siblingPairs) {
+    if (!peopleById.has(pair.firstPersonId) || !peopleById.has(pair.secondPersonId)) {
+      continue;
+    }
+    undirected.get(pair.firstPersonId)?.add(pair.secondPersonId);
+    undirected.get(pair.secondPersonId)?.add(pair.firstPersonId);
+  }
 
   const components = collectConnectedComponents(undirected);
   const positions = new Map<string, NodePosition>();
@@ -74,6 +81,7 @@ export const buildTreePositions = (
       parentsByChild
     );
     normalizeParentChildDepths(componentSet, parentChildEdges, depthByPerson);
+    const pedigreeDepthByPerson = new Map(depthByPerson);
     alignCoupleDepths(componentSet, parentChildEdges, spousePairs, parentsByChild, depthByPerson);
     const { units, primaryUnitByChild } = buildFamilyUnitsForComponent(
       component,
@@ -89,6 +97,16 @@ export const buildTreePositions = (
     }
     const unitChildren = buildFamilyUnitTreeEdges(units, primaryUnitByChild);
     const unitXByKey = layoutFamilyUnitTree(units, unitChildren, unitDepthByKey, peopleById);
+    const visualDepthByPerson = solveVisualDepthsForComponent({
+      component,
+      componentSet,
+      spousePairs,
+      siblingPairs,
+      parentsByChild,
+      units,
+      primaryUnitByChild,
+      pedigreeDepthByPerson
+    });
     const memberUnitsByPerson = new Map<string, FamilyUnit[]>();
     for (const unit of units) {
       for (const parentId of unit.parentIds) {
@@ -138,10 +156,10 @@ export const buildTreePositions = (
           personX = unitX + coupleGap / 2;
         }
       }
-      const unitDepth = unitDepthByKey.get(anchorUnit.key) ?? personDepth;
+      const visualPersonDepth = visualDepthByPerson.get(personId) ?? personDepth;
       positions.set(personId, [
         componentCenterX + personX * levelSpacingX,
-        treeTopY - unitDepth * levelStepY,
+        treeTopY - visualPersonDepth * levelStepY,
         componentCenterZ
       ]);
     }
