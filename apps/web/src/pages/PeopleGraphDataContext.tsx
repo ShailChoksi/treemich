@@ -44,6 +44,7 @@ import { resolvePeopleSelection } from "./people-selection";
 import { useToast } from "./ToastContext";
 
 const GRAPH_UI_STATE_STORAGE_KEY = "treemich.graph.uiState";
+const GRAPH_LAYOUT_FAMILY_VIEW_STYLE = "generationTree";
 
 type RefreshGraphDataOptions = {
   bypassSaveGuard?: boolean;
@@ -310,7 +311,9 @@ export const PeopleGraphDataProvider = ({
           })),
           relationships: filterGraphLayoutTopologyRelationships(sortedRelationships),
           viewMode: "family",
-          familyViewStyle: preferencesResponse.familyViewStyle,
+          // The client-side layout orchestrator validates server layout revisions against generation-tree
+          // topology. Send the same default even when older preferences omit familyViewStyle.
+          familyViewStyle: GRAPH_LAYOUT_FAMILY_VIEW_STYLE,
           selectedPersonId: nextSelection.selectedPersonId,
           primaryFamilyUnitByPersonId: preferencesResponse.primaryFamilyUnitByPersonId
         })

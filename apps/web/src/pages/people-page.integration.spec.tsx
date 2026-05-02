@@ -343,6 +343,41 @@ describe("PeoplePage + life events (integration)", () => {
     document.body.innerHTML = "";
   });
 
+  it("requests server graph layout with the client default family style when preferences omit it", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+      await Promise.resolve();
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const graphLayoutCall = vi
+        .mocked(globalThis.fetch)
+        .mock.calls.find(([input, init]) => String(input).includes("/graph/layout") && init?.method === "POST");
+      if (graphLayoutCall) {
+        break;
+      }
+    }
+
+    const graphLayoutCall = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.find(([input, init]) => String(input).includes("/graph/layout") && init?.method === "POST");
+    expect(graphLayoutCall).toBeTruthy();
+    const body = JSON.parse(String(graphLayoutCall?.[1]?.body));
+    expect(body.familyViewStyle).toBe("generationTree");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it("loads person life events after selecting a person and hydrates profile quick-edit fields", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
