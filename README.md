@@ -365,8 +365,9 @@ This starts the API on `localhost:4000` and the web app on `localhost:5173` with
 
 ## Auth Model
 
-- Sign in with a Treemich email and password (standalone; no Immich required).
+- Sign in with a Treemich email and password (standalone; no Immich required). A fresh install can bootstrap the first password-backed Treemich user from the first email/password login; after any password-backed user exists, unknown Treemich emails are rejected instead of self-registering.
 - Optionally sign in via Immich credentials (`provider: "immich"` in the login body) as a legacy migration/provider path when `IMMICH_BASE_URL` is configured.
+- Legacy rows with the same normalized email can exist after migrations. Password login checks all candidates for that email, keeps only rows whose stored password matches, then chooses the row with the most `PersonProfile` records, newest `updatedAt`, and finally lowest id. If matching candidates have no password yet, the selected row is claimed by setting its password.
 - Treemich stores a session cookie for browser auth. Immich tokens are encrypted at rest and used only for optional provider calls.
 - All relationship and profile data is private per Treemich user.
 

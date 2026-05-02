@@ -137,6 +137,7 @@ Expected result for all `broken_*` checks is `0`.
 Verify these user-facing paths:
 
 - Sign in with Treemich email/password on a fresh or existing install.
+- If an upgraded database has more than one `TreemichUser` row for the same normalized email, verify password login opens the populated account, not an empty duplicate. The password-login tiebreaker is: matching password hash first, then most `PersonProfile` rows, then newest `updatedAt`, then lowest id.
 - Create a standalone person without linking Immich.
 - Create/edit a parent-child or spouse relationship.
 - Create two likely duplicate people, recompute duplicate candidates from the Duplicates workspace, dismiss/reopen a candidate, then merge into the intended canonical person and verify the duplicate profile disappears.
