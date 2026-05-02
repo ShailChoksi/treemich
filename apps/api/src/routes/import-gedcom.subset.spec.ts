@@ -8,9 +8,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const gedcomImportJobCreateMock = vi.fn();
 const gedcomImportJobUpdateMock = vi.fn();
 const getRequiredAuthMock = vi.fn(() => ({ user: { id: "user-1" } }));
-const validateFamMatchesMock = vi.fn((_preview: unknown, _indiMap: unknown): string | null =>
-  "FAM @F1@: missing CHIL @I2@"
-);
+const validateFamMatchesMock = vi.fn((preview: unknown, indiMap: unknown): string | null => {
+  void preview;
+  void indiMap;
+  return "FAM @F1@: missing CHIL @I2@";
+});
 const scheduleGedcomImportJobMock = vi.fn();
 const stageGedcomArchiveMediaFilesMock = vi.fn();
 

@@ -399,9 +399,8 @@ const PersonDetailPanelComponent = ({
     setShowDeletePersonConfirm(false);
     setVisibleSuggestionCount(maxVisibleSuggestions);
     setCollapsedSections({ ...DEFAULT_COLLAPSED_SECTIONS, ...sectionCollapsedOverrides });
-    // Depends on `person?.id` only: `sectionCollapsedOverrides` is often an inline object in JSX; a
-    // fresh reference each parent render must not reset collapse state after toggles.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- merge overrides when the person changes
+    // Intentionally depends on `person?.id` only: `sectionCollapsedOverrides` is often a new object
+    // literal in JSX; including it would reset collapse state every parent render.
   }, [person?.id]);
 
   useEffect(() => {

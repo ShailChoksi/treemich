@@ -15,7 +15,6 @@ import {
   postGedcomExportJob,
   postGedcomImportJobFromPreview,
   type GedcomDryRunDiff,
-  type GedcomImportPreviewIndiEnrichedRow,
   type GedcomImportPreviewSummary,
   type GedcomPreviewIndisPageResponse
 } from "../lib/api";
