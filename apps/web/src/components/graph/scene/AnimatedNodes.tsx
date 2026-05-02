@@ -14,7 +14,6 @@ import { NodeInstancedMesh, type NodeRenderTier } from "./NodeInstancedMesh";
 import { useAnimatedNodeTransforms } from "./useAnimatedNodeTransforms";
 import {
   resolveNodeRenderTier,
-  shouldRenderDetailedNode,
   shouldRenderInstancedVisualForNode,
   shouldUseLargeGraphTier
 } from "./graphRenderTiers";
