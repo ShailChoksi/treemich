@@ -359,7 +359,9 @@ describe("PeoplePage + life events (integration)", () => {
       });
       const graphLayoutCall = vi
         .mocked(globalThis.fetch)
-        .mock.calls.find(([input, init]) => String(input).includes("/graph/layout") && init?.method === "POST");
+        .mock.calls.find(
+          ([input, init]) => String(input).includes("/graph/layout") && init?.method === "POST"
+        );
       if (graphLayoutCall) {
         break;
       }
@@ -1087,21 +1089,26 @@ describe("PeoplePage + life events (integration)", () => {
 
     expect(latestGraphProps?.graphViewState.initialUiState).toEqual(
       expect.objectContaining({
+        schemaVersion: 2,
         searchTerm: "alex",
         focusPersonId: "p1",
         highlightedPersonIds: ["p1", "p2"],
-        camera: { position: [1, 2, 3], target: [4, 5, 6] }
+        camera: { position: [1, 2, 3], target: [4, 5, 6] },
+        cameraIntent: "manual",
+        cameraPersonId: "p1"
       })
     );
 
     await act(async () => {
       latestGraphProps?.graphViewState.onUiStateChange?.({
-        schemaVersion: 1,
+        schemaVersion: 2,
         searchTerm: "updated",
         focusPersonId: "p2",
         pinnedPersonId: null,
         highlightedPersonIds: ["p2", "p3"],
-        camera: null
+        camera: null,
+        cameraIntent: "frameAll",
+        cameraPersonId: null
       });
     });
     await act(async () => {

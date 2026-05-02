@@ -1,4 +1,5 @@
 import type { Person, RelationshipRecord, RelationshipType, UserPreferences } from "../lib/api";
+import type { GraphCameraSessionKind } from "./graph/graphCameraPolicy";
 import type { GraphUiSnapshot } from "../lib/workspaceUiState";
 
 /** Positional and identity inputs for the 3D graph (changes with people/layout/selection). */
@@ -54,6 +55,7 @@ export type PeopleGraph3DViewStateBundle = {
   initialUiState?: GraphUiSnapshot;
   onUiStateChange?: (next: GraphUiSnapshot) => void;
   isVisible?: boolean;
+  graphCameraSessionKind?: GraphCameraSessionKind;
 };
 
 export type PeopleGraph3DBundledProps = {

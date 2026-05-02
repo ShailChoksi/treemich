@@ -12,7 +12,7 @@ import { evictOldestMapEntriesToCap } from "./topologyLayoutCache";
 import { useGraphLayoutWorker } from "./useGraphLayoutWorker";
 import type { LayoutWorkerPayload } from "./layoutWorkerTypes";
 
-const SERVER_LAYOUT_ALGORITHM_VERSION = "server-hybrid-v1";
+const SERVER_LAYOUT_ALGORITHM_VERSION = "server-generation-tree-v1";
 
 const shouldMeasureGraphLayout =
   typeof window !== "undefined" && getLocalStorageItem("treemich:profile-graph-layout") === "1";
@@ -125,9 +125,6 @@ export const useLayoutOrchestrator = ({
     if (shouldUseServerLayout) {
       return [];
     }
-    if (shouldUseWorker && !isWorkerFallbackEnabled) {
-      return [];
-    }
     const cached = topologyLayoutCacheRef.current.get(topologyRevision);
     if (cached) {
       return cached
@@ -173,7 +170,7 @@ export const useLayoutOrchestrator = ({
       return syncPositionedPeople;
     }
     if (!workerPositions) {
-      return [];
+      return syncPositionedPeople;
     }
     return workerPositions
       .map((entry) => {

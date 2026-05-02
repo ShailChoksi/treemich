@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PersonRecord } from "../lib/api";
 import { RELATIONSHIP_TYPES } from "../lib/relationshipConstants";
+import { resolveRestoredCameraSnapshotForCanvas } from "./graph/graphCameraPolicy";
 import { canLoadPersonThumbnail, resolveAddRelativeRelationshipType } from "./PeopleGraph3D";
 
 const makePerson = (overrides: Partial<PersonRecord> = {}): PersonRecord => ({
@@ -45,6 +46,56 @@ describe("PeopleGraph3D thumbnail eligibility", () => {
         })
       )
     ).toBe(true);
+  });
+});
+
+describe("PeopleGraph3D initial camera restore", () => {
+  it("prioritizes selected-person focus over a saved camera snapshot on hard page load", () => {
+    const savedCamera = {
+      position: [100, 100, 100] as [number, number, number],
+      target: [90, 90, 90] as [number, number, number]
+    };
+
+    expect(
+      resolveRestoredCameraSnapshotForCanvas({
+        sessionKind: "hardPageLoad",
+        explicitFocusPersonId: null,
+        cameraFocusPersonRequest: "selected-person",
+        savedCamera
+      })
+    ).toBeNull();
+  });
+
+  it("restores the saved camera when there is no selected-person focus request", () => {
+    const savedCamera = {
+      position: [100, 100, 100] as [number, number, number],
+      target: [90, 90, 90] as [number, number, number]
+    };
+
+    expect(
+      resolveRestoredCameraSnapshotForCanvas({
+        sessionKind: "hardPageLoad",
+        explicitFocusPersonId: null,
+        cameraFocusPersonRequest: null,
+        savedCamera
+      })
+    ).toBe(savedCamera);
+  });
+
+  it("restores the saved camera on workspace remount even when a camera focus request exists", () => {
+    const savedCamera = {
+      position: [100, 100, 100] as [number, number, number],
+      target: [90, 90, 90] as [number, number, number]
+    };
+
+    expect(
+      resolveRestoredCameraSnapshotForCanvas({
+        sessionKind: "workspaceRemount",
+        explicitFocusPersonId: null,
+        cameraFocusPersonRequest: "selected-person",
+        savedCamera
+      })
+    ).toBe(savedCamera);
   });
 });
 

@@ -48,20 +48,25 @@ export const shouldRenderDetailedNode = ({
 }) =>
   (!largeGraphTierEnabled || isPriorityNode) && visibilityBucket !== "far" && visibilityBucket !== "culled";
 
-const resolveNodeRenderTier = ({
+export const resolveNodeRenderTier = ({
   visibilityBucket,
   isPriorityNode,
-  largeGraphTierEnabled
+  largeGraphTierEnabled,
+  hasThumbnail = false
 }: {
   visibilityBucket: GraphVisibilityBucket;
   isPriorityNode: boolean;
   largeGraphTierEnabled: boolean;
+  hasThumbnail?: boolean;
 }) => {
   if (isPriorityNode) {
     return "detailed" as const;
   }
   if (visibilityBucket === "culled") {
     return "minimal" as const;
+  }
+  if (hasThumbnail) {
+    return "thumbnail" as const;
   }
   if (visibilityBucket === "mid" || visibilityBucket === "far") {
     return "thumbnail" as const;
@@ -74,6 +79,9 @@ const resolveNodeRenderTier = ({
     ? ("detailed" as const)
     : ("minimal" as const);
 };
+
+export const shouldRenderInstancedVisualForNode = ({ hasThumbnail }: { hasThumbnail: boolean }) =>
+  !hasThumbnail;
 
 export const AnimatedNodes = ({
   displayVisiblePeople,
@@ -115,10 +123,15 @@ export const AnimatedNodes = ({
       const isPriorityNode =
         isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(item.person.id);
       const visibilityBucket = renderVisibilityBucketByPersonId.get(item.person.id) ?? "near";
+      const hasThumbnail = thumbnailNodeIds.has(item.person.id);
+      if (!shouldRenderInstancedVisualForNode({ hasThumbnail })) {
+        continue;
+      }
       const renderTier = resolveNodeRenderTier({
         visibilityBucket,
         isPriorityNode,
-        largeGraphTierEnabled
+        largeGraphTierEnabled,
+        hasThumbnail
       });
       next[renderTier].push(item);
     }
@@ -130,7 +143,8 @@ export const AnimatedNodes = ({
     largeGraphTierEnabled,
     prioritizedNodeIds,
     selectedPersonId,
-    renderVisibilityBucketByPersonId
+    renderVisibilityBucketByPersonId,
+    thumbnailNodeIds
   ]);
 
   useEffect(() => {
@@ -195,13 +209,14 @@ export const AnimatedNodes = ({
         const isHighlighted = highlightedPersonIds.has(person.id);
         const isPriorityNode = isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(person.id);
         const visibilityBucket = renderVisibilityBucketByPersonId.get(person.id) ?? "near";
+        const showThumbnail = thumbnailNodeIds.has(person.id);
         const renderTier = resolveNodeRenderTier({
           visibilityBucket,
           isPriorityNode,
-          largeGraphTierEnabled
+          largeGraphTierEnabled,
+          hasThumbnail: showThumbnail
         });
         const showLabel = isPriorityNode || visibilityBucket === "near" || visibilityBucket === "mid";
-        const showThumbnail = thumbnailNodeIds.has(person.id);
 
         return (
           <group key={person.id} ref={(group) => registerGroupRef(person.id, group)}>

@@ -296,9 +296,16 @@ const GraphContainer = memo(
         layoutResizeSignal,
         initialUiState: graph.graphUiSnapshot,
         onUiStateChange: graph.setGraphUiSnapshot,
-        isVisible: isTreeView
+        isVisible: isTreeView,
+        graphCameraSessionKind: graph.graphCameraSessionKind
       }),
-      [layoutResizeSignal, graph.graphUiSnapshot, graph.setGraphUiSnapshot, isTreeView]
+      [
+        layoutResizeSignal,
+        graph.graphUiSnapshot,
+        graph.graphCameraSessionKind,
+        graph.setGraphUiSnapshot,
+        isTreeView
+      ]
     );
 
     return (

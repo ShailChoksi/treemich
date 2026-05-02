@@ -25,6 +25,18 @@ type SessionWithUserFull = Prisma.TreemichSessionGetPayload<{
   include: typeof authSessionIncludeFull;
 }>;
 
+const passwordLoginUserInclude = {
+  _count: {
+    select: {
+      profiles: true
+    }
+  }
+} as const satisfies Prisma.TreemichUserInclude;
+
+type PasswordLoginUser = Prisma.TreemichUserGetPayload<{
+  include: typeof passwordLoginUserInclude;
+}>;
+
 const legacySharedUserId = "legacy-shared-user";
 
 export class TreemichAuthError extends Error {
@@ -116,6 +128,30 @@ class SessionContextCache {
   }
 }
 
+const comparePasswordLoginUsers = (left: PasswordLoginUser, right: PasswordLoginUser) => {
+  const profileDelta = right._count.profiles - left._count.profiles;
+  if (profileDelta !== 0) {
+    return profileDelta;
+  }
+  const updatedDelta = right.updatedAt.getTime() - left.updatedAt.getTime();
+  if (updatedDelta !== 0) {
+    return updatedDelta;
+  }
+  return left.id.localeCompare(right.id);
+};
+
+const pickPasswordLoginUser = (candidates: PasswordLoginUser[], password: string) => {
+  const candidatesWithPassword = candidates.filter((user) => user.passwordHash);
+  if (candidatesWithPassword.length > 0) {
+    return (
+      candidatesWithPassword
+        .filter((user) => user.passwordHash && verifyPassword(password, user.passwordHash))
+        .sort(comparePasswordLoginUsers)[0] ?? null
+    );
+  }
+  return [...candidates].sort(comparePasswordLoginUsers)[0] ?? null;
+};
+
 export class AuthService {
   private readonly sessionCacheTtlMs = 30_000;
   private readonly maxSessionCacheEntries = 500;
@@ -149,14 +185,20 @@ export class AuthService {
     state: AuthState;
   }> {
     const normalizedEmail = email.trim().toLowerCase();
-    const existing = await prisma.treemichUser.findFirst({
-      where: { email: normalizedEmail }
+    const existingCandidates = await prisma.treemichUser.findMany({
+      where: { email: normalizedEmail },
+      include: passwordLoginUserInclude
     });
     const nativeUserCount = await prisma.treemichUser.count({
       where: { passwordHash: { not: null } }
     });
 
-    if (!existing && nativeUserCount > 0) {
+    if (existingCandidates.length === 0 && nativeUserCount > 0) {
+      throw new TreemichAuthError("Invalid email or password");
+    }
+
+    const existing = pickPasswordLoginUser(existingCandidates, password);
+    if (existingCandidates.some((user) => user.passwordHash) && !existing) {
       throw new TreemichAuthError("Invalid email or password");
     }
 

@@ -150,6 +150,7 @@ export const useGraphCameraControls = ({
   );
 
   return {
+    applyCameraPose,
     frameAllNodes,
     focusPersonById,
     focusActiveNode,

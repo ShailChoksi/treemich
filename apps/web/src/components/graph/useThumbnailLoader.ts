@@ -109,6 +109,11 @@ export const buildThumbnailLoadOrder = ({
     ...visibleIdsByDistance
   ]);
 
+const filterThumbnailLoadOrderByCandidates = (loadOrder: string[], peopleIds: string[]) => {
+  const thumbnailCandidateIds = new Set(peopleIds);
+  return loadOrder.filter((id) => thumbnailCandidateIds.has(id));
+};
+
 export const pickThumbnailBatch = ({
   loadOrder,
   loadedIds,
@@ -267,19 +272,22 @@ export const useThumbnailLoader = ({
 
   const prevLoadOrderRef = useRef<string[]>([]);
   const thumbnailLoadOrder = useMemo(() => {
-    const next = buildThumbnailLoadOrder({
-      renderNearPersonIds,
-      prioritizedNodeIds,
-      nearCameraNodeIds,
-      visibleIdsByDistance
-    });
+    const next = filterThumbnailLoadOrderByCandidates(
+      buildThumbnailLoadOrder({
+        renderNearPersonIds,
+        prioritizedNodeIds,
+        nearCameraNodeIds,
+        visibleIdsByDistance
+      }),
+      peopleIds
+    );
     const prev = prevLoadOrderRef.current;
     if (next.length === prev.length && next.every((v, i) => v === prev[i])) {
       return prev;
     }
     prevLoadOrderRef.current = next;
     return next;
-  }, [nearCameraNodeIds, prioritizedNodeIds, renderNearPersonIds, visibleIdsByDistance]);
+  }, [nearCameraNodeIds, peopleIds, prioritizedNodeIds, renderNearPersonIds, visibleIdsByDistance]);
 
   // Dispose textures for people that have been removed from the graph.
   // Do NOT dispose textures for people still in the module cache — they'll
