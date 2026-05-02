@@ -1,33 +1,24 @@
+import AdmZip from "adm-zip";
 import Fastify from "fastify";
-import multipart from "@fastify/multipart";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const gedcomImportJobCreateMock = vi.fn();
 const gedcomImportJobUpdateMock = vi.fn();
 const getRequiredAuthMock = vi.fn(() => ({ user: { id: "user-1" } }));
-const buildGedcomImportPreviewMock = vi.fn((gedcomUtf8: string) => {
-  void gedcomUtf8;
-  return {
-    indis: [],
-    fams: [],
-    media: [],
-    records: [],
-    lineLog: []
-  };
-});
-const mergeIndiMatchesMock = vi.fn((matches: Record<string, string>, records: unknown[]) => {
-  void matches;
-  void records;
-  return new Map<string, string>();
-});
-const validateFamMatchesMock = vi.fn((preview: unknown, merged: unknown): string | null => {
-  void preview;
-  void merged;
-  return "FAM @F1@: missing CHIL @I2@";
-});
+const validateFamMatchesMock = vi.fn((_preview: unknown, _indiMap: unknown): string | null =>
+  "FAM @F1@: missing CHIL @I2@"
+);
 const scheduleGedcomImportJobMock = vi.fn();
-const parseGedcomArchiveMock = vi.fn();
 const stageGedcomArchiveMediaFilesMock = vi.fn();
+
+const gedcomImportPreviewSessionFindFirst = vi.fn();
+const gedcomImportPreviewSessionDelete = vi.fn();
+const gedcomImportPreviewSessionDeleteMany = vi.fn();
+const gedcomImportPreviewSessionFindMany = vi.fn();
+const gedcomImportPreviewSessionCreate = vi.fn();
 
 vi.mock("../config/env.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../config/env.js")>();
@@ -49,32 +40,62 @@ vi.mock("../db/client.js", () => ({
     gedcomImportJob: {
       create: gedcomImportJobCreateMock,
       update: gedcomImportJobUpdateMock
+    },
+    gedcomImportPreviewSession: {
+      create: gedcomImportPreviewSessionCreate,
+      findFirst: gedcomImportPreviewSessionFindFirst,
+      delete: gedcomImportPreviewSessionDelete,
+      deleteMany: gedcomImportPreviewSessionDeleteMany,
+      findMany: gedcomImportPreviewSessionFindMany
     }
   }
 }));
 
-vi.mock("../gedcom/archiveImport.js", () => ({
-  parseGedcomArchive: (buffer: Buffer) => parseGedcomArchiveMock(buffer),
-  stageGedcomArchiveMediaFiles: (jobId: string, files: unknown[]) =>
-    stageGedcomArchiveMediaFilesMock(jobId, files)
-}));
+vi.mock("../gedcom/archiveImport.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../gedcom/archiveImport.js")>();
+  return {
+    ...actual,
+    stageGedcomArchiveMediaFiles: (jobId: string, files: unknown[]) =>
+      stageGedcomArchiveMediaFilesMock(jobId, files)
+  };
+});
 
-vi.mock("../gedcom/importRunner.js", () => ({
-  buildGedcomImportPreview: (gedcomUtf8: string) => buildGedcomImportPreviewMock(gedcomUtf8),
-  capGedcomLineLog: <T>(lineLog: T[]) => lineLog,
-  mergeIndiMatches: (matches: Record<string, string>, records: unknown[]) =>
-    mergeIndiMatchesMock(matches, records),
-  validateFamMatches: (preview: unknown, merged: unknown) => validateFamMatchesMock(preview, merged),
-  scheduleGedcomImportJob: (jobId: string, services: unknown, logger: unknown) =>
-    scheduleGedcomImportJobMock(jobId, services, logger)
-}));
+vi.mock("../gedcom/importRunner.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../gedcom/importRunner.js")>();
+  return {
+    ...actual,
+    validateFamMatches: (preview: unknown, merged: unknown) => validateFamMatchesMock(preview, merged),
+    scheduleGedcomImportJob: (jobId: string, services: unknown, logger: unknown) =>
+      scheduleGedcomImportJobMock(jobId, services, logger)
+  };
+});
+
+const previewSessionRow = () => ({
+  id: "pv-1",
+  userId: "user-1",
+  expiresAt: new Date(Date.now() + 3_600_000),
+  fileName: "tree.ged",
+  isArchive: false,
+  gedcomUtf8: "0 HEAD\n0 TRLR\n",
+  stagedArchivePath: null,
+  lineLog: [],
+  indiRows: [],
+  fams: [],
+  media: [],
+  archiveMediaFiles: null,
+  famMatchError: null
+});
 
 describe("import GEDCOM subset matching", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    validateFamMatchesMock.mockReturnValue("FAM @F1@: missing CHIL @I2@");
+    gedcomImportPreviewSessionFindMany.mockResolvedValue([]);
+    gedcomImportPreviewSessionDeleteMany.mockResolvedValue({ count: 0 });
   });
 
   it("returns 422 by default when family pointers are unmatched", async () => {
+    gedcomImportPreviewSessionFindFirst.mockResolvedValue(previewSessionRow());
     const { registerImportGedcomRoutes } = await import("./import-gedcom.js");
     const app = Fastify();
     (app as unknown as { services: unknown }).services = {};
@@ -83,10 +104,11 @@ describe("import GEDCOM subset matching", () => {
 
     const res = await app.inject({
       method: "POST",
-      url: "/import/gedcom/jobs",
+      url: "/import/gedcom/jobs/from-preview",
       payload: {
-        gedcomUtf8: "0 HEAD\n0 TRLR\n",
-        indiMatches: {}
+        previewId: "pv-1",
+        indiMatches: {},
+        importOptions: { unmatchedIndiPolicy: "MATCH_ONLY" }
       }
     });
     expect(res.statusCode).toBe(422);
@@ -100,6 +122,8 @@ describe("import GEDCOM subset matching", () => {
       status: "PENDING",
       createdAt: new Date("2026-01-01T00:00:00.000Z")
     });
+    gedcomImportPreviewSessionFindFirst.mockResolvedValue(previewSessionRow());
+    validateFamMatchesMock.mockReturnValueOnce(null);
     const { registerImportGedcomRoutes } = await import("./import-gedcom.js");
     const app = Fastify();
     (app as unknown as { services: unknown }).services = {};
@@ -108,9 +132,9 @@ describe("import GEDCOM subset matching", () => {
 
     const res = await app.inject({
       method: "POST",
-      url: "/import/gedcom/jobs",
+      url: "/import/gedcom/jobs/from-preview",
       payload: {
-        gedcomUtf8: "0 HEAD\n0 TRLR\n",
+        previewId: "pv-1",
         indiMatches: {},
         importOptions: { allowPartialMatches: true }
       }
@@ -118,6 +142,7 @@ describe("import GEDCOM subset matching", () => {
     expect(res.statusCode).toBe(200);
     expect(gedcomImportJobCreateMock).toHaveBeenCalledTimes(1);
     expect(scheduleGedcomImportJobMock).toHaveBeenCalledWith("job-1", expect.anything(), expect.anything());
+    expect(gedcomImportPreviewSessionDelete).toHaveBeenCalledWith({ where: { id: "pv-1" } });
     await app.close();
   });
 
@@ -127,8 +152,7 @@ describe("import GEDCOM subset matching", () => {
       status: "PENDING",
       createdAt: new Date("2026-01-01T00:00:00.000Z")
     });
-    // validateFamMatchesMock returns an error by default (from hoisted mock above);
-    // the CREATE policy should prevent the 422 response.
+    gedcomImportPreviewSessionFindFirst.mockResolvedValue(previewSessionRow());
     const { registerImportGedcomRoutes } = await import("./import-gedcom.js");
     const app = Fastify();
     (app as unknown as { services: unknown }).services = {};
@@ -137,16 +161,15 @@ describe("import GEDCOM subset matching", () => {
 
     const res = await app.inject({
       method: "POST",
-      url: "/import/gedcom/jobs",
+      url: "/import/gedcom/jobs/from-preview",
       payload: {
-        gedcomUtf8: "0 HEAD\n0 TRLR\n",
+        previewId: "pv-1",
         indiMatches: {},
         importOptions: { unmatchedIndiPolicy: "CREATE" }
       }
     });
     expect(res.statusCode).toBe(200);
     expect(gedcomImportJobCreateMock).toHaveBeenCalledTimes(1);
-    // importOptions must be persisted so the runner picks up the CREATE policy
     expect(gedcomImportJobCreateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -158,6 +181,7 @@ describe("import GEDCOM subset matching", () => {
   });
 
   it("still returns 422 for FAM mismatch when policy is MATCH_ONLY", async () => {
+    gedcomImportPreviewSessionFindFirst.mockResolvedValue(previewSessionRow());
     const { registerImportGedcomRoutes } = await import("./import-gedcom.js");
     const app = Fastify();
     (app as unknown as { services: unknown }).services = {};
@@ -166,9 +190,9 @@ describe("import GEDCOM subset matching", () => {
 
     const res = await app.inject({
       method: "POST",
-      url: "/import/gedcom/jobs",
+      url: "/import/gedcom/jobs/from-preview",
       payload: {
-        gedcomUtf8: "0 HEAD\n0 TRLR\n",
+        previewId: "pv-1",
         indiMatches: {},
         importOptions: { unmatchedIndiPolicy: "MATCH_ONLY" }
       }
@@ -178,52 +202,44 @@ describe("import GEDCOM subset matching", () => {
     await app.close();
   });
 
-  it("creates archive import jobs from multipart ZIP uploads", async () => {
+  it("creates archive import jobs from-preview with staged ZIP", async () => {
     gedcomImportJobCreateMock.mockResolvedValue({
       id: "job-archive",
       status: "PENDING",
       createdAt: new Date("2026-01-01T00:00:00.000Z")
     });
     gedcomImportJobUpdateMock.mockResolvedValue({});
-    parseGedcomArchiveMock.mockReturnValue({
-      gedcomUtf8: "0 HEAD\n0 TRLR\n",
-      gedcomFileName: "tree.ged",
-      mediaFiles: [{ normalizedPath: "media/a.jpg" }],
-      lineLog: []
+    const zip = new AdmZip();
+    zip.addFile("tree.ged", Buffer.from("0 HEAD\n0 TRLR\n", "utf8"));
+    const zipDir = await mkdtemp(join(tmpdir(), "gedcom-subset-"));
+    const zipPath = join(zipDir, "upload.zip");
+    await writeFile(zipPath, zip.toBuffer());
+    gedcomImportPreviewSessionFindFirst.mockResolvedValue({
+      ...previewSessionRow(),
+      isArchive: true,
+      stagedArchivePath: zipPath,
+      gedcomUtf8: "0 HEAD\n0 TRLR\n"
     });
     stageGedcomArchiveMediaFilesMock.mockResolvedValue({
       archiveDir: "/tmp/job-archive",
       files: [{ normalizedPath: "media/a.jpg", stagedPath: "/tmp/job-archive/a.jpg" }]
     });
     validateFamMatchesMock.mockReturnValueOnce(null);
+
     const { registerImportGedcomRoutes } = await import("./import-gedcom.js");
     const app = Fastify();
     (app as unknown as { services: unknown }).services = {};
-    await app.register(multipart);
     await app.register(registerImportGedcomRoutes);
     await app.ready();
 
-    const boundary = "----treemich-test";
-    const payload = Buffer.from(
-      [
-        `--${boundary}`,
-        'Content-Disposition: form-data; name="archive"; filename="tree.zip"',
-        "Content-Type: application/zip",
-        "",
-        "fake zip bytes",
-        `--${boundary}`,
-        'Content-Disposition: form-data; name="indiMatches"',
-        "",
-        "{}",
-        `--${boundary}--`,
-        ""
-      ].join("\r\n")
-    );
     const res = await app.inject({
       method: "POST",
-      url: "/import/gedcom/jobs/archive",
-      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
-      payload
+      url: "/import/gedcom/jobs/from-preview",
+      payload: {
+        previewId: "pv-1",
+        indiMatches: {},
+        importOptions: { allowPartialMatches: true }
+      }
     });
 
     expect(res.statusCode).toBe(200);

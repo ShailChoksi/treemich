@@ -1,4 +1,4 @@
-import { act, createElement, type ComponentProps } from "react";
+import { act, createElement, Fragment, useState, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../styles.css";
@@ -142,6 +142,34 @@ const renderPanel = (overrides?: {
   return { container, root };
 };
 
+/** Re-renders like ProfileWorkspace did: new `sectionCollapsedOverrides` object every render. */
+const PanelWithUnstableSectionOverrides = (props: PanelProps) => {
+  const [, setTick] = useState(0);
+  return createElement(
+    Fragment,
+    null,
+    createElement(
+      "button",
+      {
+        type: "button",
+        "data-testid": "force-parent-rerender",
+        onClick: () => setTick((tick) => tick + 1)
+      },
+      "rerender"
+    ),
+    createElement(PersonDetailPanelWithProps, {
+      ...props,
+      sectionCollapsedOverrides: {
+        names: false,
+        lifeEvents: false,
+        timeline: false,
+        families: false,
+        researchTasks: true
+      }
+    })
+  );
+};
+
 afterEach(() => {
   vi.useRealTimers();
   document.body.innerHTML = "";
@@ -219,6 +247,88 @@ describe("PersonDetailPanelWithProps", () => {
     expect((profileRegionOpen as HTMLElement | null)?.hasAttribute("hidden")).toBe(false);
     expect(window.getComputedStyle(profileRegionOpen as HTMLElement).display).not.toBe("none");
     expect(container.textContent).toContain("Save profile");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("does not reset collapsed sections when parent re-renders with a new overrides object", () => {
+    const selectedPerson = person("me", "Me");
+    const people = [selectedPerson, person("spouse", "Spouse"), person("spouse-mom", "Martha")];
+    const relationships = [
+      relationship("spouse", "me", "SPOUSE_OF"),
+      relationship("spouse-mom", "spouse", "PARENT_OF")
+    ];
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const baseProps: PanelProps = {
+      person: selectedPerson,
+      people,
+      relationships,
+      dismissedSuggestionKeys: [],
+      genders: ["UNKNOWN", "MALE", "FEMALE", "OTHER"],
+      genderValue: "UNKNOWN",
+      birthDateValue: "",
+      givenNameValue: "",
+      surnameValue: "",
+      nicknamesValue: "",
+      deathDateValue: "",
+      birthCityValue: "",
+      birthCountryValue: "",
+      onGenderChange: () => undefined,
+      onBirthDateChange: () => undefined,
+      onGivenNameChange: () => undefined,
+      onSurnameChange: () => undefined,
+      onNicknamesChange: () => undefined,
+      onDeathDateChange: () => undefined,
+      onBirthCityChange: () => undefined,
+      onBirthCountryChange: () => undefined,
+      onProfileSave: () => undefined,
+      isSavingProfile: false,
+      onFocusPerson: () => undefined,
+      onCreateRelationship: async () => undefined,
+      onUpdateRelationship: async () => undefined,
+      onDeleteRelationship: async () => undefined,
+      onDismissSuggestion: () => undefined,
+      isSavingRelationship: false,
+      immichBaseUrl: null,
+      primaryFamilyUnitByPersonId: {},
+      onPrimaryFamilyUnitChange: () => undefined,
+      relationshipLifeEventsById: {},
+      researchTasks: [],
+      onResearchTaskCreate: async () => undefined,
+      onResearchTaskUpdate: async () => undefined,
+      onResearchTaskDelete: async () => undefined
+    };
+
+    act(() => {
+      root.render(createElement(PanelWithUnstableSectionOverrides, baseProps));
+    });
+
+    const profileToggle = container.querySelector(
+      'button[aria-controls="person-detail-section-content-profile"]'
+    ) as HTMLButtonElement | null;
+    expect(profileToggle?.getAttribute("aria-expanded")).toBe("true");
+
+    act(() => {
+      profileToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(profileToggle?.getAttribute("aria-expanded")).toBe("false");
+
+    const rerenderBtn = container.querySelector(
+      '[data-testid="force-parent-rerender"]'
+    ) as HTMLButtonElement | null;
+    act(() => {
+      rerenderBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const profileToggleAfter = container.querySelector(
+      'button[aria-controls="person-detail-section-content-profile"]'
+    ) as HTMLButtonElement | null;
+    expect(profileToggleAfter?.getAttribute("aria-expanded")).toBe("false");
 
     act(() => {
       root.unmount();

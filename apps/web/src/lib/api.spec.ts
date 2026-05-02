@@ -142,6 +142,47 @@ describe("immichPersonUrl", () => {
   });
 });
 
+describe("syncImmichLabelledPeople", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("POSTs the Immich labelled-people sync endpoint with session cookies", async () => {
+    const body = {
+      created: 0,
+      updated: 1,
+      alreadyLinked: 2,
+      skippedUnnamed: 0,
+      duplicateRecompute: { status: "skipped" as const }
+    };
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    const { syncImmichLabelledPeople } = await import("./api");
+    const result = await syncImmichLabelledPeople();
+
+    expect(result).toEqual(body);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/providers/immich/people/sync",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include"
+      })
+    );
+  });
+});
+
 describe("computeGraphLayout", () => {
   const originalFetch = globalThis.fetch;
 

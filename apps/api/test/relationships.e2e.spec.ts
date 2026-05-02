@@ -1744,6 +1744,98 @@ describe("Treemich API routes", () => {
       expect(json.showSingleFamilyTree).toBe(defaultShowSingleFamilyTree);
     });
 
+    it("returns saved onboardingTutorial with defaults merged", async () => {
+      const onboardingTutorial = {
+        dismissedVersion: "v1",
+        dismissedAt: "2025-05-01T12:00:00.000Z"
+      };
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({
+        preferences: { familyViewStyle: "generationTree", onboardingTutorial }
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/user/preferences"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        familyViewStyle: "generationTree",
+        graphRenderLimit: defaultGraphRenderLimit,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true,
+        onboardingTutorial
+      });
+    });
+
+    it("saves onboardingTutorial via PATCH", async () => {
+      const onboardingTutorial = {
+        dismissedVersion: "v1",
+        dismissedAt: "2025-05-01T12:00:00.000Z"
+      };
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: {} });
+      treemichUserUpdateMock.mockResolvedValueOnce({ preferences: { onboardingTutorial } });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { onboardingTutorial }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        graphRenderLimit: defaultGraphRenderLimit,
+        showSingleFamilyTree: defaultShowSingleFamilyTree,
+        primaryFamilyUnitByPersonId: {},
+        cooccurrence: defaultCooccurrencePreferences,
+        searchIncludeAlternateNames: true,
+        onboardingTutorial
+      });
+      expect(treemichUserUpdateMock).toHaveBeenCalledWith({
+        where: { id: "user-1" },
+        data: { preferences: { onboardingTutorial } },
+        select: { preferences: true }
+      });
+    });
+
+    it("preserves onboardingTutorial when only familyViewStyle is patched", async () => {
+      const onboardingTutorial = {
+        dismissedVersion: "v1",
+        dismissedAt: "2025-05-01T12:00:00.000Z"
+      };
+      const existing = { familyViewStyle: "generationTree", onboardingTutorial };
+      const merged = { ...existing, familyViewStyle: "hybridTreeList" };
+      treemichUserFindUniqueOrThrowMock.mockResolvedValueOnce({ preferences: existing });
+      treemichUserUpdateMock.mockResolvedValueOnce({ preferences: merged });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { familyViewStyle: "hybridTreeList" }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().onboardingTutorial).toEqual(onboardingTutorial);
+      expect(response.json().familyViewStyle).toBe("hybridTreeList");
+      expect(treemichUserUpdateMock).toHaveBeenCalledWith({
+        where: { id: "user-1" },
+        data: { preferences: merged },
+        select: { preferences: true }
+      });
+    });
+
+    it("rejects PATCH with partial onboardingTutorial", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/user/preferences",
+        payload: { onboardingTutorial: { dismissedVersion: "v1" } }
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
     it("persists graph render limit preferences", async () => {
       const existing = { familyViewStyle: "generationTree" };
       const merged = { ...existing, graphRenderLimit: 240 };

@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Person } from "../../lib/api";
-import { getPersonDisplayLabel } from "../../lib/personDisplay";
+import { personMatchesGraphSearchQuery } from "../../lib/personDisplay";
 
 type SearchFallbackMatch = {
   personId: string;
@@ -36,12 +36,7 @@ export const findPersonBySearchTerm = (people: Person[], searchTerm: string) => 
   if (!normalized) {
     return null;
   }
-  return (
-    people.find((person) => {
-      const label = getPersonDisplayLabel(person);
-      return label.toLowerCase().includes(normalized) || person.name.toLowerCase().includes(normalized);
-    }) ?? null
-  );
+  return people.find((person) => personMatchesGraphSearchQuery(person, normalized)) ?? null;
 };
 
 export const resolveFocusPersonRequest = (people: Person[], focusPersonRequest: string | null) => {

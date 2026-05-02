@@ -25,6 +25,7 @@ import type {
   ImmichImportDecision,
   ImmichImportPreviewResponse,
   ImmichPeopleImportResponse,
+  ImmichPeopleSyncResponse,
   ImmichThumbnailImportResponse,
   LifeEventListResponse,
   LifeEventRecord,
@@ -88,6 +89,7 @@ export type {
   ImmichImportDecision,
   ImmichImportPreviewResponse,
   ImmichPeopleImportResponse,
+  ImmichPeopleSyncResponse,
   ImmichThumbnailImportResponse,
   LinkStatus,
   LifeEventRecord,
@@ -645,6 +647,19 @@ export const searchRelationships = async (query: string): Promise<SearchRelation
 export const personThumbnailUrl = (personId: string, revision?: string) => {
   const baseUrl = `${treemichApi}/people/${encodeURIComponent(personId)}/thumbnail`;
   return revision ? `${baseUrl}?revision=${encodeURIComponent(revision)}` : baseUrl;
+};
+
+/** Dispatched on `window` after a successful `syncImmichLabelledPeople()` so graph data can refresh. */
+export const IMMICH_PEOPLE_SYNCED_EVENT = "treemich:immich-people-synced" as const;
+
+/** `POST /providers/immich/people/sync` — upsert Treemich people from labelled Immich faces (session + linked Immich). */
+export const syncImmichLabelledPeople = async (): Promise<ImmichPeopleSyncResponse> => {
+  const response = await fetch(
+    `${treemichApi}/providers/immich/people/sync`,
+    withSession({ method: "POST" })
+  );
+  await ensureOk(response, "Failed to sync Immich labelled people");
+  return (await response.json()) as ImmichPeopleSyncResponse;
 };
 
 export const getImmichImportPreview = async (): Promise<ImmichImportPreviewResponse> => {
@@ -1552,24 +1567,62 @@ export const deleteEvidenceMediaLink = async (linkId: string): Promise<void> => 
   await ensureOk(response, "Failed to delete media link");
 };
 
-/** `POST /import/gedcom/preview` — parse UTF-8 GEDCOM and list INDI/FAM for matching (Phase 5b). */
-export type GedcomImportPreviewIndiRow = {
+/** One related person shown on a GEDCOM import preview row. */
+export type GedcomImportPreviewRelatedPerson = {
+  label: string;
+  name: string;
+};
+
+/** Enriched INDI row returned by preview session APIs. */
+export type GedcomImportPreviewIndiEnrichedRow = {
   xref: string;
   displayName: string | null;
   personHint: string | null;
-  /** @deprecated Legacy provider hint retained for older GEDCOM preview responses; use personHint. */
+  /** @deprecated Legacy provider hint; prefer personHint. */
   immichHint?: string | null;
+  fullName: string | null;
+  alternateNames: string[];
+  birthDate: string | null;
+  relatedPeople: GedcomImportPreviewRelatedPerson[];
 };
 
-export type GedcomImportPreviewResponse = {
-  indis: GedcomImportPreviewIndiRow[];
-  fams: { xref: string; husbXref: string | null; wifeXref: string | null; childXrefs: string[] }[];
-  media: { xref: string; file: string | null; title: string | null; form: string | null }[];
-  archiveMediaFiles: { path: string; byteSize: number; mimeType: string | null }[];
-  unmatchedIndis: GedcomImportPreviewIndiRow[];
-  unmatchedIndiPolicy?: "MATCH_ONLY" | "CREATE";
+export type GedcomImportPreviewSummary = {
+  totalIndis: number;
+  totalFams: number;
+  totalMedia: number;
+  matchedByHintCount: number;
+  archiveMediaFileCount: number;
   famMatchError: string | null;
+};
+
+/** `POST /import/gedcom/previews` — create a preview session and return the first page. */
+export type GedcomPreviewCreateResponse = {
+  previewId: string;
+  expiresAt: string;
+  initialMatchedXrefs: string[];
+  summary: GedcomImportPreviewSummary;
   lineLog: unknown[];
+  archiveMediaFiles: { path: string; byteSize: number; mimeType: string | null }[];
+  page: {
+    offset: number;
+    limit: number;
+    total: number;
+    rows: GedcomImportPreviewIndiEnrichedRow[];
+  };
+};
+
+export type GedcomPreviewIndisPageResponse = {
+  previewId: string;
+  offset: number;
+  limit: number;
+  total: number;
+  rows: GedcomImportPreviewIndiEnrichedRow[];
+  summary: {
+    totalIndis: number;
+    totalFams: number;
+    totalMedia: number;
+    famMatchError: string | null;
+  };
 };
 
 export type GedcomDryRunDiff = {
@@ -1585,36 +1638,60 @@ export type GedcomImportSummary = Record<string, unknown> & {
   dryRunDiff?: GedcomDryRunDiff;
 };
 
-export const postGedcomImportPreview = async (gedcomUtf8: string): Promise<GedcomImportPreviewResponse> => {
+export const createGedcomImportPreview = async (file: File): Promise<GedcomPreviewCreateResponse> => {
+  const form = new FormData();
+  form.append("file", file, file.name);
   const response = await fetch(
-    `${treemichApi}/import/gedcom/preview`,
-    withSession({
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ gedcomUtf8 })
-    })
+    `${treemichApi}/import/gedcom/previews`,
+    withSession({ method: "POST", body: form })
   );
   await ensureOk(response, "GEDCOM preview failed");
-  return (await response.json()) as GedcomImportPreviewResponse;
+  return (await response.json()) as GedcomPreviewCreateResponse;
 };
 
-export const postGedcomImportArchivePreview = async (archive: File): Promise<GedcomImportPreviewResponse> => {
-  const form = new FormData();
-  form.append("archive", archive, archive.name);
+export const deleteGedcomImportPreviewSession = async (previewId: string): Promise<void> => {
   const response = await fetch(
-    `${treemichApi}/import/gedcom/preview/archive`,
-    withSession({
-      method: "POST",
-      body: form
-    })
+    `${treemichApi}/import/gedcom/previews/${encodeURIComponent(previewId)}`,
+    withSession({ method: "DELETE" })
   );
-  await ensureOk(response, "GEDCOM archive preview failed");
-  return (await response.json()) as GedcomImportPreviewResponse;
+  await ensureOk(response, "Failed to delete GEDCOM preview session");
 };
 
-export type GedcomImportJobCreateBody = {
-  gedcomUtf8: string;
-  fileName?: string;
+export const getGedcomPreviewIndisPage = async (
+  previewId: string,
+  params: {
+    offset?: number;
+    limit?: number;
+    filter?: "all" | "unmatched";
+    q?: string;
+    matchedXrefs?: string[];
+  }
+): Promise<GedcomPreviewIndisPageResponse> => {
+  const sp = new URLSearchParams();
+  if (params.offset != null) {
+    sp.set("offset", String(params.offset));
+  }
+  if (params.limit != null) {
+    sp.set("limit", String(params.limit));
+  }
+  if (params.filter) {
+    sp.set("filter", params.filter);
+  }
+  if (params.q?.trim()) {
+    sp.set("q", params.q.trim());
+  }
+  if (params.matchedXrefs && params.matchedXrefs.length > 0) {
+    sp.set("matchedXrefs", params.matchedXrefs.join(","));
+  }
+  const qs = sp.toString();
+  const url = `${treemichApi}/import/gedcom/previews/${encodeURIComponent(previewId)}/indis${qs ? `?${qs}` : ""}`;
+  const response = await fetch(url, withSession({ cache: "no-store" }));
+  await ensureOk(response, "Failed to load GEDCOM preview page");
+  return (await response.json()) as GedcomPreviewIndisPageResponse;
+};
+
+export type GedcomImportJobFromPreviewBody = {
+  previewId: string;
   indiMatches: Record<string, string>;
   importOptions?: {
     dryRun?: boolean;
@@ -1624,11 +1701,11 @@ export type GedcomImportJobCreateBody = {
   };
 };
 
-export const postGedcomImportJob = async (
-  body: GedcomImportJobCreateBody
+export const postGedcomImportJobFromPreview = async (
+  body: GedcomImportJobFromPreviewBody
 ): Promise<{ id: string; status: string; createdAt: string }> => {
   const response = await fetch(
-    `${treemichApi}/import/gedcom/jobs`,
+    `${treemichApi}/import/gedcom/jobs/from-preview`,
     withSession({
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1636,31 +1713,6 @@ export const postGedcomImportJob = async (
     })
   );
   await ensureOk(response, "GEDCOM import job failed to start");
-  return (await response.json()) as { id: string; status: string; createdAt: string };
-};
-
-export const postGedcomImportArchiveJob = async (body: {
-  archive: File;
-  indiMatches: Record<string, string>;
-  importOptions?: {
-    dryRun?: boolean;
-    skipAlreadyImportedIndis?: boolean;
-    allowPartialMatches?: boolean;
-    unmatchedIndiPolicy?: "MATCH_ONLY" | "CREATE";
-  };
-}): Promise<{ id: string; status: string; createdAt: string }> => {
-  const form = new FormData();
-  form.append("archive", body.archive, body.archive.name);
-  form.append("indiMatches", JSON.stringify(body.indiMatches));
-  form.append("importOptions", JSON.stringify(body.importOptions ?? {}));
-  const response = await fetch(
-    `${treemichApi}/import/gedcom/jobs/archive`,
-    withSession({
-      method: "POST",
-      body: form
-    })
-  );
-  await ensureOk(response, "GEDCOM archive import job failed to start");
   return (await response.json()) as { id: string; status: string; createdAt: string };
 };
 

@@ -1,7 +1,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { PersonRecord } from "../../lib/api";
 import { GraphSearchOverlay } from "./GraphSearchOverlay";
+
+const person = (partial: Partial<PersonRecord> & Pick<PersonRecord, "id" | "name">): PersonRecord =>
+  partial as PersonRecord;
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
@@ -24,7 +28,7 @@ const renderOverlay = (onCenterView = vi.fn()): RenderResult => {
         onSearchSubmit={(event) => event.preventDefault()}
         onClearSearch={() => undefined}
         onCenterView={onCenterView}
-        people={[{ id: "person-1", name: "Alex" }]}
+        people={[person({ id: "person-1", name: "Alex" })]}
         searchFeedback={null}
         treeValidationIssueCount={null}
         treeValidationEngineDisabled={false}
@@ -43,6 +47,39 @@ afterEach(() => {
 });
 
 describe("GraphSearchOverlay", () => {
+  it("exposes onboarding anchors for relationship search and new person", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <GraphSearchOverlay
+          searchTerm=""
+          onSearchTermChange={() => undefined}
+          onSearchSubmit={(event) => event.preventDefault()}
+          onClearSearch={() => undefined}
+          onCenterView={() => undefined}
+          people={[]}
+          searchFeedback={null}
+          treeValidationIssueCount={null}
+          treeValidationEngineDisabled={false}
+          providerFilter="all"
+          onProviderFilterChange={() => undefined}
+          onNewPerson={() => undefined}
+        />
+      );
+    });
+
+    expect(container.querySelector('[data-onboarding-target="relationship-search"]')).not.toBeNull();
+    expect(container.querySelector('[data-onboarding-target="new-person"]')).not.toBeNull();
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it("renders a center view button with an accessible label", () => {
     const { container, root } = renderOverlay();
 
@@ -75,10 +112,12 @@ describe("GraphSearchOverlay", () => {
   });
 
   it("limits datalist options to a bounded list", () => {
-    const people = Array.from({ length: 120 }, (_, index) => ({
-      id: `person-${index}`,
-      name: `Person ${String(index).padStart(3, "0")}`
-    }));
+    const people = Array.from({ length: 120 }, (_, index) =>
+      person({
+        id: `person-${index}`,
+        name: `Person ${String(index).padStart(3, "0")}`
+      })
+    );
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -123,8 +162,8 @@ describe("GraphSearchOverlay", () => {
           onClearSearch={() => undefined}
           onCenterView={() => undefined}
           people={[
-            { id: "standalone-1", name: "Standalone Person" },
-            { id: "immich-1", name: "Immich Person" }
+            person({ id: "standalone-1", name: "Standalone Person" }),
+            person({ id: "immich-1", name: "Immich Person" })
           ]}
           searchFeedback={null}
           treeValidationIssueCount={null}
@@ -161,7 +200,7 @@ describe("GraphSearchOverlay", () => {
           onSearchSubmit={(event) => event.preventDefault()}
           onClearSearch={() => undefined}
           onCenterView={() => undefined}
-          people={[{ id: "person-1", name: "Alex" }]}
+          people={[person({ id: "person-1", name: "Alex" })]}
           searchFeedback={null}
           treeValidationIssueCount={null}
           treeValidationEngineDisabled={false}
@@ -177,6 +216,61 @@ describe("GraphSearchOverlay", () => {
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(onProviderFilterChange).toHaveBeenCalledWith("unlinked");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("includes Immich identity display names as search suggestion aliases", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <GraphSearchOverlay
+          searchTerm="emma"
+          onSearchTermChange={() => undefined}
+          onSearchSubmit={(event) => event.preventDefault()}
+          onClearSearch={() => undefined}
+          onCenterView={() => undefined}
+          people={[
+            person({
+              id: "p1",
+              name: "Jane Doe",
+              displayName: "Jane D.",
+              externalIdentities: [
+                {
+                  id: "ext-1",
+                  personId: "p1",
+                  provider: "IMMICH",
+                  providerPersonId: "im-1",
+                  providerBaseUrl: "https://immich.test/api",
+                  displayName: "Emma From Immich",
+                  thumbnailImportedAt: null,
+                  lastSeenAt: null,
+                  metadata: {},
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:00.000Z"
+                }
+              ]
+            })
+          ]}
+          searchFeedback={null}
+          treeValidationIssueCount={null}
+          treeValidationEngineDisabled={false}
+          providerFilter="all"
+          onProviderFilterChange={() => undefined}
+        />
+      );
+    });
+
+    const options = [...container.querySelectorAll<HTMLOptionElement>("datalist option")].map(
+      (option) => option.value
+    );
+    expect(options).toContain("Emma From Immich");
 
     act(() => {
       root.unmount();

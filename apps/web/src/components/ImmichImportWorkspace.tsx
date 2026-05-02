@@ -2,10 +2,12 @@ import { useMemo, useState } from "react";
 import {
   ApiHttpError,
   getImmichImportPreview,
+  IMMICH_PEOPLE_SYNCED_EVENT,
   importImmichCooccurrence,
   importImmichPeople,
   importImmichThumbnails,
   personThumbnailUrl,
+  syncImmichLabelledPeople,
   type ImmichImportDecision,
   type ImmichImportPreviewResponse,
   type PersonRecord
@@ -167,6 +169,48 @@ export const ImmichImportWorkspace = ({ people, onImported }: Props) => {
     }
   };
 
+  const resyncLabelledPeople = async () => {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await syncImmichLabelledPeople();
+      const headline =
+        result.created > 0
+          ? `${result.created} new Immich ${result.created === 1 ? "person" : "people"} added.`
+          : "No new Immich people added.";
+      const detailParts: string[] = [];
+      if (result.updated > 0) {
+        detailParts.push(`${result.updated} Immich label${result.updated === 1 ? "" : "s"} updated`);
+      }
+      if (result.alreadyLinked > 0) {
+        detailParts.push(`${result.alreadyLinked} already linked`);
+      }
+      if (result.skippedUnnamed > 0) {
+        detailParts.push(`${result.skippedUnnamed} unnamed skipped`);
+      }
+      const syncSummaryLine = detailParts.length > 0 ? `${headline} (${detailParts.join(", ")}).` : headline;
+      setMessage(syncSummaryLine);
+      window.dispatchEvent(new Event(IMMICH_PEOPLE_SYNCED_EVENT));
+      onImported?.();
+      try {
+        await loadPreview();
+      } catch {
+        /* Preview refresh is best-effort after sync. */
+      } finally {
+        setMessage(syncSummaryLine);
+      }
+    } catch (e) {
+      if (e instanceof ApiHttpError && e.statusCode === 401) {
+        setError("Link or refresh your Immich account before re-syncing labelled people.");
+      } else {
+        setError(e instanceof Error ? e.message : "Immich sync failed");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="card stack">
       <div className="section-heading">
@@ -176,9 +220,19 @@ export const ImmichImportWorkspace = ({ people, onImported }: Props) => {
             Preview Immich people, link them to Treemich people, create missing people, and import thumbnails.
           </p>
         </div>
-        <button type="button" className="button" disabled={busy} onClick={() => void loadPreview()}>
-          Load Immich Preview
-        </button>
+        <div className="toolbar-row">
+          <button type="button" className="button" disabled={busy} onClick={() => void loadPreview()}>
+            Load Immich Preview
+          </button>
+          <button
+            type="button"
+            className="button"
+            disabled={busy}
+            onClick={() => void resyncLabelledPeople()}
+          >
+            Re-sync labelled people
+          </button>
+        </div>
       </div>
 
       {error ? <p className="error-text">{error}</p> : null}

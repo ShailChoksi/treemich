@@ -6,6 +6,13 @@ import { ToastProvider, useToast, type ToastMessage } from "./ToastContext";
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
+/** Flush passive effects / microtasks (e.g. provider useEffect after setState) inside the act environment. */
+const flushAct = () =>
+  act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
 type Snapshot = {
   toasts: ToastMessage[];
   status: string | null;
@@ -42,21 +49,25 @@ describe("ToastContext", () => {
     await act(async () => {
       root.render(createElement(ToastProvider, null, createElement(Probe)));
     });
+    await flushAct();
 
     await act(async () => {
       getLatest().addToast("Saved");
     });
+    await flushAct();
     expect(getLatest().toasts.map((toast) => toast.message)).toEqual(["Saved"]);
 
     await act(async () => {
       getLatest().setStatus("Loaded");
     });
+    await flushAct();
     expect(getLatest().status).toBe("Loaded");
     expect(getLatest().toasts.map((toast) => toast.message)).toEqual(["Saved", "Loaded"]);
 
     await act(async () => {
       vi.advanceTimersByTime(5000);
     });
+    await flushAct();
     expect(getLatest().toasts).toEqual([]);
     expect(getLatest().status).toBeNull();
 

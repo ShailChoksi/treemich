@@ -6,22 +6,38 @@ import type { FastifyInstance } from "fastify";
 import {
   immichPeopleImportBodySchema,
   immichThumbnailImportBodySchema,
+  splitImmichPersonDisplayName,
   type GenderValue,
   type ImmichImportCandidate,
-  type ImmichImportPreviewRow
+  type ImmichImportPreviewRow,
+  type ImmichPeopleSyncDuplicateRecompute
 } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import { importImmichThumbnailForIdentity } from "../integrations/immich/importProvider.js";
 import { getRequiredAuth } from "../auth/request.js";
 import { getImmichClientForRequest } from "../services.js";
 
-const splitName = (name: string) => {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const [givenName, ...surnameParts] = parts;
-  return {
-    givenName: givenName ?? "Person",
-    surname: surnameParts.join(" ") || null
-  };
+const runDuplicateRecomputeIfNeeded = async (
+  app: FastifyInstance,
+  userId: string,
+  createdCount: number
+): Promise<ImmichPeopleSyncDuplicateRecompute> => {
+  if (createdCount <= 0) {
+    return { status: "skipped" };
+  }
+  const duplicateService = app.services.personDuplicateService;
+  if (!duplicateService) {
+    return { status: "skipped" };
+  }
+  try {
+    const response = await duplicateService.recomputeCandidates(userId);
+    return { status: "ok", summary: response.summary };
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Duplicate recompute failed"
+    };
+  }
 };
 
 const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() ?? "";
@@ -53,6 +69,25 @@ const reasonScore = (reason: ImmichImportCandidate["reason"]) => {
 };
 
 export const registerImmichProviderRoutes = (app: FastifyInstance) => {
+  app.post("/providers/immich/people/sync", async (request) => {
+    const auth = getRequiredAuth(request);
+    const immichClient = await getImmichClientForRequest(request);
+    const linkedAccount =
+      request.auth && "linkedAccount" in request.auth
+        ? (request.auth as { linkedAccount: { immichBaseUrl: string } }).linkedAccount
+        : null;
+    try {
+      const immichPeople = await immichClient.listPeople();
+      const summary = await app.services.personService.syncImmichLabelledPeople(auth.user.id, immichPeople, {
+        providerBaseUrl: linkedAccount?.immichBaseUrl ?? null
+      });
+      const duplicateRecompute = await runDuplicateRecomputeIfNeeded(app, auth.user.id, summary.created);
+      return { ...summary, duplicateRecompute };
+    } finally {
+      immichClient.dispose();
+    }
+  });
+
   app.get("/providers/immich/people/preview", async (request) => {
     const auth = getRequiredAuth(request);
     const immichClient = await getImmichClientForRequest(request);
@@ -157,9 +192,9 @@ export const registerImmichProviderRoutes = (app: FastifyInstance) => {
         const person =
           decision.action === "create"
             ? await app.services.personService.create(auth.user.id, {
-                ...splitName(immichPerson.name),
-                givenName: decision.givenName ?? splitName(immichPerson.name).givenName,
-                surname: decision.surname ?? splitName(immichPerson.name).surname,
+                ...splitImmichPersonDisplayName(immichPerson.name),
+                givenName: decision.givenName ?? splitImmichPersonDisplayName(immichPerson.name).givenName,
+                surname: decision.surname ?? splitImmichPersonDisplayName(immichPerson.name).surname,
                 gender: (decision.gender ?? "UNKNOWN") as GenderValue
               })
             : await app.services.personService.get(auth.user.id, decision.personId);
@@ -230,15 +265,19 @@ export const registerImmichProviderRoutes = (app: FastifyInstance) => {
       }
     }
 
+    const createdCount = results.filter((result) => result.status === "created").length;
+    const duplicateRecompute = await runDuplicateRecomputeIfNeeded(app, auth.user.id, createdCount);
+
     return {
       results,
       summary: {
-        created: results.filter((result) => result.status === "created").length,
+        created: createdCount,
         linked: results.filter((result) => result.status === "linked").length,
         skipped: results.filter((result) => result.status === "skipped").length,
         alreadyLinked: results.filter((result) => result.status === "alreadyLinked").length,
         errors: results.filter((result) => result.status === "error").length,
-        thumbnailsImported
+        thumbnailsImported,
+        duplicateRecompute
       }
     };
   });

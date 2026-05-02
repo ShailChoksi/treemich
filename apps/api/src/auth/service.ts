@@ -3,8 +3,7 @@ import type { AuthState } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import { env } from "../config/env.js";
 import { createOpaqueToken, encryptSecret, hashPassword, hashToken, verifyPassword } from "./crypto.js";
-import { ImmichAuthenticationError, ImmichClient, loginToImmich } from "../integrations/immich/client.js";
-import { PersonService } from "../people/service.js";
+import { ImmichAuthenticationError, loginToImmich } from "../integrations/immich/client.js";
 
 const authSessionIncludeLight = {
   user: true
@@ -67,14 +66,7 @@ type ResolvedSessionContext<TOptions extends SessionResolutionOptions | undefine
 
 type CachedContext = AuthenticatedRequestContext | LinkedAuthenticatedRequestContext | null;
 
-type ImmichPeopleClient = Pick<ImmichClient, "listPeople" | "dispose">;
-
 type ImmichLoginResult = Awaited<ReturnType<typeof loginToImmich>>;
-
-type AuthServiceOptions = {
-  personService?: Pick<PersonService, "syncImmichExternalIdentityNames">;
-  createImmichClientFromToken?: (accessToken: string) => ImmichPeopleClient;
-};
 
 class SessionContextCache {
   private readonly cache = new Map<string, { expiresAt: number; context: CachedContext }>();
@@ -131,11 +123,8 @@ export class AuthService {
     this.sessionCacheTtlMs,
     this.maxSessionCacheEntries
   );
-  private readonly personService: Pick<PersonService, "syncImmichExternalIdentityNames">;
 
-  constructor(private readonly options: AuthServiceOptions = {}) {
-    this.personService = options.personService ?? new PersonService();
-  }
+  constructor() {}
 
   private userState(
     user: Pick<SessionWithUserLight["user"], "id" | "email" | "name">,
@@ -241,8 +230,6 @@ export class AuthService {
 
     await this.storeLinkedImmichAccount(user.id, login);
 
-    await this.syncImmichPersonNames(user.id, login.accessToken);
-
     const sessionToken = createOpaqueToken();
     await prisma.treemichSession.create({
       data: {
@@ -307,7 +294,6 @@ export class AuthService {
     }
 
     await this.storeLinkedImmichAccount(userId, login);
-    await this.syncImmichPersonNames(userId, login.accessToken);
     return {
       linked: true,
       immichBaseUrl,
@@ -371,21 +357,6 @@ export class AuthService {
     return result.count;
   }
 
-  private createImmichClientFromToken(accessToken: string): ImmichPeopleClient {
-    const immichBaseUrl = this.requireConfiguredImmichBaseUrl();
-    return (
-      this.options.createImmichClientFromToken?.(accessToken) ??
-      new ImmichClient({
-        baseUrl: immichBaseUrl,
-        accessToken,
-        peoplePageSize: env.IMMICH_PEOPLE_PAGE_SIZE,
-        timeoutMs: env.IMMICH_HTTP_TIMEOUT_MS,
-        maxRetries: env.IMMICH_HTTP_MAX_RETRIES,
-        retryBaseDelayMs: env.IMMICH_HTTP_RETRY_BASE_DELAY_MS
-      })
-    );
-  }
-
   private async loginToImmichWithGenericAuthError(email: string, password: string) {
     const immichBaseUrl = this.requireConfiguredImmichBaseUrl();
     try {
@@ -439,18 +410,6 @@ export class AuthService {
       throw new TreemichConflictError("Immich provider is not configured");
     }
     return env.IMMICH_BASE_URL;
-  }
-
-  private async syncImmichPersonNames(userId: string, accessToken: string) {
-    const client = this.createImmichClientFromToken(accessToken);
-    try {
-      const people = await client.listPeople();
-      await this.personService.syncImmichExternalIdentityNames(userId, people);
-    } catch {
-      // Name recovery should not prevent a successful Immich login or link.
-    } finally {
-      client.dispose();
-    }
   }
 
   private async resolveSession<TOptions extends SessionResolutionOptions | undefined = undefined>(

@@ -48,7 +48,7 @@ export const buildServices = (): AppServices => {
   const lifeEventService = new LifeEventService(personService);
   const relationshipService = new RelationshipService(personService, lifeEventService);
   return {
-    authService: new AuthService({ personService }),
+    authService: new AuthService(),
     cooccurrenceService: new CooccurrenceService(),
     immichClientFactory: new ImmichClientFactory(),
     personService,

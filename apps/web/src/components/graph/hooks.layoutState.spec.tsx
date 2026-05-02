@@ -135,6 +135,7 @@ describe("useGraphLayoutState", () => {
   });
 
   it("falls back to sync layout when worker request fails", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const originalWorker = globalThis.Worker;
     (globalThis as { Worker?: typeof Worker }).Worker = class {} as unknown as typeof Worker;
     const workerSpy = vi
@@ -173,6 +174,11 @@ describe("useGraphLayoutState", () => {
 
     expect(workerSpy).toHaveBeenCalled();
     expect(visibleCount).toBeGreaterThan(0);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]?.[0]).toBe(
+      "[graph-layout] falling back to sync layout after worker failure"
+    );
+    expect(warnSpy.mock.calls[0]?.[1]).toMatchObject({ message: "worker unavailable" });
 
     act(() => root.unmount());
     container.remove();

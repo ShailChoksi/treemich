@@ -18,8 +18,7 @@ describe("GEDCOM import when TREEMICH_GEDCOM_IMPORT_ENABLED is off", () => {
 
     const preview = await app.inject({
       method: "POST",
-      url: "/import/gedcom/preview",
-      payload: { gedcomUtf8: "0 HEAD\n0 TRLR\n" }
+      url: "/import/gedcom/previews"
     });
     expect(preview.statusCode).toBe(404);
 

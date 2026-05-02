@@ -7,12 +7,9 @@ export default defineConfig({
     /** Cold `import()` of large route graphs can exceed defaults on slow disks (e.g. WSL + `/mnt`). */
     testTimeout: 30_000,
     hookTimeout: 30_000,
-    poolOptions: {
-      threads: {
-        maxThreads: 4,
-        minThreads: 1
-      }
-    },
+    /** Vitest 4: replaces `poolOptions.threads` (removed). Default pool is `forks`; keep thread pool + worker cap. */
+    pool: "threads",
+    maxWorkers: 4,
     setupFiles: ["./test/setup-env.ts"],
     coverage: {
       provider: "v8",

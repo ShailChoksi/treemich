@@ -129,6 +129,8 @@ const clampGraphRenderLimit = (value: number) =>
 type Props = {
   immichBaseUrl?: string | null;
   currentUserName?: string | null;
+  /** Opens the first-login tutorial replay from Settings (optional). */
+  onReplayOnboardingTutorial?: () => void;
 };
 
 const ToastViewport = memo(({ toasts }: { toasts: ToastMessage[] }) => (
@@ -168,6 +170,7 @@ const WorkspaceNav = memo(
             <button
               key={workspace.id}
               data-workspace={workspace.id}
+              data-onboarding-target={workspace.id === "interchange" ? "workspace-interchange" : undefined}
               ref={(node) => {
                 workspaceButtonRefs.current[index] = node;
               }}
@@ -354,19 +357,27 @@ const DetailContainer = memo(
   }
 );
 
-export const PeoplePage = ({ immichBaseUrl = null, currentUserName = null }: Props) => (
+export const PeoplePage = ({
+  immichBaseUrl = null,
+  currentUserName = null,
+  onReplayOnboardingTutorial
+}: Props) => (
   <ToastProvider>
     <PeopleGraphDataProvider immichBaseUrl={immichBaseUrl} currentUserName={currentUserName}>
       <PeopleReviewProvider>
         <PersonDetailProviderTree>
-          <PeoplePageShell />
+          <PeoplePageShell onReplayOnboardingTutorial={onReplayOnboardingTutorial} />
         </PersonDetailProviderTree>
       </PeopleReviewProvider>
     </PeopleGraphDataProvider>
   </ToastProvider>
 );
 
-const PeoplePageShell = () => {
+type PeoplePageShellProps = {
+  onReplayOnboardingTutorial?: () => void;
+};
+
+const PeoplePageShell = ({ onReplayOnboardingTutorial }: PeoplePageShellProps) => {
   const graph = usePeopleGraphData();
   const review = usePeopleReview();
   const { toasts } = useToast();
@@ -510,6 +521,11 @@ const PeoplePageShell = () => {
     },
     [activeWorkspace, graph.profileDraftDirty]
   );
+
+  const handleReplayTutorialClick = useCallback(() => {
+    requestWorkspaceChange("tree");
+    onReplayOnboardingTutorial?.();
+  }, [onReplayOnboardingTutorial, requestWorkspaceChange]);
 
   const handleConfirmWorkspaceDiscard = useCallback(async () => {
     try {
@@ -715,6 +731,23 @@ const PeoplePageShell = () => {
                   </span>
                 </span>
               </label>
+              <div className="stack">
+                <h2>Onboarding</h2>
+                <p className="hint">
+                  Replay the welcome walkthrough for Treemich people, relationships, and optional Immich
+                  linking.
+                </p>
+              </div>
+              <div className="toolbar-row">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!onReplayOnboardingTutorial}
+                  onClick={() => handleReplayTutorialClick()}
+                >
+                  Replay tutorial
+                </button>
+              </div>
             </section>
           )}
         </section>
@@ -765,7 +798,12 @@ const PeoplePageShell = () => {
         </span>
       </button>
 
-      <section className="workspace-main" id="main-content" tabIndex={-1}>
+      <section
+        className="workspace-main"
+        id="main-content"
+        data-onboarding-target="main-content"
+        tabIndex={-1}
+      >
         <div className="workspace-main-views" ref={workspaceMainViewsRef}>
           <GraphContainer
             activeWorkspace={activeWorkspace}

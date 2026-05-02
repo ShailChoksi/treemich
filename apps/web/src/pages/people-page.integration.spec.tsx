@@ -154,7 +154,8 @@ describe("PeoplePage + life events (integration)", () => {
           showSingleFamilyTree: true,
           primaryFamilyUnitByPersonId: {},
           cooccurrence: { refreshEnabled: true, refreshIntervalDays: 7 },
-          searchIncludeAlternateNames: body.searchIncludeAlternateNames ?? true
+          searchIncludeAlternateNames: body.searchIncludeAlternateNames ?? true,
+          ...(body.onboardingTutorial !== undefined ? { onboardingTutorial: body.onboardingTutorial } : {})
         });
       }
 
@@ -308,16 +309,27 @@ describe("PeoplePage + life events (integration)", () => {
         });
       }
 
-      if (method === "POST" && url.endsWith("/import/gedcom/preview")) {
+      if (method === "POST" && url.includes("/import/gedcom/previews")) {
         return jsonResponse({
-          indis: [],
-          fams: [],
-          media: [],
+          previewId: "pv-int",
+          expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+          initialMatchedXrefs: [],
+          summary: {
+            totalIndis: 0,
+            totalFams: 0,
+            totalMedia: 0,
+            matchedByHintCount: 0,
+            archiveMediaFileCount: 0,
+            famMatchError: null
+          },
+          lineLog: [],
           archiveMediaFiles: [],
-          unmatchedIndis: [],
-          famMatchError: null,
-          lineLog: []
+          page: { offset: 0, limit: 50, total: 0, rows: [] }
         });
+      }
+
+      if (method === "DELETE" && url.includes("/import/gedcom/previews/")) {
+        return new Response(null, { status: 204 });
       }
 
       return jsonResponse({ error: `unmocked ${method} ${url}` }, 404);
@@ -765,6 +777,59 @@ describe("PeoplePage + life events (integration)", () => {
     container.remove();
   });
 
+  it("Settings Onboarding Replay tutorial invokes the callback when provided", async () => {
+    const onReplayOnboardingTutorial = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        createElement(PeoplePage, {
+          immichBaseUrl: null,
+          currentUserName: null,
+          onReplayOnboardingTutorial
+        })
+      );
+    });
+
+    const settingsNav = container.querySelector('[data-workspace="settings"]') as HTMLButtonElement | null;
+    await act(async () => {
+      settingsNav!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Onboarding");
+    const replay = [...container.querySelectorAll("button")].find((b) => b.textContent === "Replay tutorial");
+    expect(replay?.disabled).toBe(false);
+
+    const patchCountBefore = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.filter(
+        (call) => String(call[0]).includes("/user/preferences") && call[1]?.method === "PATCH"
+      ).length;
+
+    await act(async () => {
+      replay?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onReplayOnboardingTutorial).toHaveBeenCalledTimes(1);
+    const treeNav = container.querySelector('[data-workspace="tree"]') as HTMLButtonElement | null;
+    expect(treeNav?.className).toContain("workspace-nav-item--active");
+    const patchCountAfter = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.filter(
+        (call) => String(call[0]).includes("/user/preferences") && call[1]?.method === "PATCH"
+      ).length;
+    expect(patchCountAfter).toBe(patchCountBefore);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it("persists graph render limit changes from Settings", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -835,7 +900,7 @@ describe("PeoplePage + life events (integration)", () => {
         await Promise.resolve();
       });
       const fetchMock = vi.mocked(globalThis.fetch);
-      if (fetchMock.mock.calls.some((call) => String(call[0]).endsWith("/import/gedcom/preview"))) {
+      if (fetchMock.mock.calls.some((call) => String(call[0]).includes("/import/gedcom/previews"))) {
         break;
       }
     }
@@ -843,7 +908,7 @@ describe("PeoplePage + life events (integration)", () => {
     expect(container.textContent).toContain("Interchange workspace");
     expect(container.textContent).toContain("GEDCOM import / export");
     const fetchMock = vi.mocked(globalThis.fetch);
-    expect(fetchMock.mock.calls.some((call) => String(call[0]).endsWith("/import/gedcom/preview"))).toBe(
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/import/gedcom/previews"))).toBe(
       true
     );
 

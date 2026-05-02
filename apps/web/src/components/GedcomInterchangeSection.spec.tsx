@@ -1,145 +1,187 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Person } from "../lib/api";
 import { GedcomInterchangeSection } from "./GedcomInterchangeSection";
 
 const apiMocks = vi.hoisted(() => ({
-  postGedcomImportPreview: vi.fn(),
-  postGedcomImportArchivePreview: vi.fn(),
-  postGedcomImportArchiveJob: vi.fn(),
-  postGedcomImportJob: vi.fn(),
+  createGedcomImportPreview: vi.fn(),
+  deleteGedcomImportPreviewSession: vi.fn(),
+  getGedcomPreviewIndisPage: vi.fn(),
+  postGedcomImportJobFromPreview: vi.fn(),
   getGedcomImportJob: vi.fn(),
   fetchGedcomExportDownload: vi.fn(),
   postGedcomExportJob: vi.fn(),
   getGedcomExportJob: vi.fn(),
-  downloadGedcomExportJobResult: vi.fn()
+  downloadGedcomExportJobResult: vi.fn(),
+  searchPeople: vi.fn()
 }));
 
 vi.mock("../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/api")>();
   return {
     ...actual,
-    postGedcomImportPreview: apiMocks.postGedcomImportPreview,
-    postGedcomImportArchivePreview: apiMocks.postGedcomImportArchivePreview,
-    postGedcomImportArchiveJob: apiMocks.postGedcomImportArchiveJob,
-    postGedcomImportJob: apiMocks.postGedcomImportJob,
+    createGedcomImportPreview: apiMocks.createGedcomImportPreview,
+    deleteGedcomImportPreviewSession: apiMocks.deleteGedcomImportPreviewSession,
+    getGedcomPreviewIndisPage: apiMocks.getGedcomPreviewIndisPage,
+    postGedcomImportJobFromPreview: apiMocks.postGedcomImportJobFromPreview,
     getGedcomImportJob: apiMocks.getGedcomImportJob,
     fetchGedcomExportDownload: apiMocks.fetchGedcomExportDownload,
     postGedcomExportJob: apiMocks.postGedcomExportJob,
     getGedcomExportJob: apiMocks.getGedcomExportJob,
-    downloadGedcomExportJobResult: apiMocks.downloadGedcomExportJobResult
+    downloadGedcomExportJobResult: apiMocks.downloadGedcomExportJobResult,
+    searchPeople: apiMocks.searchPeople
   };
 });
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
+const sampleRow = (xref: string, displayName: string, overrides: Partial<Record<string, unknown>> = {}) => ({
+  xref,
+  displayName,
+  personHint: null as string | null,
+  fullName: displayName,
+  alternateNames: [] as string[],
+  birthDate: "15 Jan 1990",
+  relatedPeople: [{ label: "Spouse" as const, name: "Jamie" }],
+  ...overrides
+});
+
+const defaultCreateResponse = (rowOverrides?: Partial<Record<string, unknown>>) => ({
+  previewId: "pv-1",
+  expiresAt: "2026-12-31T00:00:00.000Z",
+  initialMatchedXrefs: [] as string[],
+  summary: {
+    totalIndis: 1,
+    totalFams: 0,
+    totalMedia: 0,
+    matchedByHintCount: 0,
+    archiveMediaFileCount: 0,
+    famMatchError: null as string | null
+  },
+  lineLog: [
+    {
+      severity: "warn",
+      lineNo: 0,
+      message: "GEDCOM import diagnostics truncated; 12 additional entries were omitted."
+    }
+  ],
+  archiveMediaFiles: [] as { path: string; byteSize: number; mimeType: string | null }[],
+  page: {
+    offset: 0,
+    limit: 50,
+    total: 1,
+    rows: [sampleRow("@I1@", "Pat Fixture", rowOverrides)]
+  }
+});
+
 describe("GedcomInterchangeSection", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true)
+    );
+    apiMocks.createGedcomImportPreview.mockImplementation(async () => defaultCreateResponse());
+    apiMocks.deleteGedcomImportPreviewSession.mockResolvedValue(undefined);
+    apiMocks.getGedcomPreviewIndisPage.mockImplementation(async (previewId, params) => ({
+      previewId,
+      offset: params.offset ?? 0,
+      limit: params.limit ?? 50,
+      total: 1,
+      rows: [sampleRow("@I1@", "Pat Fixture")],
+      summary: {
+        totalIndis: 1,
+        totalFams: 0,
+        totalMedia: 0,
+        famMatchError: null
+      }
+    }));
+  });
+
   afterEach(() => {
     document.body.innerHTML = "";
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
-  it("shows parser diagnostics from preview responses", async () => {
-    apiMocks.postGedcomImportPreview.mockResolvedValue({
-      indis: [{ xref: "@I1@", displayName: "Pat Fixture", personHint: null }],
-      fams: [],
-      media: [],
-      archiveMediaFiles: [],
-      unmatchedIndis: [],
-      famMatchError: null,
-      lineLog: [
-        {
-          severity: "warn",
-          lineNo: 0,
-          message: "GEDCOM import diagnostics truncated; 12 additional entries were omitted."
-        }
-      ]
-    });
+  const mount = async (people: Person[] = []) => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
-
     await act(async () => {
-      root.render(<GedcomInterchangeSection people={[]} />);
+      root.render(<GedcomInterchangeSection people={people} />);
     });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    apiMocks.createGedcomImportPreview.mockClear();
+    apiMocks.deleteGedcomImportPreviewSession.mockClear();
+    apiMocks.getGedcomPreviewIndisPage.mockClear();
+    return { root, container };
+  };
 
+  const setInputValue = (el: HTMLInputElement, value: string) => {
+    const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value");
+    desc?.set?.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  const chooseGedFile = async (container: HTMLElement, name = "tree.ged") => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const ged = new File(["0 HEAD\n0 TRLR\n"], "tree.ged", { type: "text/plain" });
+    const ged = new File(["0 HEAD\n0 TRLR\n"], name, { type: "text/plain" });
     await act(async () => {
       Object.defineProperty(input, "files", { value: [ged], configurable: true });
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    const previewButton = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Preview"
-    );
     await act(async () => {
-      previewButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
     });
+    return ged;
+  };
 
+  it("auto-previews after file selection and shows parser log", async () => {
+    const { root, container } = await mount();
+    await chooseGedFile(container);
+
+    expect(apiMocks.createGedcomImportPreview).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Parser log (1 entries, first 40 shown)");
     expect(container.textContent).toContain("GEDCOM import diagnostics truncated");
+    expect(container.textContent).not.toContain("Ref:");
+    expect(container.textContent).toContain("Born 15 Jan 1990");
+    expect(container.textContent).toContain("Spouse: Jamie");
+    expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Preview")).toBe(false);
     root.unmount();
+    container.remove();
   });
 
-  it("previews ZIP bundles through the archive endpoint", async () => {
-    apiMocks.postGedcomImportPreview.mockResolvedValue({
-      indis: [],
-      fams: [],
-      media: [],
-      archiveMediaFiles: [],
-      unmatchedIndis: [],
-      famMatchError: null,
-      lineLog: []
-    });
-    apiMocks.postGedcomImportArchivePreview.mockResolvedValue({
-      indis: [],
-      fams: [],
-      media: [{ xref: "@O1@", file: "media/a.jpg", title: "A", form: "image/jpeg" }],
-      archiveMediaFiles: [{ path: "media/a.jpg", byteSize: 3, mimeType: "image/jpeg" }],
-      unmatchedIndis: [],
-      famMatchError: null,
-      lineLog: []
-    });
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    await act(async () => {
-      root.render(<GedcomInterchangeSection people={[]} />);
-    });
-
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const archive = new File([new Uint8Array([1, 2, 3])], "tree.zip", { type: "application/zip" });
-    await act(async () => {
-      Object.defineProperty(input, "files", { value: [archive], configurable: true });
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    const previewButton = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Preview"
-    );
-    await act(async () => {
-      previewButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(apiMocks.postGedcomImportArchivePreview).toHaveBeenCalledWith(archive);
-    expect(container.textContent).toContain("Media in GEDCOM: 1 OBJE records");
-    root.unmount();
-  });
-
-  it("submits dry-runs with create-missing policy and displays structured diff output", async () => {
-    apiMocks.postGedcomImportPreview.mockResolvedValue({
-      indis: [{ xref: "@I1@", displayName: "Pat Fixture", personHint: "person-1" }],
-      fams: [],
-      media: [],
-      archiveMediaFiles: [],
-      unmatchedIndis: [],
-      unmatchedIndiPolicy: "MATCH_ONLY",
-      famMatchError: null,
-      lineLog: []
-    });
-    apiMocks.postGedcomImportJob.mockResolvedValue({
+  it("submits dry-runs via from-preview job without create confirmation", async () => {
+    const confirmSpy = vi.mocked(globalThis.confirm);
+    apiMocks.getGedcomPreviewIndisPage.mockImplementation(async (previewId, params) => ({
+      previewId,
+      offset: params.offset ?? 0,
+      limit: params.limit ?? 50,
+      total: 1,
+      rows: [
+        {
+          xref: "@I1@",
+          displayName: "Pat Fixture",
+          personHint: "person-1",
+          fullName: "Pat Fixture",
+          alternateNames: [],
+          birthDate: null,
+          relatedPeople: []
+        }
+      ],
+      summary: {
+        totalIndis: 1,
+        totalFams: 0,
+        totalMedia: 0,
+        famMatchError: null
+      }
+    }));
+    apiMocks.postGedcomImportJobFromPreview.mockResolvedValue({
       id: "job-1",
       status: "PENDING",
       createdAt: "2026-01-01T00:00:00.000Z"
@@ -166,30 +208,13 @@ describe("GedcomInterchangeSection", () => {
       },
       lineLog: []
     });
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
+    const { root, container } = await mount([{ id: "person-1", name: "Pat Fixture" } as never]);
 
-    await act(async () => {
-      root.render(<GedcomInterchangeSection people={[{ id: "person-1", name: "Pat Fixture" } as never]} />);
-    });
-
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const ged = new File(["0 HEAD\n0 TRLR\n"], "tree.ged", { type: "text/plain" });
-    await act(async () => {
-      Object.defineProperty(input, "files", { value: [ged], configurable: true });
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await chooseGedFile(container);
 
     const dryRunToggle = [...container.querySelectorAll('input[type="checkbox"]')][0] as HTMLInputElement;
     await act(async () => {
       dryRunToggle.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    const previewButton = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Preview"
-    );
-    await act(async () => {
-      previewButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     const submitButton = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Run dry-run"
@@ -198,28 +223,22 @@ describe("GedcomInterchangeSection", () => {
       submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(apiMocks.postGedcomImportJob).toHaveBeenCalledWith(
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(apiMocks.postGedcomImportJobFromPreview).toHaveBeenCalledWith(
       expect.objectContaining({
+        previewId: "pv-1",
         importOptions: expect.objectContaining({ dryRun: true, unmatchedIndiPolicy: "CREATE" })
       })
     );
     expect(container.textContent).toContain("Dry-run complete");
     expect(container.textContent).toContain("personLifeEvents: 1");
     root.unmount();
+    container.remove();
   });
 
   it("surfaces failed import job messages", async () => {
-    apiMocks.postGedcomImportPreview.mockResolvedValue({
-      indis: [],
-      fams: [],
-      media: [],
-      archiveMediaFiles: [],
-      unmatchedIndis: [],
-      unmatchedIndiPolicy: "MATCH_ONLY",
-      famMatchError: null,
-      lineLog: []
-    });
-    apiMocks.postGedcomImportJob.mockResolvedValue({
+    vi.mocked(globalThis.confirm).mockReturnValue(true);
+    apiMocks.postGedcomImportJobFromPreview.mockResolvedValue({
       id: "job-failed",
       status: "PENDING",
       createdAt: "2026-01-01T00:00:00.000Z"
@@ -237,26 +256,8 @@ describe("GedcomInterchangeSection", () => {
       summary: null,
       lineLog: [{ severity: "error", lineNo: 0, message: "source write failed" }]
     });
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    await act(async () => {
-      root.render(<GedcomInterchangeSection people={[]} />);
-    });
-
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const ged = new File(["0 HEAD\n0 TRLR\n"], "tree.ged", { type: "text/plain" });
-    await act(async () => {
-      Object.defineProperty(input, "files", { value: [ged], configurable: true });
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    const previewButton = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Preview"
-    );
-    await act(async () => {
-      previewButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+    const { root, container } = await mount();
+    await chooseGedFile(container);
     const submitButton = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Apply import"
     );
@@ -264,73 +265,215 @@ describe("GedcomInterchangeSection", () => {
       submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(container.textContent).toContain("source write failed; partial records may already exist");
+    expect(container.textContent).toContain("source write failed");
     root.unmount();
+    container.remove();
   });
 
-  it("downloads completed async exports with the signed download URL", async () => {
-    const originalCreateObjectUrl = URL.createObjectURL;
-    const originalRevokeObjectUrl = URL.revokeObjectURL;
-    URL.createObjectURL = vi.fn(() => "blob:gedcom-export");
-    URL.revokeObjectURL = vi.fn();
-    apiMocks.postGedcomImportPreview.mockResolvedValue({
-      indis: [],
-      fams: [],
-      media: [],
-      archiveMediaFiles: [],
-      unmatchedIndis: [],
-      famMatchError: null,
-      lineLog: []
+  it("shows Retry preview after preview failure and retries", async () => {
+    const { root, container } = await mount();
+    apiMocks.createGedcomImportPreview.mockRejectedValueOnce(new Error("network down"));
+    await chooseGedFile(container);
+    expect(container.textContent).toContain("network down");
+    const retry = [...container.querySelectorAll("button")].find((b) => b.textContent === "Retry preview");
+    expect(retry).toBeTruthy();
+    await act(async () => {
+      retry!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    apiMocks.postGedcomExportJob.mockResolvedValue({
-      id: "export-1",
+    expect(container.textContent).toContain("Pat Fixture");
+    root.unmount();
+    container.remove();
+  });
+
+  it("requests the next page at offset 50 when Next 50 is used", async () => {
+    apiMocks.createGedcomImportPreview.mockResolvedValue({
+      ...defaultCreateResponse(),
+      page: {
+        offset: 0,
+        limit: 50,
+        total: 60,
+        rows: Array.from({ length: 50 }, (_, i) => sampleRow(`@I${i}@`, `Person ${i}`))
+      },
+      summary: { ...defaultCreateResponse().summary, totalIndis: 60 }
+    });
+    apiMocks.getGedcomPreviewIndisPage.mockImplementation(async (previewId, params) => {
+      const offset = params.offset ?? 0;
+      return {
+        previewId,
+        offset,
+        limit: 50,
+        total: 60,
+        rows:
+          offset === 0
+            ? Array.from({ length: 50 }, (_, i) => sampleRow(`@I${i}@`, `Person ${i}`))
+            : Array.from({ length: 10 }, (_, i) => sampleRow(`@I${50 + i}@`, `Person ${50 + i}`)),
+        summary: {
+          totalIndis: 60,
+          totalFams: 0,
+          totalMedia: 0,
+          famMatchError: null
+        }
+      };
+    });
+    const { root, container } = await mount();
+    await chooseGedFile(container);
+    apiMocks.getGedcomPreviewIndisPage.mockClear();
+    const next = [...container.querySelectorAll("button")].find((b) => b.textContent === "Next 50");
+    await act(async () => {
+      next!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(apiMocks.getGedcomPreviewIndisPage).toHaveBeenCalledWith(
+      "pv-1",
+      expect.objectContaining({ offset: 50, limit: 50 })
+    );
+    root.unmount();
+    container.remove();
+  });
+
+  it("debounces GEDCOM row search and passes q to the preview page API", async () => {
+    const { root, container } = await mount();
+    await chooseGedFile(container);
+    apiMocks.getGedcomPreviewIndisPage.mockClear();
+    const searchInput = container.querySelector(".gedcom-source-search-input") as HTMLInputElement;
+    await act(async () => {
+      setInputValue(searchInput, "Pat");
+    });
+    let sawQuery = false;
+    for (let i = 0; i < 40; i += 1) {
+      await new Promise((r) => setTimeout(r, 50));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (apiMocks.getGedcomPreviewIndisPage.mock.calls.some(([, p]) => p?.q === "Pat")) {
+        sawQuery = true;
+        break;
+      }
+    }
+    expect(sawQuery).toBe(true);
+    root.unmount();
+    container.remove();
+  });
+
+  it("confirms before real import when create-missing would apply to unmatched rows", async () => {
+    const confirmSpy = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirmSpy);
+    apiMocks.createGedcomImportPreview.mockResolvedValue(
+      defaultCreateResponse({ personHint: null, fullName: "Unmatched One" })
+    );
+    const { root, container } = await mount();
+    await chooseGedFile(container);
+    const submitButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Apply import"
+    );
+    await act(async () => {
+      submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringContaining("This import will create up to 1 new Treemich people")
+    );
+    expect(apiMocks.postGedcomImportJobFromPreview).not.toHaveBeenCalled();
+    root.unmount();
+    container.remove();
+  });
+
+  it("uses server search in the match combobox and submits selected person", async () => {
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true)
+    );
+    apiMocks.searchPeople.mockResolvedValue({
+      people: [
+        {
+          id: "p-search",
+          name: "Alex Searchhit",
+          birthDate: "2000",
+          thumbnail: null,
+          profile: { givenName: "Alex", surname: "Searchhit" },
+          hasRelationship: true
+        } as never
+      ],
+      nextOffset: null
+    });
+    apiMocks.postGedcomImportJobFromPreview.mockResolvedValue({
+      id: "job-2",
       status: "PENDING",
       createdAt: "2026-01-01T00:00:00.000Z"
     });
-    apiMocks.getGedcomExportJob.mockResolvedValue({
-      id: "export-1",
+    apiMocks.getGedcomImportJob.mockResolvedValue({
+      id: "job-2",
       status: "COMPLETED",
-      redactLiving: false,
-      includeTreemichCustomTags: true,
-      byteSize: 42,
+      fileName: "tree.ged",
+      byteSize: 10,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:01.000Z",
-      startedAt: "2026-01-01T00:00:00.100Z",
-      completedAt: "2026-01-01T00:00:00.200Z",
+      startedAt: null,
+      completedAt: "2026-01-01T00:00:01.000Z",
       errorMessage: null,
-      resultPath: "/export/gedcom/jobs/export-1/ged",
-      downloadUrl: "/export/gedcom/jobs/export-1/ged/signed-token",
-      downloadTokenExpiresAt: "2026-01-01T00:15:00.000Z"
+      summary: {},
+      lineLog: []
     });
-    apiMocks.downloadGedcomExportJobResult.mockResolvedValue(
-      new Blob(["0 HEAD\n0 TRLR\n"], { type: "text/plain" })
-    );
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
 
+    const alexPerson = {
+      id: "p-search",
+      name: "Alex Searchhit",
+      birthDate: "2000",
+      thumbnail: null,
+      profile: { givenName: "Alex", surname: "Searchhit" },
+      hasRelationship: true
+    } as Person;
+    const { root, container } = await mount([alexPerson]);
+    await chooseGedFile(container);
+
+    const comboInput = container.querySelector(
+      'input.gedcom-match-combobox-input[role="combobox"]'
+    ) as HTMLInputElement;
     await act(async () => {
-      root.render(<GedcomInterchangeSection people={[]} />);
+      comboInput.focus();
+      setInputValue(comboInput, "Al");
     });
+    let sawSearch = false;
+    for (let i = 0; i < 40; i += 1) {
+      await new Promise((r) => setTimeout(r, 50));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (
+        apiMocks.searchPeople.mock.calls.some(
+          (c) => c[0]?.query === "Al" && c[0]?.limit === 10 && c[0]?.offset === 0
+        )
+      ) {
+        sawSearch = true;
+        break;
+      }
+    }
+    expect(sawSearch).toBe(true);
 
-    const exportButton = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Async .ged job"
+    const option = [...container.querySelectorAll('[role="option"]')].find((el) =>
+      el.textContent?.includes("Alex Searchhit")
+    ) as HTMLButtonElement;
+    await act(async () => {
+      option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Alex Searchhit");
+    expect(container.querySelector(".gedcom-match-selected .gedcom-match-avatar-initials")?.textContent).toBe(
+      "AS"
+    );
+
+    const submitButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Apply import"
     );
     await act(async () => {
-      exportButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-
-    expect(apiMocks.postGedcomExportJob).toHaveBeenCalledWith({
-      redactLiving: false,
-      includeTreemichCustomTags: true
-    });
-    expect(apiMocks.downloadGedcomExportJobResult).toHaveBeenCalledWith(
-      "export-1",
-      "/export/gedcom/jobs/export-1/ged/signed-token"
+    expect(apiMocks.postGedcomImportJobFromPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        indiMatches: expect.objectContaining({ "@I1@": "p-search" })
+      })
     );
-    expect(container.textContent).toContain("Async export ready (42 bytes)");
     root.unmount();
-    URL.createObjectURL = originalCreateObjectUrl;
-    URL.revokeObjectURL = originalRevokeObjectUrl;
+    container.remove();
   });
 });

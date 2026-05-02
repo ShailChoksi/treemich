@@ -32,6 +32,7 @@ import {
   getRelationships,
   getTreeValidation,
   getUserPreferences,
+  IMMICH_PEOPLE_SYNCED_EVENT,
   importPersonImmichThumbnail,
   updateUserPreferences,
   uploadPersonThumbnail
@@ -348,6 +349,16 @@ export const PeopleGraphDataProvider = ({
       setStatus(getErrorMessage(error));
     });
   }, [refreshGraphData, setStatus]);
+
+  useEffect(() => {
+    const onImmichPeopleSynced = () => {
+      void refreshPeopleOnly().catch((error: unknown) => {
+        setStatus(getErrorMessage(error));
+      });
+    };
+    window.addEventListener(IMMICH_PEOPLE_SYNCED_EVENT, onImmichPeopleSynced);
+    return () => window.removeEventListener(IMMICH_PEOPLE_SYNCED_EVENT, onImmichPeopleSynced);
+  }, [refreshPeopleOnly, setStatus]);
 
   useEffect(() => {
     selectedPersonIdRef.current = selectedPersonId;
