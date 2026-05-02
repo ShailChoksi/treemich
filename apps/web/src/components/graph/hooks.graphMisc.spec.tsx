@@ -41,6 +41,35 @@ describe("useGraphSearch helpers", () => {
     expect(findPersonBySearchTerm(people, "  ")).toBeNull();
     expect(findPersonBySearchTerm(people, "not-found")).toBeNull();
   });
+
+  it("finds person by Immich external identity display name when Treemich display label differs", () => {
+    const people: Person[] = [
+      {
+        id: "treemich-id",
+        name: "Jane Doe",
+        displayName: "Jane D.",
+        hasRelationship: false,
+        externalIdentities: [
+          {
+            id: "ext-1",
+            personId: "treemich-id",
+            provider: "IMMICH",
+            providerPersonId: "im-1",
+            providerBaseUrl: "https://immich.test/api",
+            displayName: "Vacation Emma",
+            thumbnailImportedAt: null,
+            lastSeenAt: null,
+            metadata: {},
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z"
+          }
+        ]
+      }
+    ];
+
+    expect(findPersonBySearchTerm(people, "emma")?.id).toBe("treemich-id");
+    expect(findPersonBySearchTerm(people, "vacation")?.id).toBe("treemich-id");
+  });
 });
 
 describe("useGraphKeyboardNavigation helpers", () => {

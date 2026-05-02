@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildGedcomImportPreview,
   capGedcomLineLog,
+  enrichGedcomImportPreviewIndis,
   mergeIndiMatches,
   validateFamMatches
 } from "./importRunner.js";
@@ -70,6 +71,50 @@ describe("buildGedcomImportPreview", () => {
         lineNo: 0,
         message: "GEDCOM import diagnostics truncated; 2 additional entries were omitted."
       }
+    ]);
+  });
+
+  it("enriches indis with birth date, alternate names, and related people", () => {
+    const ged = `0 HEAD
+0 @I1@ INDI
+1 NAME Ann /Smith/
+2 GIVN Ann
+2 SURN Smith
+1 NAME Ann /Jones/
+2 TYPE married
+1 BIRT
+2 DATE ABT 15 JAN 1950
+0 @I2@ INDI
+1 NAME Bob /Jones/
+0 @I3@ INDI
+1 NAME Kid /Smith/
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+0 TRLR
+`;
+    const p = buildGedcomImportPreview(ged);
+    const enriched = enrichGedcomImportPreviewIndis(p);
+    const ann = enriched.find((r) => r.xref === "@I1@");
+    expect(ann?.fullName).toBe("Ann Smith");
+    expect(ann?.alternateNames).toEqual(["Ann Jones"]);
+    expect(ann?.birthDate).toBe("abt 15 Jan 1950");
+    expect(ann?.relatedPeople.map((x) => `${x.label}:${x.name}`)).toEqual([
+      "Spouse:Bob Jones",
+      "Child:Kid Smith"
+    ]);
+
+    const bob = enriched.find((r) => r.xref === "@I2@");
+    expect(bob?.relatedPeople.map((x) => `${x.label}:${x.name}`)).toEqual([
+      "Spouse:Ann Smith",
+      "Child:Kid Smith"
+    ]);
+
+    const kid = enriched.find((r) => r.xref === "@I3@");
+    expect(kid?.relatedPeople.map((x) => `${x.label}:${x.name}`)).toEqual([
+      "Parent:Ann Smith",
+      "Parent:Bob Jones"
     ]);
   });
 });

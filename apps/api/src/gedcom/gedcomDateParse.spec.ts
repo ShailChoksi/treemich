@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGedcomDate } from "./gedcomDateParse.js";
+import { formatGedcomBirthDateDisplay, parseGedcomDate } from "./gedcomDateParse.js";
 
 describe("parseGedcomDate", () => {
   it("parses exact day month year", () => {
@@ -44,5 +44,17 @@ describe("parseGedcomDate", () => {
       month: 12,
       day: 31
     });
+  });
+});
+
+describe("formatGedcomBirthDateDisplay", () => {
+  it("formats exact and qualified dates", () => {
+    expect(formatGedcomBirthDateDisplay("15 JAN 1990")).toBe("15 Jan 1990");
+    expect(formatGedcomBirthDateDisplay("ABT 1900")).toBe("abt 1900");
+    expect(formatGedcomBirthDateDisplay("BEF 1980")).toBe("bef 1980");
+  });
+
+  it("formats between dates", () => {
+    expect(formatGedcomBirthDateDisplay("BET 1900 AND 1910")).toBe("bet 1900 and 1910");
   });
 });

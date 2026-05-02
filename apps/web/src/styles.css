@@ -1579,6 +1579,12 @@ body {
   box-shadow: 0 10px 25px rgba(15, 23, 42, 0.35);
 }
 
+.graph-search-relationship-tour-anchor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .graph-search-form {
   display: flex;
   align-items: center;
@@ -1874,6 +1880,60 @@ body {
 .confirm-dialog-submit {
   min-width: 76px;
   padding: 8px 12px;
+}
+
+.onboarding-tour-spotlight-hole {
+  position: fixed;
+  z-index: 95;
+  pointer-events: none;
+  border-radius: 12px;
+  box-shadow: 0 0 0 4000px rgba(15, 23, 42, 0.62);
+}
+
+.onboarding-tour-fallback-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.onboarding-tour-tooltip.confirm-dialog {
+  width: min(400px, calc(100vw - 32px));
+  max-height: min(90vh, 720px);
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.onboarding-tutorial-dialog.confirm-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(90vh, 720px);
+  gap: 12px;
+}
+
+.onboarding-tutorial-step {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.onboarding-tutorial-dialog-body {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 48vh;
+}
+
+.onboarding-tutorial-actions {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: auto;
+}
+
+.onboarding-tutorial-error {
+  margin: 0;
+  color: #fecaca;
+  font-size: 13px;
 }
 
 .add-relative-form {
@@ -2573,6 +2633,145 @@ textarea:disabled {
   font-weight: 600;
   line-height: 1.25;
   word-break: break-word;
+}
+
+.gedcom-preview-summary {
+  padding: 0.5rem 0.75rem;
+}
+
+.gedcom-source-search-input {
+  width: 100%;
+  max-width: 28rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #0f172a;
+  color: #f8fafc;
+  font: inherit;
+}
+
+.gedcom-preview-pagination {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gedcom-match-combobox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.gedcom-match-combobox-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gedcom-match-combobox-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #0f172a;
+  color: #f8fafc;
+  font: inherit;
+}
+
+.gedcom-match-combobox-status {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.gedcom-match-combobox-results {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+}
+
+.gedcom-match-combobox-row {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.gedcom-match-combobox-row:hover,
+.gedcom-match-combobox-row--active {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.gedcom-match-combobox-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gedcom-match-combobox-row-name {
+  font-weight: 600;
+}
+
+.gedcom-match-combobox-row-meta {
+  font-size: 0.8rem;
+}
+
+.gedcom-match-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #1e293b;
+  border: 1px solid #475569;
+}
+
+.gedcom-match-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gedcom-match-avatar-initials {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.gedcom-match-selected {
+  padding: 0.5rem 0.65rem;
+}
+
+.gedcom-match-selected-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.gedcom-match-selected-text {
+  min-width: 0;
+}
+
+.gedcom-match-selected-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
 .gedcom-line-log {

@@ -399,7 +399,9 @@ const PersonDetailPanelComponent = ({
     setShowDeletePersonConfirm(false);
     setVisibleSuggestionCount(maxVisibleSuggestions);
     setCollapsedSections({ ...DEFAULT_COLLAPSED_SECTIONS, ...sectionCollapsedOverrides });
-  }, [person?.id, sectionCollapsedOverrides]);
+    // Intentionally depends on `person?.id` only: `sectionCollapsedOverrides` is often a new object
+    // literal in JSX; including it would reset collapse state every parent render.
+  }, [person?.id]);
 
   useEffect(() => {
     if (editingRelationshipKey && !activeRelationship) {

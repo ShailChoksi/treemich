@@ -161,8 +161,9 @@ model TreemichUser {
   duplicateCandidates      PersonDuplicateCandidate[]
   personMergeAudits        PersonMergeAudit[]
   families                 Family[]
-  gedcomImportJobs         GedcomImportJob[]
-  gedcomExportJobs         GedcomExportJob[]
+  gedcomImportJobs              GedcomImportJob[]
+  gedcomExportJobs              GedcomExportJob[]
+  gedcomImportPreviewSessions   GedcomImportPreviewSession[]
 }
 
 model LinkedImmichAccount {
@@ -682,6 +683,31 @@ model GedcomImportJob {
   user          TreemichUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+/// Temporary GEDCOM import preview (paged UI + apply-by-session).
+model GedcomImportPreviewSession {
+  id                String   @id @default(cuid())
+  userId            String
+  createdAt         DateTime @default(now())
+  expiresAt         DateTime
+  fileName          String
+  isArchive         Boolean  @default(false)
+  /// Extracted UTF-8 GEDCOM used for preview paging and plain-text jobs.
+  gedcomUtf8        String   @db.Text
+  /// When `isArchive`, path to the uploaded .zip on disk until delete/TTL/consume.
+  stagedArchivePath String?
+  /// Enriched INDI rows in file order (`GedcomImportPreviewIndiEnriched[]`).
+  indiRows          Json
+  fams              Json
+  media             Json
+  archiveMediaFiles Json?
+  lineLog           Json     @default("[]")
+  famMatchError     String?
+  user              TreemichUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 /// Async GEDCOM export (UTF-8 text stored when complete, capped like import max bytes).

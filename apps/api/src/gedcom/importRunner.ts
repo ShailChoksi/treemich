@@ -13,7 +13,7 @@ import { storeMediaFile } from "../evidence/mediaStorage.js";
 import { HttpConflictError } from "../lifeEvents/errors.js";
 import { env, maxGedcomImportLineLogEntries, maxGedcomImportLines } from "../config/env.js";
 import { findArchiveMediaFile, type StagedGedcomArchiveMediaFile } from "./archiveImport.js";
-import { parseGedcomDate } from "./gedcomDateParse.js";
+import { formatGedcomBirthDateDisplay, parseGedcomDate } from "./gedcomDateParse.js";
 import {
   chunkByLevel1,
   findSubValue,
@@ -142,6 +142,18 @@ export type GedcomImportPreviewIndi = {
   personHint: string | null;
 };
 
+export type GedcomImportPreviewRelatedPerson = {
+  label: string;
+  name: string;
+};
+
+export type GedcomImportPreviewIndiEnriched = GedcomImportPreviewIndi & {
+  fullName: string | null;
+  alternateNames: string[];
+  birthDate: string | null;
+  relatedPeople: GedcomImportPreviewRelatedPerson[];
+};
+
 export type GedcomImportPreviewFam = {
   xref: string;
   husbXref: string | null;
@@ -200,6 +212,195 @@ const summarizeFam = (block: GedcomRecordBlock): GedcomImportPreviewFam => {
     }
   }
   return { xref, husbXref: husb, wifeXref: wife, childXrefs: children };
+};
+
+const dedupePreserveOrder = (values: string[]): string[] => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of values) {
+    const t = v.trim();
+    if (!t || seen.has(t)) {
+      continue;
+    }
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+};
+
+const collectNameDisplaysFromIndiBlock = (block: GedcomRecordBlock): string[] => {
+  const names: string[] = [];
+  for (const ch of chunkByLevel1(block.lines)) {
+    const head = ch[0]!;
+    if (head.tag !== "NAME" || head.level !== 1) {
+      continue;
+    }
+    const { given, surname } = parseNameSlash(head.value);
+    let line = [given, surname].filter(Boolean).join(" ").trim();
+    const givn = findSubValue(ch, "GIVN");
+    const surn = findSubValue(ch, "SURN");
+    const preferred = [givn, surn].filter(Boolean).join(" ").trim();
+    if (preferred) {
+      line = preferred;
+    }
+    if (line) {
+      names.push(line);
+    }
+  }
+  return dedupePreserveOrder(names);
+};
+
+const extractBirthDateDisplayFromIndiBlock = (block: GedcomRecordBlock): string | null => {
+  for (const ch of chunkByLevel1(block.lines)) {
+    const head = ch[0]!;
+    if (head.tag === "BIRT" && head.level === 1) {
+      const raw = findSubValue(ch, "DATE");
+      return formatGedcomBirthDateDisplay(raw);
+    }
+  }
+  return null;
+};
+
+type RelationKind = "spouse" | "parent" | "child" | "sibling";
+
+type RelationDraft = { kind: RelationKind; label: string; otherXref: string; seq: number };
+
+const relationKindRank: Record<RelationKind, number> = {
+  spouse: 0,
+  parent: 1,
+  child: 2,
+  sibling: 3
+};
+
+const buildRelationDraftsByIndi = (fams: GedcomImportPreviewFam[]): Map<string, RelationDraft[]> => {
+  const byIndi = new Map<string, RelationDraft[]>();
+  const push = (indiXref: string | null, draft: RelationDraft) => {
+    if (!indiXref) {
+      return;
+    }
+    const nk = normalizeIndiFamXref(indiXref);
+    if (!nk) {
+      return;
+    }
+    const list = byIndi.get(nk) ?? [];
+    list.push(draft);
+    byIndi.set(nk, list);
+  };
+  let seq = 0;
+  for (const fam of fams) {
+    const h = fam.husbXref ? normalizeIndiFamXref(fam.husbXref) : null;
+    const w = fam.wifeXref ? normalizeIndiFamXref(fam.wifeXref) : null;
+    const kids = fam.childXrefs.map((c) => normalizeIndiFamXref(c)).filter((c): c is string => Boolean(c));
+    if (h && w) {
+      seq += 1;
+      push(h, { kind: "spouse", label: "Spouse", otherXref: w, seq });
+      push(w, { kind: "spouse", label: "Spouse", otherXref: h, seq });
+    }
+    for (const child of kids) {
+      if (h) {
+        seq += 1;
+        push(child, { kind: "parent", label: "Parent", otherXref: h, seq });
+        push(h, { kind: "child", label: "Child", otherXref: child, seq });
+      }
+      if (w) {
+        seq += 1;
+        push(child, { kind: "parent", label: "Parent", otherXref: w, seq });
+        push(w, { kind: "child", label: "Child", otherXref: child, seq });
+      }
+    }
+    for (let i = 0; i < kids.length; i += 1) {
+      for (let j = 0; j < kids.length; j += 1) {
+        if (i === j) {
+          continue;
+        }
+        seq += 1;
+        push(kids[i]!, { kind: "sibling", label: "Sibling", otherXref: kids[j]!, seq });
+      }
+    }
+  }
+  return byIndi;
+};
+
+const pickRelatedPeople = (
+  indiXrefNorm: string,
+  draftsByIndi: Map<string, RelationDraft[]>,
+  displayByIndiXref: Map<string, string>
+): GedcomImportPreviewRelatedPerson[] => {
+  const drafts = draftsByIndi.get(indiXrefNorm) ?? [];
+  const sorted = [...drafts].sort(
+    (a, b) => relationKindRank[a.kind] - relationKindRank[b.kind] || a.seq - b.seq
+  );
+  const seenOther = new Set<string>();
+  const out: GedcomImportPreviewRelatedPerson[] = [];
+  for (const d of sorted) {
+    if (seenOther.has(d.otherXref)) {
+      continue;
+    }
+    seenOther.add(d.otherXref);
+    const name = displayByIndiXref.get(d.otherXref)?.trim() || d.otherXref;
+    out.push({ label: d.label, name });
+    if (out.length >= 3) {
+      break;
+    }
+  }
+  return out;
+};
+
+/**
+ * Builds enriched INDI rows (names, birth, related people) for GEDCOM import preview UIs.
+ */
+export const enrichGedcomImportPreviewIndis = (
+  preview: GedcomImportPreviewWithRecords
+): GedcomImportPreviewIndiEnriched[] => {
+  const blockByXref = new Map<string, GedcomRecordBlock>();
+  for (const r of preview.records) {
+    if (r.recordTag === "INDI" && r.xref) {
+      const nk = normalizeIndiFamXref(r.xref);
+      if (nk) {
+        blockByXref.set(nk, r);
+      }
+    }
+  }
+  const displayByIndiXref = new Map<string, string>();
+  for (const indi of preview.indis) {
+    const nk = normalizeIndiFamXref(indi.xref);
+    if (!nk) {
+      continue;
+    }
+    const block = blockByXref.get(nk);
+    const names = block ? collectNameDisplaysFromIndiBlock(block) : [];
+    const primary = names[0] ?? indi.displayName?.trim() ?? null;
+    displayByIndiXref.set(nk, primary ?? nk);
+  }
+  const draftsByIndi = buildRelationDraftsByIndi(preview.fams);
+  const enriched: GedcomImportPreviewIndiEnriched[] = [];
+  for (const indi of preview.indis) {
+    const nk = normalizeIndiFamXref(indi.xref);
+    if (!nk) {
+      enriched.push({
+        ...indi,
+        fullName: indi.displayName,
+        alternateNames: [],
+        birthDate: null,
+        relatedPeople: []
+      });
+      continue;
+    }
+    const block = blockByXref.get(nk);
+    const names = block ? collectNameDisplaysFromIndiBlock(block) : [];
+    const fullName = names[0] ?? indi.displayName ?? null;
+    const alternateNames = names.slice(1, 3);
+    const birthDate = block ? extractBirthDateDisplayFromIndiBlock(block) : null;
+    const relatedPeople = pickRelatedPeople(nk, draftsByIndi, displayByIndiXref);
+    enriched.push({
+      ...indi,
+      fullName,
+      alternateNames,
+      birthDate,
+      relatedPeople
+    });
+  }
+  return enriched;
 };
 
 export const buildGedcomImportPreview = (gedcomUtf8: string): GedcomImportPreviewWithRecords => {

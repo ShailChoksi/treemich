@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import type { FamilyChildPedigree } from "./families.js";
+import type { PersonDuplicateRecomputeResponse } from "./personDuplicates.js";
 import type { AgeFilter, InterpreterIntent } from "./search/interpreter.js";
 
 /** Canonical relationship kinds stored in Treemich person-id space. */
@@ -147,6 +148,35 @@ export type ImmichProviderPerson = {
   name: string;
   birthDate?: string | null;
   thumbnailPath?: string | null;
+};
+
+/** Splits an Immich face label into Treemich profile given/surname (provider import and auto-sync). */
+export const splitImmichPersonDisplayName = (name: string): { givenName: string; surname: string | null } => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const [givenName, ...surnameParts] = parts;
+  return {
+    givenName: givenName ?? "Person",
+    surname: surnameParts.join(" ") || null
+  };
+};
+
+/** Result of optional duplicate-candidate recompute after Immich people sync/import. */
+export type ImmichPeopleSyncDuplicateRecompute =
+  | { status: "skipped" }
+  | { status: "ok"; summary: PersonDuplicateRecomputeResponse["summary"] }
+  | { status: "error"; message: string };
+
+/** Counts from `PersonService.syncImmichLabelledPeople` (no duplicate recompute). */
+export type ImmichPeopleSyncSummary = {
+  created: number;
+  updated: number;
+  alreadyLinked: number;
+  skippedUnnamed: number;
+};
+
+/** `POST /providers/immich/people/sync` response body. */
+export type ImmichPeopleSyncResponse = ImmichPeopleSyncSummary & {
+  duplicateRecompute: ImmichPeopleSyncDuplicateRecompute;
 };
 
 /** Directed relationship edge between two Treemich person ids. */
@@ -298,6 +328,7 @@ export type ImmichPeopleImportResponse = {
     alreadyLinked: number;
     errors: number;
     thumbnailsImported: number;
+    duplicateRecompute?: ImmichPeopleSyncDuplicateRecompute;
   };
 };
 
@@ -424,6 +455,14 @@ export const defaultGraphRenderLimit = 120;
 export const minGraphRenderLimit = 20;
 export const maxGraphRenderLimit = 1000;
 
+/** Server-persisted dismissal for the first-login onboarding tutorial (both fields required when present). */
+export const onboardingTutorialSchema = z.object({
+  dismissedVersion: z.string().min(1),
+  dismissedAt: z.string().datetime()
+});
+
+export type OnboardingTutorial = z.infer<typeof onboardingTutorialSchema>;
+
 export const userPreferencesSchema = z.object({
   graphFilterVisibility: graphFilterVisibilitySchema.optional(),
   familyViewStyle: familyViewStyleSchema.optional(),
@@ -435,7 +474,8 @@ export const userPreferencesSchema = z.object({
   dismissedSuggestions: z.array(z.string()).optional(),
   cooccurrence: cooccurrencePreferencesSchema.optional(),
   /** When true, natural-language people search also matches stored alternate names. */
-  searchIncludeAlternateNames: z.boolean().optional()
+  searchIncludeAlternateNames: z.boolean().optional(),
+  onboardingTutorial: onboardingTutorialSchema.optional()
 });
 
 export type GraphFilterVisibility = z.infer<typeof graphFilterVisibilitySchema>;

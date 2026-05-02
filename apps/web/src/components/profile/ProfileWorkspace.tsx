@@ -174,7 +174,7 @@ export const ProfileWorkspace = memo(
           <div className="profile-workspace-detail person-detail-panel person-detail-panel--profile-page">
             <PersonDetailPanelWithProps
               {...panelProps}
-              sectionCollapsedOverrides={{ ...PROFILE_SECTION_DEFAULTS }}
+              sectionCollapsedOverrides={PROFILE_SECTION_DEFAULTS}
             />
           </div>
         )}

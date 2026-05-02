@@ -51,5 +51,7 @@ export const mergeUserPreferences = (
   primaryFamilyUnitByPersonId: incoming.primaryFamilyUnitByPersonId ?? current.primaryFamilyUnitByPersonId,
   dismissedSuggestions: incoming.dismissedSuggestions ?? current.dismissedSuggestions,
   cooccurrence: incoming.cooccurrence ?? current.cooccurrence,
-  searchIncludeAlternateNames: incoming.searchIncludeAlternateNames ?? current.searchIncludeAlternateNames
+  searchIncludeAlternateNames: incoming.searchIncludeAlternateNames ?? current.searchIncludeAlternateNames,
+  onboardingTutorial:
+    incoming.onboardingTutorial !== undefined ? incoming.onboardingTutorial : current.onboardingTutorial
 });

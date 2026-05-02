@@ -9,7 +9,8 @@ export default defineConfig({
   },
   // Nested deps (e.g. @use-gesture/react, react-use-measure) can pull React 18; two copies break hooks / R3F.
   resolve: {
-    dedupe: ["react", "react-dom", "scheduler"]
+    // R3F / drei must use the same three instance as app imports (otherwise THREE warns and breaks instanceof).
+    dedupe: ["react", "react-dom", "scheduler", "three", "three-stdlib"]
   },
   optimizeDeps: {
     include: ["react", "react-dom", "scheduler", "@react-three/fiber", "@react-three/drei"]

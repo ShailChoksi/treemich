@@ -15,8 +15,8 @@ const mocks = vi.hoisted(() => ({
   personExternalIdentityDeleteMany: vi.fn()
 }));
 
-vi.mock("../db/client.js", () => ({
-  prisma: {
+vi.mock("../db/client.js", () => {
+  const transactionalClient = {
     personProfile: {
       create: mocks.personProfileCreate,
       findFirst: mocks.personProfileFindFirst,
@@ -32,8 +32,15 @@ vi.mock("../db/client.js", () => ({
       update: mocks.personExternalIdentityUpdate,
       deleteMany: mocks.personExternalIdentityDeleteMany
     }
-  }
-}));
+  };
+  return {
+    prisma: {
+      ...transactionalClient,
+      $transaction: async (fn: (tx: typeof transactionalClient) => Promise<unknown>) =>
+        fn(transactionalClient)
+    }
+  };
+});
 
 vi.mock("../config/env.js", () => ({
   env: { TREEMICH_SESSION_TTL_MS: 2_592_000_000 }
@@ -459,6 +466,201 @@ describe("PersonService", () => {
 
       expect(mocks.personExternalIdentityUpdate).not.toHaveBeenCalled();
       expect(result).toEqual({ matched: 1, updated: 0, skippedUnnamed: 0 });
+    });
+  });
+
+  describe("syncImmichLabelledPeople", () => {
+    it("creates a Treemich person and Immich identity for each unmatched named Immich person", async () => {
+      mocks.personExternalIdentityFindMany.mockResolvedValueOnce([]);
+      mocks.personProfileCreate.mockResolvedValueOnce(
+        makeProfile({ id: "new-profile", givenName: "Pat", surname: "Lee" })
+      );
+      mocks.personExternalIdentityCreate.mockResolvedValueOnce(
+        makeIdentity({ personId: "new-profile", providerPersonId: "im-1", displayName: "Pat Lee" })
+      );
+
+      const { PersonService } = await import("./service.js");
+      const result = await new PersonService().syncImmichLabelledPeople(
+        "user-1",
+        [{ id: "im-1", name: "Pat Lee" }],
+        { providerBaseUrl: "https://immich.example/api" }
+      );
+
+      expect(result).toEqual({ created: 1, updated: 0, alreadyLinked: 0, skippedUnnamed: 0 });
+      expect(mocks.personExternalIdentityFindMany).toHaveBeenCalledWith({
+        where: {
+          userId: "user-1",
+          provider: "IMMICH",
+          providerPersonId: { in: ["im-1"] },
+          OR: [{ providerBaseUrl: "https://immich.example/api" }, { providerBaseUrl: null }]
+        }
+      });
+      expect(mocks.personExternalIdentityCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: "user-1",
+            personId: "new-profile",
+            provider: "IMMICH",
+            providerPersonId: "im-1",
+            providerBaseUrl: "https://immich.example/api",
+            displayName: "Pat Lee",
+            metadata: { importedFromImmichAutoSync: true }
+          })
+        })
+      );
+    });
+
+    it("counts unnamed Immich people as skipped without creating rows", async () => {
+      const { PersonService } = await import("./service.js");
+      const result = await new PersonService().syncImmichLabelledPeople(
+        "user-1",
+        [{ id: "im-1", name: "  " }],
+        { providerBaseUrl: "https://immich.example/api" }
+      );
+
+      expect(result).toEqual({ created: 0, updated: 0, alreadyLinked: 0, skippedUnnamed: 1 });
+      expect(mocks.personExternalIdentityFindMany).not.toHaveBeenCalled();
+      expect(mocks.personProfileCreate).not.toHaveBeenCalled();
+    });
+
+    it("counts already-linked identities when the Immich display name is unchanged", async () => {
+      mocks.personExternalIdentityFindMany.mockResolvedValueOnce([
+        makeIdentity({
+          id: "ident-1",
+          providerPersonId: "im-1",
+          displayName: "Same Name",
+          providerBaseUrl: "https://immich.example/api"
+        })
+      ]);
+
+      const { PersonService } = await import("./service.js");
+      const result = await new PersonService().syncImmichLabelledPeople(
+        "user-1",
+        [{ id: "im-1", name: "Same Name" }],
+        { providerBaseUrl: "https://immich.example/api" }
+      );
+
+      expect(result).toEqual({ created: 0, updated: 0, alreadyLinked: 1, skippedUnnamed: 0 });
+      expect(mocks.personExternalIdentityUpdate).not.toHaveBeenCalled();
+      expect(mocks.personProfileCreate).not.toHaveBeenCalled();
+    });
+
+    it("updates the Immich identity display name when the provider label changes", async () => {
+      mocks.personExternalIdentityFindMany.mockResolvedValueOnce([
+        makeIdentity({
+          id: "ident-1",
+          providerPersonId: "im-1",
+          displayName: "Old Label",
+          providerBaseUrl: "https://immich.example/api"
+        })
+      ]);
+      mocks.personExternalIdentityUpdate.mockResolvedValueOnce(makeIdentity({ displayName: "New Label" }));
+
+      const { PersonService } = await import("./service.js");
+      const result = await new PersonService().syncImmichLabelledPeople(
+        "user-1",
+        [{ id: "im-1", name: "New Label" }],
+        { providerBaseUrl: "https://immich.example/api" }
+      );
+
+      expect(result).toEqual({ created: 0, updated: 1, alreadyLinked: 0, skippedUnnamed: 0 });
+      expect(mocks.personExternalIdentityUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "ident-1" },
+          data: expect.objectContaining({ displayName: "New Label" })
+        })
+      );
+    });
+
+    it("creates a new Treemich person when the only existing identity is on a different Immich base URL", async () => {
+      mocks.personExternalIdentityFindMany.mockResolvedValueOnce([
+        makeIdentity({
+          id: "ident-other",
+          providerPersonId: "im-1",
+          displayName: "Same Immich id other server",
+          providerBaseUrl: "http://other-immich.example/api"
+        })
+      ]);
+      mocks.personProfileCreate.mockResolvedValueOnce(
+        makeProfile({ id: "new-profile-2", givenName: "Pat", surname: "Lee" })
+      );
+      mocks.personExternalIdentityCreate.mockResolvedValueOnce(
+        makeIdentity({
+          personId: "new-profile-2",
+          providerPersonId: "im-1",
+          providerBaseUrl: "https://immich.example/api"
+        })
+      );
+
+      const { PersonService } = await import("./service.js");
+      const result = await new PersonService().syncImmichLabelledPeople(
+        "user-1",
+        [{ id: "im-1", name: "Pat Lee" }],
+        { providerBaseUrl: "https://immich.example/api" }
+      );
+
+      expect(result).toEqual({ created: 1, updated: 0, alreadyLinked: 0, skippedUnnamed: 0 });
+      expect(mocks.personProfileCreate).toHaveBeenCalled();
+      expect(mocks.personExternalIdentityCreate).toHaveBeenCalled();
+    });
+
+    it("migrates legacy null providerBaseUrl to the current base when relinking", async () => {
+      mocks.personExternalIdentityFindMany.mockResolvedValueOnce([
+        makeIdentity({
+          id: "ident-1",
+          providerPersonId: "im-1",
+          displayName: "Pat Lee",
+          providerBaseUrl: null
+        })
+      ]);
+      mocks.personExternalIdentityUpdate.mockResolvedValueOnce(
+        makeIdentity({ providerBaseUrl: "https://immich.example/api" })
+      );
+
+      const { PersonService } = await import("./service.js");
+      const result = await new PersonService().syncImmichLabelledPeople(
+        "user-1",
+        [{ id: "im-1", name: "Pat Lee" }],
+        { providerBaseUrl: "https://immich.example/api" }
+      );
+
+      expect(result).toEqual({ created: 0, updated: 1, alreadyLinked: 0, skippedUnnamed: 0 });
+      expect(mocks.personExternalIdentityUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ providerBaseUrl: "https://immich.example/api" })
+        })
+      );
+    });
+
+    it("does not delete Treemich profiles or identities when a later sync payload omits earlier Immich ids", async () => {
+      mocks.personExternalIdentityFindMany.mockResolvedValueOnce([]);
+      mocks.personProfileCreate.mockResolvedValueOnce(
+        makeProfile({ id: "pp-b", givenName: "Bob", surname: null })
+      );
+      mocks.personExternalIdentityCreate.mockResolvedValueOnce(
+        makeIdentity({ personId: "pp-b", providerPersonId: "im-b" })
+      );
+
+      const { PersonService } = await import("./service.js");
+      const service = new PersonService();
+      await service.syncImmichLabelledPeople("user-1", [{ id: "im-b", name: "Bob Solo" }], {
+        providerBaseUrl: "https://immich.example/api"
+      });
+
+      mocks.personExternalIdentityFindMany.mockResolvedValueOnce([]);
+      mocks.personProfileCreate.mockResolvedValueOnce(
+        makeProfile({ id: "pp-c", givenName: "Cara", surname: null })
+      );
+      mocks.personExternalIdentityCreate.mockResolvedValueOnce(
+        makeIdentity({ personId: "pp-c", providerPersonId: "im-c" })
+      );
+      await service.syncImmichLabelledPeople("user-1", [{ id: "im-c", name: "Cara Only" }], {
+        providerBaseUrl: "https://immich.example/api"
+      });
+
+      expect(mocks.personProfileDeleteMany).not.toHaveBeenCalled();
+      expect(mocks.personExternalIdentityDeleteMany).not.toHaveBeenCalled();
+      expect(mocks.cooccurrenceEdgeDeleteMany).not.toHaveBeenCalled();
     });
   });
 

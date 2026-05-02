@@ -1,7 +1,7 @@
 import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PersonRecord, RelationshipRecord } from "../lib/api";
+import { IMMICH_PEOPLE_SYNCED_EVENT, type PersonRecord, type RelationshipRecord } from "../lib/api";
 import { PeopleGraphDataProvider, samePeopleList, usePeopleGraphData } from "./PeopleGraphDataContext";
 import { ToastProvider } from "./ToastContext";
 
@@ -302,6 +302,55 @@ describe("PeopleGraphDataContext", () => {
     expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(true);
     expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(true);
+
+    root.unmount();
+  });
+
+  it("refetches people when the Immich labelled-people sync event fires", async () => {
+    const graphBox: { current: ReturnType<typeof usePeopleGraphData> | null } = { current: null };
+    const Probe = () => {
+      graphBox.current = usePeopleGraphData();
+      return null;
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          ToastProvider,
+          null,
+          createElement(
+            PeopleGraphDataProvider,
+            { immichBaseUrl: null, currentUserName: null },
+            createElement(Probe)
+          )
+        )
+      );
+    });
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (graphBox.current && graphBox.current.people.length > 0 && !graphBox.current.isLoading) {
+        break;
+      }
+    }
+
+    vi.mocked(globalThis.fetch).mockClear();
+
+    await act(async () => {
+      window.dispatchEvent(new Event(IMMICH_PEOPLE_SYNCED_EVENT));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const peopleCalls = vi.mocked(globalThis.fetch).mock.calls.filter(([input, init]) => {
+      const url = typeof input === "string" ? input : input.toString();
+      return (init?.method ?? "GET") === "GET" && /\/people$/.test(url);
+    });
+    expect(peopleCalls.length).toBeGreaterThanOrEqual(1);
 
     root.unmount();
   });

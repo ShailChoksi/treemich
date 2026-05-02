@@ -377,13 +377,37 @@ describe.skipIf(!runLiveGedcomDbRoundTrip)("GEDCOM live DB round-trip", () => {
     expect(gedcomUtf8).toContain("1 _TREEMICH_PERSON_ID");
     expect(gedcomUtf8).toContain("1 PEDI adopted");
 
-    const importCreate = await app.inject({
-      method: "POST",
-      url: "/import/gedcom/jobs",
-      headers: { cookie: authCookie(targetToken) },
-      payload: {
-        fileName: "phase-b-roundtrip.ged",
+    const boundary = `----live-e2e-${Date.now()}`;
+    const gedMultipart = Buffer.from(
+      [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="file"; filename="phase-b-roundtrip.ged"',
+        "Content-Type: text/plain",
+        "",
         gedcomUtf8,
+        `--${boundary}--`,
+        ""
+      ].join("\r\n"),
+      "utf8"
+    );
+    const previewRes = await app!.inject({
+      method: "POST",
+      url: "/import/gedcom/previews",
+      headers: {
+        cookie: authCookie(targetToken),
+        "content-type": `multipart/form-data; boundary=${boundary}`
+      },
+      payload: gedMultipart
+    });
+    expect(previewRes.statusCode).toBe(200);
+    const previewId = previewRes.json<{ previewId: string }>().previewId;
+
+    const importCreate = await app!.inject({
+      method: "POST",
+      url: "/import/gedcom/jobs/from-preview",
+      headers: { cookie: authCookie(targetToken), "content-type": "application/json" },
+      payload: {
+        previewId,
         indiMatches: {},
         importOptions: { unmatchedIndiPolicy: "CREATE" }
       }

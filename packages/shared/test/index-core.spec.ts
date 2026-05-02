@@ -83,6 +83,43 @@ describe("shared enums and preference schemas", () => {
     expect(prefs.searchIncludeAlternateNames).toBe(true);
   });
 
+  it("parses onboardingTutorial when both dismissed fields are present", () => {
+    const prefs = userPreferencesSchema.parse({
+      onboardingTutorial: {
+        dismissedVersion: "v1",
+        dismissedAt: "2025-05-01T12:00:00.000Z"
+      }
+    });
+    expect(prefs.onboardingTutorial).toEqual({
+      dismissedVersion: "v1",
+      dismissedAt: "2025-05-01T12:00:00.000Z"
+    });
+  });
+
+  it("rejects onboardingTutorial when dismissedAt is missing", () => {
+    expect(() =>
+      userPreferencesSchema.parse({
+        onboardingTutorial: { dismissedVersion: "v1" }
+      })
+    ).toThrow();
+  });
+
+  it("rejects onboardingTutorial when dismissedVersion is missing", () => {
+    expect(() =>
+      userPreferencesSchema.parse({
+        onboardingTutorial: { dismissedAt: "2025-05-01T12:00:00.000Z" }
+      })
+    ).toThrow();
+  });
+
+  it("rejects onboardingTutorial when dismissedAt is not a valid datetime string", () => {
+    expect(() =>
+      userPreferencesSchema.parse({
+        onboardingTutorial: { dismissedVersion: "v1", dismissedAt: "not-a-date" }
+      })
+    ).toThrow();
+  });
+
   it("exposes default co-occurrence preferences", () => {
     expect(defaultCooccurrencePreferences).toEqual({
       refreshEnabled: true,

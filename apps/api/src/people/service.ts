@@ -9,12 +9,14 @@ import type {
 import type {
   CreatePersonBody,
   CreatePersonExternalIdentityBody,
+  ImmichPeopleSyncSummary,
   ImmichProviderPerson,
   PatchPersonBody,
   PersonExternalIdentityRecord,
   PersonRecord,
   PersonThumbnailRecord
 } from "@treemich/shared";
+import { splitImmichPersonDisplayName } from "@treemich/shared";
 import { prisma } from "../db/client.js";
 import { HttpConflictError, HttpNotFoundError } from "../lifeEvents/errors.js";
 import { resolveDisplayNameForPerson } from "../personNames/service.js";
@@ -32,6 +34,25 @@ export type ImmichExternalIdentityNameSyncResult = {
   matched: number;
   updated: number;
   skippedUnnamed: number;
+};
+
+const pickMatchingImmichIdentityForSync = (
+  rows: PersonExternalIdentity[],
+  normalizedCurrentBaseUrl: string | null
+): PersonExternalIdentity | null => {
+  if (rows.length === 0) {
+    return null;
+  }
+  const candidates = rows.filter((row) =>
+    normalizedCurrentBaseUrl == null
+      ? row.providerBaseUrl == null
+      : row.providerBaseUrl === normalizedCurrentBaseUrl || row.providerBaseUrl == null
+  );
+  if (candidates.length === 0) {
+    return null;
+  }
+  const exact = candidates.find((row) => row.providerBaseUrl === normalizedCurrentBaseUrl);
+  return exact ?? candidates[0] ?? null;
 };
 
 const toIsoOrNull = (value?: Date | null) => value?.toISOString() ?? null;
@@ -314,6 +335,116 @@ export class PersonService implements ProfileResolver {
       updated,
       skippedUnnamed
     };
+  }
+
+  /**
+   * Creates Treemich people + Immich external identities for named Immich people not yet linked for this
+   * provider base URL (or legacy null base URL). Updates existing linked identities' display names only.
+   */
+  async syncImmichLabelledPeople(
+    userId: string,
+    people: ImmichProviderPerson[],
+    options: { providerBaseUrl: string | null }
+  ): Promise<ImmichPeopleSyncSummary> {
+    const normalizedCurrent =
+      options.providerBaseUrl != null && options.providerBaseUrl.trim() !== ""
+        ? options.providerBaseUrl.trim()
+        : null;
+
+    const skippedUnnamed = people.filter((person) => !String(person.name ?? "").trim()).length;
+    const namedPeople = people.filter((person) => String(person.name ?? "").trim().length > 0);
+    const uniqueNamedById = new Map(namedPeople.map((person) => [person.id, person]));
+    const uniqueNamed = [...uniqueNamedById.values()];
+    if (uniqueNamed.length === 0) {
+      return { created: 0, updated: 0, alreadyLinked: 0, skippedUnnamed };
+    }
+
+    const providerPersonIds = [...uniqueNamedById.keys()];
+
+    const identityWhere: Prisma.PersonExternalIdentityWhereInput =
+      normalizedCurrent == null
+        ? {
+            userId,
+            provider: "IMMICH",
+            providerPersonId: { in: providerPersonIds },
+            providerBaseUrl: null
+          }
+        : {
+            userId,
+            provider: "IMMICH",
+            providerPersonId: { in: providerPersonIds },
+            OR: [{ providerBaseUrl: normalizedCurrent }, { providerBaseUrl: null }]
+          };
+
+    const existingRows = await prisma.personExternalIdentity.findMany({ where: identityWhere });
+    const byProviderPersonId = new Map<string, PersonExternalIdentity[]>();
+    for (const row of existingRows) {
+      const list = byProviderPersonId.get(row.providerPersonId) ?? [];
+      list.push(row);
+      byProviderPersonId.set(row.providerPersonId, list);
+    }
+
+    let created = 0;
+    let updated = 0;
+    let alreadyLinked = 0;
+    const now = new Date();
+
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      for (const immich of uniqueNamed) {
+        const trimmedName = String(immich.name).trim();
+        const rowsForId = byProviderPersonId.get(immich.id) ?? [];
+        const existing = pickMatchingImmichIdentityForSync(rowsForId, normalizedCurrent);
+
+        if (existing) {
+          const needsBaseMigration =
+            existing.providerBaseUrl == null && normalizedCurrent != null && normalizedCurrent.length > 0;
+          const needsNameUpdate = existing.displayName?.trim() !== trimmedName;
+          if (!needsNameUpdate && !needsBaseMigration) {
+            alreadyLinked += 1;
+            continue;
+          }
+          await tx.personExternalIdentity.update({
+            where: { id: existing.id },
+            data: {
+              displayName: trimmedName,
+              lastSeenAt: now,
+              ...(needsBaseMigration ? { providerBaseUrl: normalizedCurrent } : {})
+            }
+          });
+          existing.displayName = trimmedName;
+          if (needsBaseMigration) {
+            existing.providerBaseUrl = normalizedCurrent;
+          }
+          updated += 1;
+          continue;
+        }
+
+        const { givenName, surname } = splitImmichPersonDisplayName(trimmedName);
+        const profile = await tx.personProfile.create({
+          data: {
+            userId,
+            gender: "UNKNOWN" as Gender,
+            givenName,
+            surname
+          }
+        });
+        await tx.personExternalIdentity.create({
+          data: {
+            userId,
+            personId: profile.id,
+            provider: "IMMICH",
+            providerPersonId: immich.id,
+            providerBaseUrl: normalizedCurrent,
+            displayName: trimmedName,
+            lastSeenAt: now,
+            metadata: { importedFromImmichAutoSync: true } as Prisma.InputJsonValue
+          }
+        });
+        created += 1;
+      }
+    });
+
+    return { created, updated, alreadyLinked, skippedUnnamed };
   }
 
   async addExternalIdentity(

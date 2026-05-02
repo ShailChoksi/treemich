@@ -196,7 +196,7 @@ describe("AuthService.loginWithImmich", () => {
     mocks.relationshipCount.mockResolvedValue(0);
   });
 
-  it("syncs Immich person names after storing a fresh linked account token", async () => {
+  it("stores linked Immich credentials and creates a session without server-side people sync", async () => {
     const { loginToImmich } = await import("../integrations/immich/client.js");
     vi.mocked(loginToImmich).mockResolvedValue({
       accessToken: "fresh-token",
@@ -207,56 +207,16 @@ describe("AuthService.loginWithImmich", () => {
       shouldChangePassword: false,
       isOnboarded: true
     });
-    const listPeople = vi.fn().mockResolvedValue([{ id: "immich-person-1", name: "Alice Smith" }]);
-    const dispose = vi.fn();
-    const syncImmichExternalIdentityNames = vi.fn().mockResolvedValue({
-      matched: 1,
-      updated: 1,
-      skippedUnnamed: 0
-    });
 
     const { AuthService } = await import("./service.js");
-    await new AuthService({
-      personService: { syncImmichExternalIdentityNames },
-      createImmichClientFromToken: () => ({ listPeople, dispose })
-    }).loginWithImmich("alice@example.com", "password");
+    const result = await new AuthService().loginWithImmich("alice@example.com", "password");
 
     expect(mocks.linkedImmichAccountUpsert).toHaveBeenCalledTimes(1);
-    expect(listPeople).toHaveBeenCalledTimes(1);
-    expect(syncImmichExternalIdentityNames).toHaveBeenCalledWith("user-1", [
-      { id: "immich-person-1", name: "Alice Smith" }
-    ]);
-    expect(dispose).toHaveBeenCalledTimes(1);
     expect(mocks.treemichSessionCreate).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not fail login when the post-login name sync fails", async () => {
-    const { loginToImmich } = await import("../integrations/immich/client.js");
-    vi.mocked(loginToImmich).mockResolvedValue({
-      accessToken: "fresh-token",
-      userId: "immich-user-1",
-      userEmail: "alice@example.com",
-      name: "Alice",
-      isAdmin: false,
-      shouldChangePassword: false,
-      isOnboarded: true
-    });
-    const dispose = vi.fn();
-    const syncImmichExternalIdentityNames = vi.fn();
-
-    const { AuthService } = await import("./service.js");
-    const result = await new AuthService({
-      personService: { syncImmichExternalIdentityNames },
-      createImmichClientFromToken: () => ({
-        listPeople: vi.fn().mockRejectedValue(new Error("Immich list failed")),
-        dispose
-      })
-    }).loginWithImmich("alice@example.com", "password");
-
     expect(result.state.authenticated).toBe(true);
-    expect(syncImmichExternalIdentityNames).not.toHaveBeenCalled();
-    expect(dispose).toHaveBeenCalledTimes(1);
-    expect(mocks.treemichSessionCreate).toHaveBeenCalledTimes(1);
+    expect(result.state.linkStatus).toEqual(
+      expect.objectContaining({ linked: true, immichEmail: "alice@example.com" })
+    );
   });
 });
 
@@ -267,7 +227,7 @@ describe("AuthService.linkImmichAccount", () => {
     mocks.linkedImmichAccountUpsert.mockResolvedValue({ id: "linked-1" });
   });
 
-  it("links Immich credentials to the current Treemich user and syncs names", async () => {
+  it("links Immich credentials to the current Treemich user (client syncs people separately)", async () => {
     const { loginToImmich } = await import("../integrations/immich/client.js");
     vi.mocked(loginToImmich).mockResolvedValue({
       accessToken: "fresh-token",
@@ -278,19 +238,9 @@ describe("AuthService.linkImmichAccount", () => {
       shouldChangePassword: false,
       isOnboarded: true
     });
-    const listPeople = vi.fn().mockResolvedValue([{ id: "immich-person-1", name: "Alice Smith" }]);
-    const dispose = vi.fn();
-    const syncImmichExternalIdentityNames = vi.fn().mockResolvedValue({
-      matched: 1,
-      updated: 1,
-      skippedUnnamed: 0
-    });
 
     const { AuthService } = await import("./service.js");
-    const result = await new AuthService({
-      personService: { syncImmichExternalIdentityNames },
-      createImmichClientFromToken: () => ({ listPeople, dispose })
-    }).linkImmichAccount("user-1", "alice@example.com", "password");
+    const result = await new AuthService().linkImmichAccount("user-1", "alice@example.com", "password");
 
     expect(result).toEqual({
       linked: true,
@@ -304,9 +254,6 @@ describe("AuthService.linkImmichAccount", () => {
         update: expect.objectContaining({ immichUserId: "immich-user-1" })
       })
     );
-    expect(syncImmichExternalIdentityNames).toHaveBeenCalledWith("user-1", [
-      { id: "immich-person-1", name: "Alice Smith" }
-    ]);
   });
 
   it("rejects an Immich account that is already linked to another Treemich user", async () => {

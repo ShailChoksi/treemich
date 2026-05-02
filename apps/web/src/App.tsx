@@ -1,15 +1,24 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AuthScreen } from "./components/AuthScreen";
 import {
+  CURRENT_ONBOARDING_TUTORIAL_VERSION,
+  OnboardingTutorialDialog
+} from "./components/OnboardingTutorialDialog";
+import {
   getCurrentUser,
   getLinkStatus,
+  getUserPreferences,
+  IMMICH_PEOPLE_SYNCED_EVENT,
   linkImmichAccount,
   login,
   logout,
+  syncImmichLabelledPeople,
   unlinkImmichAccount,
+  updateUserPreferences,
   type AuthState,
-  type LoginProvider
+  type LoginProvider,
+  type UserPreferences
 } from "./lib/api";
 
 const PeoplePage = lazy(async () => {
@@ -27,8 +36,105 @@ export const App = () => {
   const [isLinkingImmich, setIsLinkingImmich] = useState(false);
   const [immichLinkMessage, setImmichLinkMessage] = useState<string | null>(null);
   const [immichLinkError, setImmichLinkError] = useState<string | null>(null);
+  const [immichAutoSyncMessage, setImmichAutoSyncMessage] = useState<string | null>(null);
+  const [onboardingPrefs, setOnboardingPrefs] = useState<UserPreferences | null>(null);
+  const [onboardingLoadStatus, setOnboardingLoadStatus] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle"
+  );
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [tutorialPersistOnDismiss, setTutorialPersistOnDismiss] = useState(true);
+  const [tutorialSaving, setTutorialSaving] = useState(false);
+  const [tutorialSaveError, setTutorialSaveError] = useState<string | null>(null);
+  const didAutoOpenTutorialRef = useRef(false);
   const currentUser = authState?.user;
   const linkStatus = authState?.linkStatus;
+
+  useEffect(() => {
+    if (!authState?.authenticated || !currentUser) {
+      didAutoOpenTutorialRef.current = false;
+      setOnboardingPrefs(null);
+      setOnboardingLoadStatus("idle");
+      setTutorialOpen(false);
+      setTutorialSaveError(null);
+      setTutorialSaving(false);
+      return;
+    }
+
+    didAutoOpenTutorialRef.current = false;
+    let cancelled = false;
+    setOnboardingLoadStatus("loading");
+    void getUserPreferences()
+      .then((prefs) => {
+        if (cancelled) {
+          return;
+        }
+        setOnboardingPrefs(prefs);
+        setOnboardingLoadStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        setOnboardingLoadStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authState?.authenticated, currentUser?.id]);
+
+  useEffect(() => {
+    if (!immichAutoSyncMessage) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setImmichAutoSyncMessage(null), 10_000);
+    return () => window.clearTimeout(timeout);
+  }, [immichAutoSyncMessage]);
+
+  useEffect(() => {
+    if (onboardingLoadStatus !== "ready" || didAutoOpenTutorialRef.current) {
+      return;
+    }
+    if (onboardingPrefs?.onboardingTutorial?.dismissedVersion === CURRENT_ONBOARDING_TUTORIAL_VERSION) {
+      return;
+    }
+    didAutoOpenTutorialRef.current = true;
+    setTutorialPersistOnDismiss(true);
+    setTutorialSaveError(null);
+    setTutorialOpen(true);
+  }, [onboardingLoadStatus, onboardingPrefs]);
+
+  const handleTutorialPersist = useCallback(async () => {
+    setTutorialSaving(true);
+    setTutorialSaveError(null);
+    try {
+      const next = await updateUserPreferences({
+        onboardingTutorial: {
+          dismissedVersion: CURRENT_ONBOARDING_TUTORIAL_VERSION,
+          dismissedAt: new Date().toISOString()
+        }
+      });
+      setOnboardingPrefs(next);
+      setTutorialOpen(false);
+    } catch (error: unknown) {
+      setTutorialSaveError(error instanceof Error ? error.message : "Could not save tutorial state.");
+    } finally {
+      setTutorialSaving(false);
+    }
+  }, []);
+
+  const handleTutorialDialogClose = useCallback(() => {
+    setTutorialOpen(false);
+    setTutorialSaveError(null);
+  }, []);
+
+  const handleReplayOnboardingTutorial = useCallback(() => {
+    const alreadyDismissed =
+      onboardingPrefs?.onboardingTutorial?.dismissedVersion === CURRENT_ONBOARDING_TUTORIAL_VERSION;
+    setTutorialPersistOnDismiss(!alreadyDismissed);
+    setTutorialSaveError(null);
+    setTutorialOpen(true);
+  }, [onboardingPrefs]);
 
   useEffect(() => {
     getCurrentUser()
@@ -72,6 +178,19 @@ export const App = () => {
         ...state,
         linkStatus: latestLinkStatus
       });
+      if (provider === "immich" && latestLinkStatus?.linked) {
+        try {
+          const sync = await syncImmichLabelledPeople();
+          window.dispatchEvent(new Event(IMMICH_PEOPLE_SYNCED_EVENT));
+          if (sync.created > 0) {
+            setImmichAutoSyncMessage(
+              `${sync.created} new Immich ${sync.created === 1 ? "person" : "people"} added to your tree.`
+            );
+          }
+        } catch {
+          /* non-blocking: server sync is optional */
+        }
+      }
     } catch (error: unknown) {
       setAuthError(error instanceof Error ? error.message : "Login failed");
     } finally {
@@ -91,6 +210,19 @@ export const App = () => {
       setAuthState((state) => (state ? { ...state, linkStatus: latestLinkStatus } : state));
       setImmichLinkPassword("");
       setImmichLinkMessage(latestLinkStatus.linked ? "Immich account linked." : null);
+      if (latestLinkStatus.linked) {
+        try {
+          const sync = await syncImmichLabelledPeople();
+          window.dispatchEvent(new Event(IMMICH_PEOPLE_SYNCED_EVENT));
+          if (sync.created > 0) {
+            setImmichAutoSyncMessage(
+              `${sync.created} new Immich ${sync.created === 1 ? "person" : "people"} added to your tree.`
+            );
+          }
+        } catch {
+          /* non-blocking */
+        }
+      }
     } catch (error: unknown) {
       setImmichLinkError(error instanceof Error ? error.message : "Failed to link Immich account");
     } finally {
@@ -163,7 +295,12 @@ export const App = () => {
       <header className="card session-bar">
         <div className="session-bar-left">
           <h1 className="app-title">Treemich</h1>
-          <details className="account-provider-panel">
+          {immichAutoSyncMessage ? (
+            <p className="hint" role="status">
+              {immichAutoSyncMessage}
+            </p>
+          ) : null}
+          <details className="account-provider-panel" data-onboarding-target="immich-provider">
             <summary>
               Immich provider: {linkStatus?.linked ? (linkStatus.immichEmail ?? "linked") : "not linked"}
             </summary>
@@ -226,6 +363,14 @@ export const App = () => {
           </button>
         </div>
       </header>
+      <OnboardingTutorialDialog
+        open={tutorialOpen}
+        persistOnDismiss={tutorialPersistOnDismiss}
+        isSaving={tutorialSaving}
+        saveError={tutorialSaveError}
+        onComplete={handleTutorialPersist}
+        onClose={handleTutorialDialogClose}
+      />
       <ErrorBoundary
         errorContext="Authenticated app"
         fallback={
@@ -248,6 +393,7 @@ export const App = () => {
           <PeoplePage
             immichBaseUrl={linkStatus?.immichBaseUrl ?? null}
             currentUserName={linkStatus?.immichName ?? currentUser.name}
+            onReplayOnboardingTutorial={handleReplayOnboardingTutorial}
           />
         </Suspense>
       </ErrorBoundary>

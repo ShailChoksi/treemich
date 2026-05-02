@@ -1,24 +1,25 @@
 /**
- * @file GEDCOM import wizard (preview → match/create Treemich people → job) and export.
+ * @file GEDCOM import wizard (preview session → match/create Treemich people → job) and export.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiHttpError,
+  createGedcomImportPreview,
+  deleteGedcomImportPreviewSession,
   downloadGedcomExportJobResult,
   fetchGedcomExportDownload,
   getGedcomExportJob,
   getGedcomImportJob,
+  getGedcomPreviewIndisPage,
   postGedcomExportJob,
-  postGedcomImportArchiveJob,
-  postGedcomImportArchivePreview,
-  postGedcomImportJob,
-  postGedcomImportPreview,
+  postGedcomImportJobFromPreview,
   type GedcomDryRunDiff,
-  type GedcomImportPreviewResponse
+  type GedcomImportPreviewSummary,
+  type GedcomPreviewIndisPageResponse
 } from "../lib/api";
 import type { Person } from "../lib/api";
-import { getPersonDisplayLabel } from "../lib/personDisplay";
+import { GedcomPersonMatchCombobox } from "./gedcom/GedcomPersonMatchCombobox";
 
 type Props = {
   people: Person[];
@@ -76,10 +77,20 @@ const formatDryRunDiff = (diff: GedcomDryRunDiff) => {
 export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
   const [importApiAvailable, setImportApiAvailable] = useState<boolean | null>(null);
 
-  const [gedcomUtf8, setGedcomUtf8] = useState<string | null>(null);
-  const [archiveFile, setArchiveFile] = useState<File | null>(null);
-  const [fileName, setFileName] = useState<string>("import.ged");
-  const [preview, setPreview] = useState<GedcomImportPreviewResponse | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const previewIdRef = useRef<string | null>(null);
+  const [previewSummary, setPreviewSummary] = useState<GedcomImportPreviewSummary | null>(null);
+  const [lineLog, setLineLog] = useState<unknown[]>([]);
+  const [archiveMediaFiles, setArchiveMediaFiles] = useState<
+    { path: string; byteSize: number; mimeType: string | null }[]
+  >([]);
+  const [page, setPage] = useState<GedcomPreviewIndisPageResponse | null>(null);
+  const [pageOffset, setPageOffset] = useState(0);
+  const pageLimit = 50;
+
+  const [gedcomSearch, setGedcomSearch] = useState("");
+  const [gedcomSearchDebounced, setGedcomSearchDebounced] = useState("");
+
   const [matchByXref, setMatchByXref] = useState<Record<string, string>>({});
   const [dryRun, setDryRun] = useState(false);
   const [skipImported, setSkipImported] = useState(false);
@@ -90,8 +101,28 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [lastChosenFile, setLastChosenFile] = useState<File | null>(null);
 
   const probeDone = useRef(false);
+
+  useEffect(() => {
+    previewIdRef.current = previewId;
+  }, [previewId]);
+
+  useEffect(() => {
+    return () => {
+      const id = previewIdRef.current;
+      if (id) {
+        void deleteGedcomImportPreviewSession(id).catch(() => undefined);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setGedcomSearchDebounced(gedcomSearch.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [gedcomSearch]);
 
   const probeImport = useCallback(async () => {
     if (probeDone.current) {
@@ -99,7 +130,9 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
     }
     probeDone.current = true;
     try {
-      await postGedcomImportPreview("0 HEAD\n0 TRLR\n");
+      const file = new File(["0 HEAD\n0 TRLR\n"], "probe.ged", { type: "text/plain" });
+      const created = await createGedcomImportPreview(file);
+      await deleteGedcomImportPreviewSession(created.previewId);
       setImportApiAvailable(true);
     } catch (e) {
       if (e instanceof ApiHttpError && e.statusCode === 404) {
@@ -110,105 +143,184 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
     }
   }, []);
 
-  const initMatchesFromPreview = (p: GedcomImportPreviewResponse) => {
-    const next: Record<string, string> = {};
-    for (const row of p.indis) {
-      const legacyProviderHint = row.personHint ?? row.immichHint;
-      next[row.xref] = legacyProviderHint?.trim() ?? "";
-    }
-    setMatchByXref(next);
-  };
-
   useEffect(() => {
     void probeImport();
   }, [probeImport]);
 
-  const onFileChosen = async (file: File | null) => {
-    setError(null);
-    setPreview(null);
-    setGedcomUtf8(null);
-    setArchiveFile(null);
-    setStatusNote(null);
-    if (!file) {
+  const matchedXrefList = useMemo(
+    () =>
+      Object.entries(matchByXref)
+        .filter(([, v]) => v.trim())
+        .map(([k]) => k),
+    [matchByXref]
+  );
+
+  const matchedCount = matchedXrefList.length;
+
+  const loadPreviewPage = useCallback(
+    async (offset: number) => {
+      if (!previewId) {
+        return;
+      }
+      const data = await getGedcomPreviewIndisPage(previewId, {
+        offset,
+        limit: pageLimit,
+        filter: showOnlyUnmatched ? "unmatched" : "all",
+        q: gedcomSearchDebounced.length >= 2 ? gedcomSearchDebounced : undefined,
+        matchedXrefs: matchedXrefList
+      });
+      setPage(data);
+      setPageOffset(offset);
+      setMatchByXref((cur) => {
+        let changed = false;
+        const next = { ...cur };
+        for (const row of data.rows) {
+          const h = (row.personHint ?? row.immichHint)?.trim();
+          if (h && !next[row.xref]?.trim()) {
+            next[row.xref] = h;
+            changed = true;
+          }
+        }
+        return changed ? next : cur;
+      });
+    },
+    [gedcomSearchDebounced, matchedXrefList, previewId, showOnlyUnmatched]
+  );
+
+  useEffect(() => {
+    setPageOffset(0);
+  }, [showOnlyUnmatched, gedcomSearchDebounced, previewId]);
+
+  useEffect(() => {
+    if (!previewId) {
       return;
     }
-    const name = file.name.toLowerCase();
-    if (name.endsWith(".zip")) {
-      setArchiveFile(file);
-      setFileName(file.name || "import.zip");
-      return;
-    }
-    if (!name.endsWith(".ged")) {
-      setError("Please choose a .ged file (UTF-8 GEDCOM).");
-      return;
-    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        await loadPreviewPage(pageOffset);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load preview page");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPreviewPage, pageOffset, previewId]);
+
+  const runPreviewFromFile = async (file: File) => {
     setBusy(true);
+    setError(null);
+    setPreviewError(null);
+    setStatusNote(null);
+    setPreviewId(null);
+    setPreviewSummary(null);
+    setPage(null);
+    setLineLog([]);
+    setArchiveMediaFiles([]);
+    setMatchByXref({});
     try {
-      const text = await file.text();
-      setGedcomUtf8(text);
-      setFileName(file.name || "import.ged");
-    } catch {
-      setError("Could not read the selected file.");
+      const created = await createGedcomImportPreview(file);
+      setPreviewId(created.previewId);
+      setPreviewSummary(created.summary);
+      setLineLog(created.lineLog);
+      setArchiveMediaFiles(created.archiveMediaFiles);
+      const hints: Record<string, string> = {};
+      for (const xref of created.initialMatchedXrefs) {
+        const row = created.page.rows.find((r) => r.xref === xref);
+        const legacy = row?.personHint ?? row?.immichHint;
+        if (legacy?.trim()) {
+          hints[xref] = legacy.trim();
+        }
+      }
+      for (const row of created.page.rows) {
+        const legacyProviderHint = row.personHint ?? row.immichHint;
+        const h = legacyProviderHint?.trim();
+        if (h) {
+          hints[row.xref] = h;
+        }
+      }
+      setMatchByXref(hints);
+      setPage({
+        previewId: created.previewId,
+        ...created.page,
+        summary: {
+          totalIndis: created.summary.totalIndis,
+          totalFams: created.summary.totalFams,
+          totalMedia: created.summary.totalMedia,
+          famMatchError: created.summary.famMatchError
+        }
+      });
+      setPageOffset(0);
+      if (created.summary.famMatchError) {
+        setStatusNote(created.summary.famMatchError);
+      }
+    } catch (e) {
+      setPreviewError(e instanceof Error ? e.message : "Preview failed");
     } finally {
       setBusy(false);
     }
   };
 
-  const runPreview = async () => {
-    if (!gedcomUtf8 && !archiveFile) {
-      setError("Choose a .ged file or GEDCOM media .zip first.");
+  const onFileChosen = async (file: File | null) => {
+    setError(null);
+    setPreviewError(null);
+    setStatusNote(null);
+    if (!file) {
+      setLastChosenFile(null);
       return;
     }
-    setBusy(true);
-    setError(null);
-    setStatusNote(null);
-    try {
-      const p = archiveFile
-        ? await postGedcomImportArchivePreview(archiveFile)
-        : await postGedcomImportPreview(gedcomUtf8!);
-      setPreview(p);
-      initMatchesFromPreview(p);
-      if (p.famMatchError) {
-        setStatusNote(p.famMatchError);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Preview failed");
-    } finally {
-      setBusy(false);
+    const name = file.name.toLowerCase();
+    if (!name.endsWith(".ged") && !name.endsWith(".zip")) {
+      setError("Please choose a .ged file (UTF-8 GEDCOM) or a .zip media bundle.");
+      return;
     }
+    setLastChosenFile(file);
+    await runPreviewFromFile(file);
+  };
+
+  const retryPreview = async () => {
+    if (!lastChosenFile) {
+      setPreviewError("Choose a file again.");
+      return;
+    }
+    await runPreviewFromFile(lastChosenFile);
   };
 
   const setMatch = (xref: string, personId: string) => {
     setMatchByXref((cur) => ({ ...cur, [xref]: personId }));
   };
 
-  const matchablePeopleOptions = useMemo(
-    () =>
-      people
-        .map((p) => ({ id: p.id, label: getPersonDisplayLabel(p).trim() }))
-        .filter((p) => p.label.length > 0)
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [people]
-  );
+  const totalIndis = previewSummary?.totalIndis ?? 0;
+  const pageTotal = page?.total ?? 0;
+  const rows = page?.rows ?? [];
 
-  const indiRowsIncomplete = (p: GedcomImportPreviewResponse) =>
-    p.indis.filter((row) => !(matchByXref[row.xref] ?? "").trim());
-
-  const getVisibleRows = (p: GedcomImportPreviewResponse) =>
-    showOnlyUnmatched ? p.indis.filter((row) => !(matchByXref[row.xref] ?? "").trim()) : p.indis;
+  const unmatchedForPolicy = Math.max(0, totalIndis - matchedCount);
+  const filterActive = showOnlyUnmatched || gedcomSearchDebounced.length >= 2;
 
   const submitImport = async () => {
-    if ((!gedcomUtf8 && !archiveFile) || !preview) {
-      setError("Run preview after choosing a file.");
+    if (!previewId) {
+      setError("Choose a file before importing.");
       return;
     }
-    const incomplete = indiRowsIncomplete(preview);
-    if (incomplete.length > 0 && !allowPartialMatches && !createMissingPeople) {
-      setError(`Match every INDI to a Treemich person (${incomplete.length} missing).`);
-      return;
+    if (!dryRun && createMissingPeople && unmatchedForPolicy > 0) {
+      const ok = window.confirm(
+        `This import will create up to ${unmatchedForPolicy} new Treemich people for unmatched GEDCOM records (based on current matches). Continue?`
+      );
+      if (!ok) {
+        return;
+      }
     }
-    if (preview.famMatchError && !allowPartialMatches && !createMissingPeople) {
-      setError(preview.famMatchError);
+    if (!allowPartialMatches && !createMissingPeople) {
+      if (unmatchedForPolicy > 0) {
+        setError(`Match every INDI to a Treemich person (${unmatchedForPolicy} still unmatched).`);
+        return;
+      }
+    }
+    if (previewSummary?.famMatchError && !allowPartialMatches && !createMissingPeople) {
+      setError(previewSummary.famMatchError);
       return;
     }
     setBusy(true);
@@ -216,10 +328,10 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
     setStatusNote(null);
     try {
       const indiMatches: Record<string, string> = {};
-      for (const row of preview.indis) {
-        const v = (matchByXref[row.xref] ?? "").trim();
-        if (v) {
-          indiMatches[row.xref] = v;
+      for (const [xref, v] of Object.entries(matchByXref)) {
+        const t = v.trim();
+        if (t) {
+          indiMatches[xref] = t;
         }
       }
       const importOptions = {
@@ -228,14 +340,10 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
         allowPartialMatches,
         unmatchedIndiPolicy: createMissingPeople ? ("CREATE" as const) : ("MATCH_ONLY" as const)
       };
-      const job = archiveFile
-        ? await postGedcomImportArchiveJob({ archive: archiveFile, indiMatches, importOptions })
-        : await postGedcomImportJob({
-            gedcomUtf8: gedcomUtf8!,
-            fileName,
-            indiMatches,
-            importOptions
-          });
+      const job = await postGedcomImportJobFromPreview({ previewId, indiMatches, importOptions });
+      setPreviewId(null);
+      setPreviewSummary(null);
+      setPage(null);
       let state = await getGedcomImportJob(job.id);
       for (let i = 0; i < 120 && state.status !== "COMPLETED" && state.status !== "FAILED"; i += 1) {
         await sleep(250);
@@ -303,10 +411,18 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
     }
   };
 
+  const canPrev = pageOffset > 0;
+  const canNext = page ? pageOffset + pageLimit < pageTotal : false;
+  const rangeLabel =
+    pageTotal === 0
+      ? "Showing 0 of 0"
+      : `Showing ${pageOffset + 1}-${pageOffset + rows.length} of ${pageTotal}`;
+
   return (
     <section className="evidence-libraries-details gedcom-interchange-panel">
       <div className="field-label">GEDCOM import / export</div>
       {error ? <p className="hint hint--danger">{error}</p> : null}
+      {previewError ? <p className="hint hint--danger">{previewError}</p> : null}
       {statusNote ? <p className="hint hint--tight-below">{statusNote}</p> : null}
       <div className="stack evidence-panel-stack">
         <p className="hint hint--tight-below">
@@ -326,24 +442,18 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                 onChange={(ev) => void onFileChosen(ev.target.files?.[0] ?? null)}
               />
             </label>
-            <div className="workspace-action-row">
-              <button
-                type="button"
-                className="secondary-button workspace-action-button"
-                disabled={busy || (!gedcomUtf8 && !archiveFile)}
-                onClick={() => void runPreview()}
-              >
-                {busy ? "Working..." : "Preview"}
-              </button>
-              <button
-                type="button"
-                className="secondary-button workspace-action-button"
-                disabled={busy || !preview}
-                onClick={() => void submitImport()}
-              >
-                {dryRun ? "Run dry-run" : "Apply import"}
-              </button>
-            </div>
+            {previewError && lastChosenFile ? (
+              <div className="workspace-action-row">
+                <button
+                  type="button"
+                  className="secondary-button workspace-action-button"
+                  disabled={busy}
+                  onClick={() => void retryPreview()}
+                >
+                  Retry preview
+                </button>
+              </div>
+            ) : null}
             <label className="field-group inline-checkbox-row">
               <input
                 type="checkbox"
@@ -380,17 +490,40 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
               />
               <span>Create missing Treemich people from unmatched GEDCOM INDI records</span>
             </label>
-            {preview ? (
+            {previewId && previewSummary ? (
               <div className="stack evidence-panel-divider">
                 <div className="field-label">Match each INDI to a Treemich person</div>
-                {preview.media.length > 0 || preview.archiveMediaFiles.length > 0 ? (
+                <div className="gedcom-preview-summary card stack">
                   <p className="hint hint--tight-below">
-                    Media in GEDCOM: {preview.media.length} OBJE records
-                    {preview.archiveMediaFiles.length > 0
-                      ? `; archive contains ${preview.archiveMediaFiles.length} candidate media files.`
+                    {previewSummary.totalIndis} people · {previewSummary.totalFams} families ·{" "}
+                    {previewSummary.totalMedia} OBJE records
+                    {previewSummary.archiveMediaFileCount > 0
+                      ? ` · ${previewSummary.archiveMediaFileCount} archive media files`
+                      : ""}
+                    {previewSummary.matchedByHintCount > 0
+                      ? ` · ${previewSummary.matchedByHintCount} matched from file hints`
+                      : ""}
+                  </p>
+                </div>
+                {previewSummary.totalMedia > 0 || archiveMediaFiles.length > 0 ? (
+                  <p className="hint hint--tight-below">
+                    Media in GEDCOM: {previewSummary.totalMedia} OBJE records
+                    {archiveMediaFiles.length > 0
+                      ? `; archive contains ${archiveMediaFiles.length} candidate media files.`
                       : "."}
                   </p>
                 ) : null}
+                <label className="field-group">
+                  <span className="field-label">Search people in file</span>
+                  <input
+                    type="search"
+                    className="gedcom-source-search-input"
+                    placeholder="Type at least 2 characters…"
+                    value={gedcomSearch}
+                    onChange={(e) => setGedcomSearch(e.target.value)}
+                    disabled={busy}
+                  />
+                </label>
                 <label className="field-group inline-checkbox-row">
                   <input
                     type="checkbox"
@@ -399,8 +532,8 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                     disabled={busy}
                   />
                   <span>
-                    Show only unmatched rows ({indiRowsIncomplete(preview).length} unmatched of{" "}
-                    {preview.indis.length})
+                    Show only unmatched rows ({pageTotal} shown of {totalIndis} total in file
+                    {showOnlyUnmatched ? "" : " — filter off"})
                   </span>
                 </label>
                 <table className="gedcom-match-table">
@@ -411,27 +544,21 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {getVisibleRows(preview).map((row) => (
-                      <tr key={row.xref}>
+                    {rows.map((row) => (
+                      <tr key={row.xref} aria-label={`GEDCOM person ${row.xref}`}>
                         <td>
-                          <div className="gedcom-source-name">{row.displayName ?? "-"}</div>
-                          <p className="hint hint--tight-below">Ref: {row.xref}</p>
-                        </td>
-                        <td>
-                          <select
-                            className="gedcom-match-select"
-                            value={matchByXref[row.xref] ?? ""}
-                            onChange={(e) => setMatch(row.xref, e.target.value)}
-                            disabled={busy}
-                            aria-label={`Treemich person match for ${row.xref}`}
-                          >
-                            <option value="">- choose -</option>
-                            {matchablePeopleOptions.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.label}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="gedcom-source-name">{row.fullName ?? row.displayName ?? "-"}</div>
+                          {row.alternateNames.length > 0 ? (
+                            <p className="hint hint--tight-below">Also: {row.alternateNames.join(" · ")}</p>
+                          ) : null}
+                          {row.birthDate ? (
+                            <p className="hint hint--tight-below">Born {row.birthDate}</p>
+                          ) : null}
+                          {row.relatedPeople.length > 0 ? (
+                            <p className="hint hint--tight-below">
+                              {row.relatedPeople.map((r) => `${r.label}: ${r.name}`).join(" · ")}
+                            </p>
+                          ) : null}
                           {(() => {
                             const legacyProviderHint = row.personHint ?? row.immichHint;
                             return legacyProviderHint ? (
@@ -439,11 +566,20 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                             ) : null;
                           })()}
                         </td>
+                        <td>
+                          <GedcomPersonMatchCombobox
+                            value={matchByXref[row.xref] ?? ""}
+                            onChange={(id) => setMatch(row.xref, id)}
+                            disabled={busy}
+                            ariaLabel={`Treemich person match for ${row.xref}`}
+                            people={people}
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {getVisibleRows(preview).length === 0 ? (
+                {rows.length === 0 ? (
                   <p className="hint hint--tight-below">No rows to show for the current filter.</p>
                 ) : null}
                 {allowPartialMatches && !createMissingPeople ? (
@@ -457,16 +593,51 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
                     import.
                   </p>
                 ) : null}
-                {preview.lineLog.length > 0 ? (
+                {lineLog.length > 0 ? (
                   <details className="gedcom-line-log">
-                    <summary className="hint">
-                      Parser log ({preview.lineLog.length} entries, first 40 shown)
-                    </summary>
-                    <pre className="gedcom-line-pre">
-                      {JSON.stringify(preview.lineLog.slice(0, 40), null, 2)}
-                    </pre>
+                    <summary className="hint">Parser log ({lineLog.length} entries, first 40 shown)</summary>
+                    <pre className="gedcom-line-pre">{JSON.stringify(lineLog.slice(0, 40), null, 2)}</pre>
                   </details>
                 ) : null}
+                <div className="gedcom-preview-pagination workspace-action-row">
+                  <span className="hint">{rangeLabel}</span>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy || !canPrev}
+                    onClick={() => setPageOffset((o) => Math.max(0, o - pageLimit))}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy || !canNext}
+                    onClick={() => setPageOffset((o) => o + pageLimit)}
+                  >
+                    Next {pageLimit}
+                  </button>
+                </div>
+                {filterActive ? (
+                  <p className="hint hint--danger">
+                    Import applies all {totalIndis} people in this preview, not just the {pageTotal} currently
+                    listed.
+                  </p>
+                ) : null}
+                <p className="hint hint--tight-below">
+                  Applying <strong>all {totalIndis} people</strong>; {matchedCount} matched
+                  {unmatchedForPolicy > 0 ? `, ${unmatchedForPolicy} unmatched` : ""}.
+                </p>
+                <div className="workspace-action-row">
+                  <button
+                    type="button"
+                    className="secondary-button workspace-action-button"
+                    disabled={busy || !previewId}
+                    onClick={() => void submitImport()}
+                  >
+                    {busy ? "Working..." : dryRun ? "Run dry-run" : "Apply import"}
+                  </button>
+                </div>
               </div>
             ) : null}
           </>

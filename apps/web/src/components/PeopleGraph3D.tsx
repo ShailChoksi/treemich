@@ -591,10 +591,6 @@ const PeopleGraph3DComponent = ({
     }
   };
 
-  const peopleForSearchList = useMemo(
-    () => filteredPeople.map((p) => ({ id: p.id, name: getPersonDisplayLabel(p) })),
-    [filteredPeople]
-  );
   const graphSelectionSummary = selectedPerson
     ? `Selected person: ${getPersonDisplayLabel(selectedPerson)}. ${renderVisiblePeople.length} people and ${renderVisibleRelationshipLines.length} relationships are currently visible in the graph.`
     : `No person selected. ${renderVisiblePeople.length} people and ${renderVisibleRelationshipLines.length} relationships are currently visible in the graph.`;
@@ -611,7 +607,7 @@ const PeopleGraph3DComponent = ({
           onSearchSubmit={handleSearchSubmit}
           onClearSearch={handleClearSearch}
           onCenterView={frameAllNodes}
-          people={peopleForSearchList}
+          people={filteredPeople}
           searchFeedback={searchFeedback}
           treeValidationIssueCount={treeValidationIssueCount}
           treeValidationEngineDisabled={treeValidationEngineDisabled}

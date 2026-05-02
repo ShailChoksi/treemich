@@ -99,3 +99,76 @@ export const parseGedcomDate = (raw: string | null | undefined): ParsedGedcomDat
     endDay: null
   };
 };
+
+const MONTH_LABEL = [
+  "",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec"
+] as const;
+
+const formatOne = (year: number | null, month: number | null, day: number | null): string | null => {
+  if (year == null) {
+    return null;
+  }
+  if (month != null && day != null) {
+    const m = MONTH_LABEL[month];
+    return m ? `${day} ${m} ${year}` : `${year}`;
+  }
+  if (month != null) {
+    const m = MONTH_LABEL[month];
+    return m ? `${m} ${year}` : `${year}`;
+  }
+  return `${year}`;
+};
+
+/**
+ * Compact human-readable birth date for GEDCOM import preview (preserves common GEDCOM qualifiers).
+ */
+export const formatGedcomBirthDateDisplay = (raw: string | null | undefined): string | null => {
+  if (!raw?.trim()) {
+    return null;
+  }
+  const trimmed = raw.trim();
+  const parsed = parseGedcomDate(trimmed);
+  if (!parsed) {
+    return trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
+  }
+  const qPrefix =
+    parsed.dateQualifier === "ABOUT"
+      ? "abt "
+      : parsed.dateQualifier === "BEFORE"
+        ? "bef "
+        : parsed.dateQualifier === "AFTER"
+          ? "aft "
+          : parsed.dateQualifier === "CALCULATED"
+            ? "cal "
+            : parsed.dateQualifier === "ESTIMATED"
+              ? "est "
+              : "";
+  if (parsed.dateQualifier === "BETWEEN") {
+    const a = formatOne(parsed.year, parsed.month, parsed.day);
+    const b = formatOne(parsed.endYear, parsed.endMonth, parsed.endDay);
+    if (a && b) {
+      return `${qPrefix}bet ${a} and ${b}`;
+    }
+    if (a) {
+      return `${qPrefix}bet ${a} and …`;
+    }
+    return trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
+  }
+  const core = formatOne(parsed.year, parsed.month, parsed.day);
+  if (!core) {
+    return trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
+  }
+  return `${qPrefix}${core}`;
+};
