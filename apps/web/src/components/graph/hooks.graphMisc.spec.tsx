@@ -6,15 +6,15 @@ import {
   getNextKeyboardTraversal,
   resolveKeyboardDirection
 } from "./useGraphKeyboardNavigation";
-import { getFocusCameraPose } from "./useGraphCameraControls";
+import { getFocusCameraPose } from "./graphCameraPoses";
 import { findPersonBySearchTerm, resolveFocusPersonRequest } from "./useGraphSearch";
 import {
   resolveNodeRenderTier,
   shouldRenderDetailedNode,
   shouldRenderInstancedVisualForNode,
   shouldUseLargeGraphTier
-} from "./scene/AnimatedNodes";
-import { shouldSkipNodeAnimationFrame } from "./scene/useAnimatedNodeTransforms";
+} from "./scene/graphRenderTiers";
+import { shouldSkipNodeAnimationFrame } from "./scene/nodeAnimationPolicy";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;

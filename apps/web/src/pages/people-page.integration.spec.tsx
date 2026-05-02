@@ -91,6 +91,9 @@ describe("PeoplePage + life events (integration)", () => {
   let relationshipsLoadCount = 0;
   let preferencePatchShouldFail = false;
   let preferencesGetNeverResolves = false;
+  let preferencesResponse: Record<string, unknown> = {};
+  let peopleResponseOverride: Array<Record<string, unknown>> | null = null;
+  let relationshipsResponseOverride: Array<Record<string, unknown>> | null = null;
 
   beforeEach(() => {
     try {
@@ -105,6 +108,9 @@ describe("PeoplePage + life events (integration)", () => {
     relationshipsLoadCount = 0;
     preferencePatchShouldFail = false;
     preferencesGetNeverResolves = false;
+    preferencesResponse = {};
+    peopleResponseOverride = null;
+    relationshipsResponseOverride = null;
     globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       const method = init?.method ?? "GET";
@@ -122,6 +128,12 @@ describe("PeoplePage + life events (integration)", () => {
 
       if (method === "GET" && url.includes("/relationships?")) {
         relationshipsLoadCount += 1;
+        if (relationshipsResponseOverride) {
+          return jsonResponse({
+            relationships: relationshipsResponseOverride,
+            nextCursor: null
+          });
+        }
         if (relationshipsLoadCount > 1) {
           return jsonResponse({
             relationships: [
@@ -141,7 +153,7 @@ describe("PeoplePage + life events (integration)", () => {
         if (preferencesGetNeverResolves) {
           return new Promise<Response>(() => undefined);
         }
-        return jsonResponse({});
+        return jsonResponse(preferencesResponse);
       }
 
       if (method === "PATCH" && url.endsWith("/user/preferences")) {
@@ -185,6 +197,9 @@ describe("PeoplePage + life events (integration)", () => {
 
       if (method === "GET" && /\/people$/.test(url)) {
         peopleLoadCount += 1;
+        if (peopleResponseOverride) {
+          return jsonResponse({ people: peopleResponseOverride });
+        }
         if (peopleLoadCount > 1) {
           return jsonResponse({
             people: [
@@ -373,6 +388,65 @@ describe("PeoplePage + life events (integration)", () => {
     expect(graphLayoutCall).toBeTruthy();
     const body = JSON.parse(String(graphLayoutCall?.[1]?.body));
     expect(body.familyViewStyle).toBe("generationTree");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("passes a populated graph model through after loading people with a persisted selection", async () => {
+    const selectedPersonId = "person-42";
+    peopleResponseOverride = Array.from({ length: 646 }, (_, index) => ({
+      id: `person-${index}`,
+      name: `Person ${index}`,
+      hasRelationship: true,
+      birthDate: null,
+      profile: {
+        id: `person-${index}`,
+        gender: "UNKNOWN",
+        givenName: "Person",
+        surname: String(index),
+        nicknames: null
+      }
+    }));
+    relationshipsResponseOverride = Array.from({ length: 934 }, (_, index) => ({
+      id: `relationship-${index}`,
+      fromPersonId: `person-${index % 646}`,
+      toPersonId: `person-${(index + 1) % 646}`,
+      type: "PARENT_OF"
+    }));
+    preferencesResponse = {
+      lastSelectedPersonId: selectedPersonId,
+      graphRenderLimit: 120
+    };
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(PeoplePage, { immichBaseUrl: null, currentUserName: null }));
+      await Promise.resolve();
+    });
+
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (
+        latestGraphProps?.graphModel.people.length === 646 &&
+        latestGraphProps.graphModel.relationships.length === 934 &&
+        latestGraphProps.graphModel.selectedPersonId === selectedPersonId
+      ) {
+        break;
+      }
+    }
+
+    expect(latestGraphProps?.graphModel.people).toHaveLength(646);
+    expect(latestGraphProps?.graphModel.relationships).toHaveLength(934);
+    expect(latestGraphProps?.graphModel.selectedPersonId).toBe(selectedPersonId);
+    expect(latestGraphProps?.graphStatus.isLoading).toBe(false);
 
     act(() => {
       root.unmount();

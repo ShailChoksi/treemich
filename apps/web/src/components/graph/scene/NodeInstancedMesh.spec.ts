@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { instancedNodeLayerZ } from "./NodeInstancedMesh";
+import { instancedNodeLayerZ } from "./nodeInstancedMeshConstants";
 
 describe("instanced node layer ordering", () => {
   it("keeps instanced disk and ring behind per-person thumbnail meshes", () => {

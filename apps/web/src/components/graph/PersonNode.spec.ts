@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolvePersonInitials } from "./PersonNode";
+import { resolvePersonInitials } from "./personNodeText";
 
 describe("resolvePersonInitials", () => {
   it("uses the first letters of the resolved display name", () => {

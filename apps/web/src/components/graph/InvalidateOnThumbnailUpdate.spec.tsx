@@ -30,7 +30,9 @@ describe("InvalidateOnThumbnailUpdate", () => {
     });
 
     expect(invalidate).not.toHaveBeenCalled();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("calls invalidate when the texture map grows and the graph is visible", async () => {
@@ -67,7 +69,9 @@ describe("InvalidateOnThumbnailUpdate", () => {
       );
     });
     expect(invalidate).toHaveBeenCalledTimes(2);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("does not call invalidate when the graph is not visible", async () => {
@@ -90,7 +94,9 @@ describe("InvalidateOnThumbnailUpdate", () => {
       );
     });
     expect(invalidate).not.toHaveBeenCalled();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("does not call invalidate when the texture count shrinks", async () => {
@@ -120,6 +126,8 @@ describe("InvalidateOnThumbnailUpdate", () => {
       );
     });
     expect(invalidate).not.toHaveBeenCalled();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });

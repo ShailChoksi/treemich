@@ -7,6 +7,9 @@ import { useCallback } from "react";
 import { Vector3, type PerspectiveCamera } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { NodePosition } from "./layout";
+import { getFocusCameraPose } from "./graphCameraPoses";
+
+export { getFocusCameraPose } from "./graphCameraPoses";
 
 type UseGraphCameraControlsOptions = {
   graphBounds: {
@@ -22,13 +25,6 @@ type UseGraphCameraControlsOptions = {
   orbitControlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
   lastCameraSampleRef: React.MutableRefObject<Vector3>;
 };
-
-export const getFocusCameraPose = (
-  target: NodePosition
-): { position: NodePosition; target: NodePosition } => ({
-  position: [target[0], target[1] + 3.8, target[2] + 7.4],
-  target
-});
 
 export const useGraphCameraControls = ({
   graphBounds,

@@ -93,7 +93,9 @@ describe("MapPlacesPanel", () => {
       );
     });
     expect(container.textContent).toContain("Loading geocoded places");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("can rerender from loading state to loaded state without hook-order crash", async () => {
@@ -141,7 +143,9 @@ describe("MapPlacesPanel", () => {
     });
 
     expect(container.textContent).toContain("Geocoded life-event places");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("shows the map canvas when geocoded places are available", async () => {
@@ -173,7 +177,9 @@ describe("MapPlacesPanel", () => {
     });
     expect(container.querySelector(".map-places-panel")).toBeTruthy();
     expect(container.querySelector(".map-places-canvas")).toBeTruthy();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("renders the map in the main panel container", async () => {
@@ -204,7 +210,9 @@ describe("MapPlacesPanel", () => {
       );
     });
     expect(container.querySelector(".map-places-canvas")).toBeTruthy();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("calls includeLiving change handler from toggle", async () => {
@@ -240,7 +248,9 @@ describe("MapPlacesPanel", () => {
       checkbox.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onIncludeLivingChange).toHaveBeenCalled();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("styles cluster markers green when selected person appears in cluster sample ids", async () => {
@@ -287,7 +297,9 @@ describe("MapPlacesPanel", () => {
     expect(fills).toContain("#22c55e");
     expect(fills).toContain("#3b82f6");
     expect(container.textContent).toContain("sample ids from the map feed");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("keeps map controls visible when living filter yields zero places", async () => {
@@ -327,7 +339,9 @@ describe("MapPlacesPanel", () => {
     expect(container.textContent).toContain("Include living people places");
     checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
     expect(checkbox).toBeTruthy();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("renders focus buttons and focuses person from popup controls", async () => {
@@ -366,7 +380,9 @@ describe("MapPlacesPanel", () => {
       (focusButtons[0] as HTMLButtonElement).click();
     });
     expect(onFocusPerson).toHaveBeenCalledWith("p1");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("debounces fitBounds calls", async () => {
@@ -402,7 +418,9 @@ describe("MapPlacesPanel", () => {
       vi.advanceTimersByTime(200);
     });
     expect(leafletMocks.fitBounds).toHaveBeenCalledTimes(1);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("updates adaptive cluster hint when zoom changes", async () => {
@@ -441,7 +459,9 @@ describe("MapPlacesPanel", () => {
       }
     });
     expect(container.textContent).toContain("at zoom 8.0");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("clusters only points in the current viewport", async () => {
@@ -491,7 +511,9 @@ describe("MapPlacesPanel", () => {
       }
     });
     expect(container.textContent).toContain("1 in view");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("does not re-trigger fitBounds on viewport-only move events", async () => {
@@ -536,7 +558,9 @@ describe("MapPlacesPanel", () => {
       vi.advanceTimersByTime(220);
     });
     expect(leafletMocks.fitBounds).toHaveBeenCalledTimes(1);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("restores filter and viewport state from the initial snapshot", async () => {
@@ -600,7 +624,9 @@ describe("MapPlacesPanel", () => {
         zoom: expect.any(Number)
       })
     );
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("renders an explicit retry action for map load failures", async () => {
@@ -634,6 +660,8 @@ describe("MapPlacesPanel", () => {
       retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onRetry).toHaveBeenCalledTimes(1);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });

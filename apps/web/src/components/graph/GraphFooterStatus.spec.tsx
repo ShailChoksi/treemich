@@ -28,7 +28,9 @@ describe("GraphFooterStatus", () => {
 
     expect(container.textContent).toContain("Loading faces");
     expect(container.textContent).toContain(`0/${GRAPH_FOOTER_THUMBNAIL_PROGRESS_MIN_TOTAL}`);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("hides thumbnail progress when total is below the minimum", async () => {
@@ -50,7 +52,9 @@ describe("GraphFooterStatus", () => {
     });
 
     expect(container.textContent).not.toContain("Loading faces");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("hides thumbnail progress when all thumbnails are loaded", async () => {
@@ -70,6 +74,8 @@ describe("GraphFooterStatus", () => {
     });
 
     expect(container.textContent).not.toContain("Loading faces");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });

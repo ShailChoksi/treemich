@@ -103,7 +103,9 @@ describe("PeopleGraphDataContext", () => {
     }
 
     expect(people).toEqual([expect.objectContaining({ id: "p1", name: "Alex Smith" })]);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("recognizes equivalent people lists", () => {
@@ -224,7 +226,9 @@ describe("PeopleGraphDataContext", () => {
     expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(false);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(false);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("refreshes only relationships for the metadata-only relationship tier", async () => {
@@ -266,7 +270,9 @@ describe("PeopleGraphDataContext", () => {
     expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(false);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(false);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("uses full layout refresh for structural relationship creation", async () => {
@@ -309,7 +315,9 @@ describe("PeopleGraphDataContext", () => {
     expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(true);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("exposes retryGraphData that runs the same fetches as a full graph refresh", async () => {
@@ -362,7 +370,9 @@ describe("PeopleGraphDataContext", () => {
     expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(true);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("refetches people when the Immich labelled-people sync event fires", async () => {
@@ -411,6 +421,8 @@ describe("PeopleGraphDataContext", () => {
     });
     expect(peopleCalls.length).toBeGreaterThanOrEqual(1);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });

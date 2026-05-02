@@ -19,6 +19,9 @@ import type { Person } from "../../lib/api";
 import { personThumbnailUrl } from "../../lib/api";
 import { applyCoverCrop } from "./useThumbnailLoader";
 import { useFrame, useThree } from "@react-three/fiber";
+import { resolvePersonInitials } from "./personNodeText";
+
+export { resolvePersonInitials } from "./personNodeText";
 
 export type PersonNodeProps = {
   person: Person;
@@ -37,17 +40,6 @@ const truncateName = (name: string, maxLength = 22) => {
     return name;
   }
   return `${name.slice(0, maxLength - 1)}...`;
-};
-
-export const resolvePersonInitials = (name: string) => {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-  return initials || "?";
 };
 
 const nodeScale = (isSelected: boolean, isHovered: boolean, isHighlighted: boolean) => {
