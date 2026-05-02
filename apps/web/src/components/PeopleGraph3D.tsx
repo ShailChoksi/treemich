@@ -4,6 +4,12 @@
 
 import { defaultGraphRenderLimit } from "@treemich/shared";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DEFAULT_GRAPH_UI_SNAPSHOT,
+  type GraphCameraIntent,
+  type GraphUiSnapshot,
+  type Vector3Tuple
+} from "../lib/workspaceUiState";
 import { PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
@@ -29,6 +35,14 @@ import {
 } from "./graph/relationshipStyles";
 import { useGraphLayoutState } from "./graph/useGraphLayoutState";
 import { useGraphCameraControls } from "./graph/useGraphCameraControls";
+import {
+  resolveCameraSnapshotForPersistence,
+  resolveRestoredCameraSnapshotForCanvas,
+  resolveStartupCameraIntent,
+  shouldCanvasApplyPersistedSnapshotRestore,
+  type GraphCameraPose
+} from "./graph/graphCameraPolicy";
+import { useGraphCameraOrchestrator } from "./graph/useGraphCameraOrchestrator";
 import { GraphSceneProvider } from "./graph/GraphSceneContext";
 import { GraphSurfaceOverlays } from "./graph/GraphSurfaceOverlays";
 import { GraphFooterStatus } from "./graph/GraphFooterStatus";
@@ -159,7 +173,8 @@ const PeopleGraph3DComponent = ({
     layoutResizeSignal = 0,
     initialUiState,
     onUiStateChange,
-    isVisible = true
+    isVisible = true,
+    graphCameraSessionKind = "hardPageLoad"
   }
 }: Props) => {
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
@@ -177,13 +192,45 @@ const PeopleGraph3DComponent = ({
   );
   const { filterVisibility, showSingleFamilyTree } = graphViewPreferences;
   const [singleFamilyTreeAnchorId, setSingleFamilyTreeAnchorId] = useState<string | null>(null);
-  const [cameraPositionForCulling, setCameraPositionForCulling] = useState<[number, number, number]>(
-    initialUiState?.camera?.position ?? [0, 2, 18]
+  const { initialCameraState, startupIntent } = useMemo(() => {
+    const restored = resolveRestoredCameraSnapshotForCanvas({
+      sessionKind: graphCameraSessionKind,
+      explicitFocusPersonId: focusPersonRequest ?? null,
+      cameraFocusPersonRequest: cameraFocusPersonRequest ?? null,
+      savedCamera: initialUiState?.camera ?? null
+    });
+    return {
+      initialCameraState: restored,
+      startupIntent: resolveStartupCameraIntent({
+        sessionKind: graphCameraSessionKind,
+        explicitFocusPersonId: focusPersonRequest ?? null,
+        cameraFocusPersonRequest: cameraFocusPersonRequest ?? null,
+        restoredCameraSnapshot: restored
+      })
+    };
+  }, [cameraFocusPersonRequest, focusPersonRequest, graphCameraSessionKind, initialUiState?.camera]);
+
+  const applyPersistedSnapshotRestore = useMemo(
+    () => shouldCanvasApplyPersistedSnapshotRestore(startupIntent, initialCameraState),
+    [initialCameraState, startupIntent]
   );
+
+  const [cameraPositionForCulling, setCameraPositionForCulling] = useState<[number, number, number]>(
+    initialCameraState?.position ?? [0, 2, 18]
+  );
+  const [canvasCameraReadyGeneration, setCanvasCameraReadyGeneration] = useState(0);
+  const handleCanvasCameraSystemReady = useCallback(() => {
+    setCanvasCameraReadyGeneration((generation) => generation + 1);
+  }, []);
   const prefsAppliedRef = useRef(false);
   const lastCameraSampleRef = useRef(new Vector3(0, 2, 18));
-  const hasInitializedCameraRef = useRef(false);
   const lastAutoCenteredFocusPersonIdRef = useRef<string | null>(null);
+  const lastKeyboardCameraIntentRef = useRef<GraphCameraIntent | null>(null);
+  const pendingStartupCameraIntentRef = useRef<GraphCameraIntent | null>(null);
+  const handleStartupCameraIntentApplied = useCallback((intent: GraphCameraIntent) => {
+    pendingStartupCameraIntentRef.current = intent;
+  }, []);
+  const lastEmittedGraphUiRef = useRef<GraphUiSnapshot | null>(null);
   const cameraRef = useRef<PerspectiveCamera | null>(null);
   const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
   const clearSearchCenterDedupe = useCallback(() => {
@@ -312,7 +359,7 @@ const PeopleGraph3DComponent = ({
     onSearchFallback: handleSearchFallback,
     onSearchFocusCommitted: clearSearchCenterDedupe
   });
-  const { frameAllNodes, focusPersonById, focusActiveNode, topDownView, nudgeCamera } =
+  const { applyCameraPose, frameAllNodes, focusPersonById, focusActiveNode, topDownView, nudgeCamera } =
     useGraphCameraControls({
       graphBounds,
       visiblePositionsById,
@@ -325,13 +372,63 @@ const PeopleGraph3DComponent = ({
       lastCameraSampleRef
     });
 
+  const applyPersistedCameraPose = useCallback(
+    (pose: GraphCameraPose) => {
+      applyCameraPose(
+        [pose.position[0], pose.position[1], pose.position[2]],
+        [pose.target[0], pose.target[1], pose.target[2]]
+      );
+    },
+    [applyCameraPose]
+  );
+
+  const graphModelReady = !isLoading && !loadError;
+
+  const { hasCompletedStartupCameraRef } = useGraphCameraOrchestrator({
+    graphCameraSessionKind,
+    startupIntent,
+    focusPersonRequest: focusPersonRequest ?? null,
+    cameraFocusPersonRequest: cameraFocusPersonRequest ?? null,
+    visiblePositionsById,
+    graphBounds,
+    graphModelReady,
+    knownPersonIds: filteredPersonIds,
+    fallbackSavedCamera: initialUiState?.camera ?? null,
+    focusPersonById,
+    frameAllNodes,
+    applyPersistedCameraPose,
+    onCameraFocusPersonConsumed,
+    onFocusPersonConsumed,
+    onStartupCameraIntentApplied: handleStartupCameraIntentApplied,
+    setFocusPersonId,
+    cameraRef,
+    orbitControlsRef,
+    canvasCameraReadyGeneration,
+    lastAutoCenteredFocusPersonIdRef
+  });
+
   const graphShortcutsActive = graphKeyboardEnabled && !addRelativeIntent;
+
+  const frameAllNodesWithIntent = useCallback(() => {
+    lastKeyboardCameraIntentRef.current = "frameAll";
+    frameAllNodes();
+  }, [frameAllNodes]);
+
+  const focusActiveNodeWithIntent = useCallback(() => {
+    lastKeyboardCameraIntentRef.current = "explicitFocus";
+    focusActiveNode();
+  }, [focusActiveNode]);
+
+  const topDownViewWithIntent = useCallback(() => {
+    lastKeyboardCameraIntentRef.current = "topDown";
+    topDownView();
+  }, [topDownView]);
 
   useGraphCamera({
     enabled: graphShortcutsActive,
-    frameAllNodes,
-    focusActiveNode,
-    topDownView
+    frameAllNodes: frameAllNodesWithIntent,
+    focusActiveNode: focusActiveNodeWithIntent,
+    topDownView: topDownViewWithIntent
   });
   useGraphKeyboardNavigation({
     enabled: graphShortcutsActive,
@@ -370,44 +467,6 @@ const PeopleGraph3DComponent = ({
     lastAutoCenteredFocusPersonIdRef.current = focusPersonId;
   }, [focusPersonById, focusPersonId, visiblePositionsById]);
 
-  useEffect(() => {
-    if (!hasInitializedCameraRef.current) {
-      if (initialUiState?.camera) {
-        hasInitializedCameraRef.current = true;
-      } else {
-        if (cameraFocusPersonRequest && visiblePositionsById.has(cameraFocusPersonRequest)) {
-          setFocusPersonId(cameraFocusPersonRequest);
-          focusPersonById(cameraFocusPersonRequest);
-          onCameraFocusPersonConsumed();
-          lastAutoCenteredFocusPersonIdRef.current = cameraFocusPersonRequest;
-        } else {
-          frameAllNodes();
-        }
-        hasInitializedCameraRef.current = true;
-      }
-      return;
-    }
-
-    if (!cameraFocusPersonRequest) {
-      return;
-    }
-    if (!visiblePositionsById.has(cameraFocusPersonRequest)) {
-      return;
-    }
-    setFocusPersonId(cameraFocusPersonRequest);
-    focusPersonById(cameraFocusPersonRequest);
-    onCameraFocusPersonConsumed();
-    lastAutoCenteredFocusPersonIdRef.current = cameraFocusPersonRequest;
-  }, [
-    cameraFocusPersonRequest,
-    focusPersonById,
-    frameAllNodes,
-    initialUiState?.camera,
-    onCameraFocusPersonConsumed,
-    setFocusPersonId,
-    visiblePositionsById
-  ]);
-
   const handleCameraSample = useCallback((position: [number, number, number]) => {
     setCameraPositionForCulling(position);
   }, []);
@@ -418,28 +477,59 @@ const PeopleGraph3DComponent = ({
     }
     const camera = cameraRef.current;
     const target = orbitControlsRef.current?.target;
-    onUiStateChange({
-      schemaVersion: 1,
+    const canPersistCamera =
+      Boolean(camera && target) && hasCompletedStartupCameraRef.current && canvasCameraReadyGeneration > 0;
+    const liveCamera =
+      camera && target
+        ? {
+            position: [camera.position.x, camera.position.y, camera.position.z] as Vector3Tuple,
+            target: [target.x, target.y, target.z] as Vector3Tuple
+          }
+        : null;
+    const base = lastEmittedGraphUiRef.current ?? initialUiState ?? DEFAULT_GRAPH_UI_SNAPSHOT;
+    const pendingStartup = pendingStartupCameraIntentRef.current;
+    const commandedIntent = lastKeyboardCameraIntentRef.current;
+    const persisted = resolveCameraSnapshotForPersistence({
+      canPersistCamera: Boolean(canPersistCamera && liveCamera),
+      liveCamera,
+      baseCamera: base.camera,
+      baseCameraIntent: base.cameraIntent,
+      baseCameraPersonId: base.cameraPersonId,
+      focusPersonId,
+      selectedPersonId,
+      pendingStartupIntent: pendingStartup,
+      keyboardIntent: commandedIntent
+    });
+    if (canPersistCamera && liveCamera) {
+      if (pendingStartup) {
+        pendingStartupCameraIntentRef.current = null;
+      } else if (commandedIntent) {
+        lastKeyboardCameraIntentRef.current = null;
+      }
+    }
+    const next: GraphUiSnapshot = {
+      ...base,
+      schemaVersion: 2,
       searchTerm,
       focusPersonId,
       pinnedPersonId,
       highlightedPersonIds: [...highlightedPersonIds],
-      camera:
-        camera && target
-          ? {
-              position: [camera.position.x, camera.position.y, camera.position.z],
-              target: [target.x, target.y, target.z]
-            }
-          : (initialUiState?.camera ?? null)
-    });
+      camera: persisted.camera,
+      cameraIntent: persisted.cameraIntent,
+      cameraPersonId: persisted.cameraPersonId
+    };
+    lastEmittedGraphUiRef.current = next;
+    onUiStateChange(next);
   }, [
     cameraPositionForCulling,
+    canvasCameraReadyGeneration,
     focusPersonId,
     highlightedPersonIds,
-    initialUiState?.camera,
+    initialUiState,
     onUiStateChange,
     pinnedPersonId,
-    searchTerm
+    searchTerm,
+    selectedPersonId
   ]);
 
   useEffect(() => {
@@ -606,7 +696,7 @@ const PeopleGraph3DComponent = ({
           onSearchTermChange={setSearchTerm}
           onSearchSubmit={handleSearchSubmit}
           onClearSearch={handleClearSearch}
-          onCenterView={frameAllNodes}
+          onCenterView={frameAllNodesWithIntent}
           people={filteredPeople}
           searchFeedback={searchFeedback}
           treeValidationIssueCount={treeValidationIssueCount}
@@ -662,12 +752,14 @@ const PeopleGraph3DComponent = ({
               onNodeActionOpen={handleOpenAddRelative}
               onCanvasMissed={handleCanvasMissed}
               onCameraSample={handleCameraSample}
-              initialCameraState={initialUiState?.camera ?? null}
+              initialCameraState={initialCameraState}
               cameraRef={cameraRef}
               orbitControlsRef={orbitControlsRef}
               lastCameraSampleRef={lastCameraSampleRef}
               isVisible={isVisible}
               onThumbnailProgress={handleThumbnailProgress}
+              onCanvasCameraSystemReady={handleCanvasCameraSystemReady}
+              applyPersistedSnapshotRestore={applyPersistedSnapshotRestore}
             />
           </GraphSceneProvider>
         </ErrorBoundary>

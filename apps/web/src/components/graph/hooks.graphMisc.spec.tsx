@@ -6,10 +6,15 @@ import {
   getNextKeyboardTraversal,
   resolveKeyboardDirection
 } from "./useGraphKeyboardNavigation";
-import { getFocusCameraPose } from "./useGraphCameraControls";
+import { getFocusCameraPose } from "./graphCameraPoses";
 import { findPersonBySearchTerm, resolveFocusPersonRequest } from "./useGraphSearch";
-import { shouldRenderDetailedNode, shouldUseLargeGraphTier } from "./scene/AnimatedNodes";
-import { shouldSkipNodeAnimationFrame } from "./scene/useAnimatedNodeTransforms";
+import {
+  resolveNodeRenderTier,
+  shouldRenderDetailedNode,
+  shouldRenderInstancedVisualForNode,
+  shouldUseLargeGraphTier
+} from "./scene/graphRenderTiers";
+import { shouldSkipNodeAnimationFrame } from "./scene/nodeAnimationPolicy";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
 reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
@@ -228,6 +233,22 @@ describe("render-tier helpers", () => {
     expect(shouldUseLargeGraphTier(100)).toBe(false);
     expect(shouldUseLargeGraphTier(280)).toBe(true);
     expect(shouldUseLargeGraphTier(500)).toBe(true);
+  });
+
+  it("keeps loaded thumbnails in the thumbnail tier during large-graph LOD", () => {
+    expect(
+      resolveNodeRenderTier({
+        largeGraphTierEnabled: true,
+        isPriorityNode: false,
+        visibilityBucket: "near",
+        hasThumbnail: true
+      })
+    ).toBe("thumbnail");
+  });
+
+  it("does not render the instanced fallback disk behind loaded thumbnails", () => {
+    expect(shouldRenderInstancedVisualForNode({ hasThumbnail: true })).toBe(false);
+    expect(shouldRenderInstancedVisualForNode({ hasThumbnail: false })).toBe(true);
   });
 
   it("keeps detailed rendering for priority nodes in large tier", () => {

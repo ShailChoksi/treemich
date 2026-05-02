@@ -7,12 +7,23 @@ import type { Texture } from "three";
 import type { Person } from "../../../lib/api";
 import { useGraphScene } from "../GraphSceneContext";
 import { NodeActionButtons, type AddRelativeSlot } from "../NodeActionButtons";
-import type { GraphVisibilityBucket } from "../graphVisibility";
 import { PersonNode, PersonNodeFallback, PersonNodeMinimal } from "../PersonNode";
 import type { NodePosition } from "../layout";
 import { logThumbnailRenderProfile } from "../thumbnailPerfProfiler";
 import { NodeInstancedMesh, type NodeRenderTier } from "./NodeInstancedMesh";
 import { useAnimatedNodeTransforms } from "./useAnimatedNodeTransforms";
+import {
+  resolveNodeRenderTier,
+  shouldRenderInstancedVisualForNode,
+  shouldUseLargeGraphTier
+} from "./graphRenderTiers";
+
+export {
+  resolveNodeRenderTier,
+  shouldRenderDetailedNode,
+  shouldRenderInstancedVisualForNode,
+  shouldUseLargeGraphTier
+} from "./graphRenderTiers";
 
 type DisplayPerson = {
   person: Person;
@@ -30,49 +41,6 @@ type Props = {
   onNodeClick: (personId: string, event: { stopPropagation: () => void }) => void;
   onNodeHover: (personId: string, hovered: boolean) => void;
   onNodeActionOpen: (slot: AddRelativeSlot) => void;
-};
-
-const LARGE_GRAPH_NODE_THRESHOLD = 280;
-
-export const shouldUseLargeGraphTier = (visiblePeopleCount: number) =>
-  visiblePeopleCount >= LARGE_GRAPH_NODE_THRESHOLD;
-
-export const shouldRenderDetailedNode = ({
-  largeGraphTierEnabled,
-  isPriorityNode,
-  visibilityBucket = "near"
-}: {
-  largeGraphTierEnabled: boolean;
-  isPriorityNode: boolean;
-  visibilityBucket?: GraphVisibilityBucket;
-}) =>
-  (!largeGraphTierEnabled || isPriorityNode) && visibilityBucket !== "far" && visibilityBucket !== "culled";
-
-const resolveNodeRenderTier = ({
-  visibilityBucket,
-  isPriorityNode,
-  largeGraphTierEnabled
-}: {
-  visibilityBucket: GraphVisibilityBucket;
-  isPriorityNode: boolean;
-  largeGraphTierEnabled: boolean;
-}) => {
-  if (isPriorityNode) {
-    return "detailed" as const;
-  }
-  if (visibilityBucket === "culled") {
-    return "minimal" as const;
-  }
-  if (visibilityBucket === "mid" || visibilityBucket === "far") {
-    return "thumbnail" as const;
-  }
-  return shouldRenderDetailedNode({
-    largeGraphTierEnabled,
-    isPriorityNode,
-    visibilityBucket
-  })
-    ? ("detailed" as const)
-    : ("minimal" as const);
 };
 
 export const AnimatedNodes = ({
@@ -115,10 +83,15 @@ export const AnimatedNodes = ({
       const isPriorityNode =
         isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(item.person.id);
       const visibilityBucket = renderVisibilityBucketByPersonId.get(item.person.id) ?? "near";
+      const hasThumbnail = thumbnailNodeIds.has(item.person.id);
+      if (!shouldRenderInstancedVisualForNode({ hasThumbnail })) {
+        continue;
+      }
       const renderTier = resolveNodeRenderTier({
         visibilityBucket,
         isPriorityNode,
-        largeGraphTierEnabled
+        largeGraphTierEnabled,
+        hasThumbnail
       });
       next[renderTier].push(item);
     }
@@ -130,7 +103,8 @@ export const AnimatedNodes = ({
     largeGraphTierEnabled,
     prioritizedNodeIds,
     selectedPersonId,
-    renderVisibilityBucketByPersonId
+    renderVisibilityBucketByPersonId,
+    thumbnailNodeIds
   ]);
 
   useEffect(() => {
@@ -195,13 +169,14 @@ export const AnimatedNodes = ({
         const isHighlighted = highlightedPersonIds.has(person.id);
         const isPriorityNode = isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(person.id);
         const visibilityBucket = renderVisibilityBucketByPersonId.get(person.id) ?? "near";
+        const showThumbnail = thumbnailNodeIds.has(person.id);
         const renderTier = resolveNodeRenderTier({
           visibilityBucket,
           isPriorityNode,
-          largeGraphTierEnabled
+          largeGraphTierEnabled,
+          hasThumbnail: showThumbnail
         });
         const showLabel = isPriorityNode || visibilityBucket === "near" || visibilityBucket === "mid";
-        const showThumbnail = thumbnailNodeIds.has(person.id);
 
         return (
           <group key={person.id} ref={(group) => registerGroupRef(person.id, group)}>

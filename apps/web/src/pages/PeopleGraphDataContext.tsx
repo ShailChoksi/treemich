@@ -1,7 +1,6 @@
 import { filterGraphLayoutTopologyRelationships } from "@treemich/shared";
 import {
   createContext,
-  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -40,10 +39,15 @@ import {
 import { getPersonNameForGraphLayout } from "../lib/personDisplay";
 import { getLocalStorageItem, setLocalStorageItem } from "../lib/safeLocalStorage";
 import { parseGraphUiSnapshot, type GraphUiSnapshot } from "../lib/workspaceUiState";
+import {
+  consumeGraphCameraSessionKindFromBrowser,
+  type GraphCameraSessionKind
+} from "../components/graph/graphCameraPolicy";
 import { resolvePeopleSelection } from "./people-selection";
 import { useToast } from "./ToastContext";
 
 const GRAPH_UI_STATE_STORAGE_KEY = "treemich.graph.uiState";
+const GRAPH_LAYOUT_FAMILY_VIEW_STYLE = "generationTree";
 
 type RefreshGraphDataOptions = {
   bypassSaveGuard?: boolean;
@@ -68,6 +72,7 @@ type PeopleGraphDataContextValue = {
   graphLayoutError: string | null;
   savedPreferences: UserPreferences | null;
   graphUiSnapshot: GraphUiSnapshot;
+  graphCameraSessionKind: GraphCameraSessionKind;
   treeValidationIssueCount: number | null;
   treeValidationEngineDisabled: boolean;
   isSavingProfile: boolean;
@@ -129,6 +134,37 @@ const sortRelationshipsStable = (relationships: RelationshipRecord[]) =>
       left.type.localeCompare(right.type)
   );
 
+const thumbnailRevisionKeyForPerson = (person: PersonRecord) =>
+  [
+    person.thumbnailPath,
+    person.thumbnail?.id,
+    person.thumbnail?.storageUrl,
+    person.thumbnail?.checksum,
+    person.thumbnail?.source,
+    person.thumbnail?.importedAt,
+    person.thumbnail?.updatedAt
+  ]
+    .filter(Boolean)
+    .join(":");
+
+const externalIdentityRevisionKeyForPerson = (person: PersonRecord) =>
+  (person.externalIdentities ?? [])
+    .map((identity) =>
+      [
+        identity.id,
+        identity.provider,
+        identity.providerPersonId,
+        identity.providerBaseUrl,
+        identity.displayName,
+        identity.thumbnailImportedAt,
+        identity.updatedAt
+      ]
+        .filter(Boolean)
+        .join(":")
+    )
+    .sort((left, right) => left.localeCompare(right))
+    .join("|");
+
 export const samePeopleList = (left: PersonRecord[], right: PersonRecord[]) =>
   left.length === right.length &&
   left.every((person, index) => {
@@ -140,6 +176,8 @@ export const samePeopleList = (left: PersonRecord[], right: PersonRecord[]) =>
       person.birthDate === other.birthDate &&
       person.displayName === other.displayName &&
       person.hasRelationship === other.hasRelationship &&
+      thumbnailRevisionKeyForPerson(person) === thumbnailRevisionKeyForPerson(other) &&
+      externalIdentityRevisionKeyForPerson(person) === externalIdentityRevisionKeyForPerson(other) &&
       person.profile?.gender === other.profile?.gender &&
       person.profile?.givenName === other.profile?.givenName &&
       person.profile?.surname === other.profile?.surname &&
@@ -174,6 +212,9 @@ export const PeopleGraphDataProvider = ({
   const [selectedPersonId, setSelectedPersonIdState] = useState<string | null>(null);
   const [graphFocusPersonId, setGraphFocusPersonId] = useState<string | null>(null);
   const [graphCameraFocusPersonId, setGraphCameraFocusPersonId] = useState<string | null>(null);
+  const [graphCameraSessionKind] = useState<GraphCameraSessionKind>(() =>
+    consumeGraphCameraSessionKindFromBrowser()
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfileState] = useState(false);
@@ -279,15 +320,13 @@ export const PeopleGraphDataProvider = ({
         ]);
         const sortedPeople = sortPeopleStable(peopleResponse);
         const sortedRelationships = sortRelationshipsStable(relationshipsResponse);
-        startTransition(() => {
-          setPeople((current) => (samePeopleList(current, sortedPeople) ? current : sortedPeople));
-          setRelationships((current) =>
-            sameRelationshipList(current, sortedRelationships) ? current : sortedRelationships
-          );
-          setSavedPreferences((current) => current ?? preferencesResponse);
-          setLoadError(null);
-          setDataRevision((revision) => revision + 1);
-        });
+        setPeople((current) => (samePeopleList(current, sortedPeople) ? current : sortedPeople));
+        setRelationships((current) =>
+          sameRelationshipList(current, sortedRelationships) ? current : sortedRelationships
+        );
+        setSavedPreferences((current) => current ?? preferencesResponse);
+        setLoadError(null);
+        setDataRevision((revision) => revision + 1);
 
         const nextSelection = resolvePeopleSelection({
           people: sortedPeople,
@@ -310,7 +349,9 @@ export const PeopleGraphDataProvider = ({
           })),
           relationships: filterGraphLayoutTopologyRelationships(sortedRelationships),
           viewMode: "family",
-          familyViewStyle: preferencesResponse.familyViewStyle,
+          // The client-side layout orchestrator validates server layout revisions against generation-tree
+          // topology. Send the same default even when older preferences omit familyViewStyle.
+          familyViewStyle: GRAPH_LAYOUT_FAMILY_VIEW_STYLE,
           selectedPersonId: nextSelection.selectedPersonId,
           primaryFamilyUnitByPersonId: preferencesResponse.primaryFamilyUnitByPersonId
         })
@@ -689,6 +730,7 @@ export const PeopleGraphDataProvider = ({
       graphLayoutError,
       savedPreferences,
       graphUiSnapshot,
+      graphCameraSessionKind,
       treeValidationIssueCount,
       treeValidationEngineDisabled,
       isSavingProfile,
@@ -735,6 +777,7 @@ export const PeopleGraphDataProvider = ({
       dataRevision,
       focusPersonInGraph,
       graphCameraFocusPersonId,
+      graphCameraSessionKind,
       graphFocusPersonId,
       graphLayoutError,
       graphUiSnapshot,

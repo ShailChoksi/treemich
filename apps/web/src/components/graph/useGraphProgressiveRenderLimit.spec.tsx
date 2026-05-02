@@ -52,7 +52,9 @@ describe("useGraphProgressiveRenderLimit", () => {
     });
     expect(latest).toBe(35);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -89,7 +91,9 @@ describe("useGraphProgressiveRenderLimit", () => {
     });
     expect(latest).toBe(5);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 });

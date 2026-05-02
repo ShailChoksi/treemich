@@ -152,7 +152,9 @@ describe("GedcomInterchangeSection", () => {
     expect(container.textContent).toContain("Born 15 Jan 1990");
     expect(container.textContent).toContain("Spouse: Jamie");
     expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Preview")).toBe(false);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -232,7 +234,9 @@ describe("GedcomInterchangeSection", () => {
     );
     expect(container.textContent).toContain("Dry-run complete");
     expect(container.textContent).toContain("personLifeEvents: 1");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -266,7 +270,9 @@ describe("GedcomInterchangeSection", () => {
     });
 
     expect(container.textContent).toContain("source write failed");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -281,7 +287,9 @@ describe("GedcomInterchangeSection", () => {
       retry!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(container.textContent).toContain("Pat Fixture");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -329,7 +337,9 @@ describe("GedcomInterchangeSection", () => {
       "pv-1",
       expect.objectContaining({ offset: 50, limit: 50 })
     );
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -353,7 +363,9 @@ describe("GedcomInterchangeSection", () => {
       }
     }
     expect(sawQuery).toBe(true);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -375,7 +387,9 @@ describe("GedcomInterchangeSection", () => {
       expect.stringContaining("This import will create up to 1 new Treemich people")
     );
     expect(apiMocks.postGedcomImportJobFromPreview).not.toHaveBeenCalled();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -473,7 +487,9 @@ describe("GedcomInterchangeSection", () => {
         indiMatches: expect.objectContaining({ "@I1@": "p-search" })
       })
     );
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 });

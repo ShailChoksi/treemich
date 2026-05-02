@@ -6,6 +6,9 @@ import { useEffect, useRef, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, Vector3 } from "three";
 import type { NodePosition } from "../layout";
+import { shouldSkipNodeAnimationFrame } from "./nodeAnimationPolicy";
+
+export { shouldSkipNodeAnimationFrame } from "./nodeAnimationPolicy";
 
 type DisplayPositionEntry = {
   personId: string;
@@ -17,16 +20,6 @@ type UseAnimatedNodeTransformsOptions = {
   prioritizedPersonIds?: Set<string>;
   reduceWorkForLargeGraph?: boolean;
 };
-
-export const shouldSkipNodeAnimationFrame = ({
-  reduceWorkForLargeGraph,
-  isPriorityNode,
-  frameTick
-}: {
-  reduceWorkForLargeGraph: boolean;
-  isPriorityNode: boolean;
-  frameTick: number;
-}) => reduceWorkForLargeGraph && !isPriorityNode && frameTick % 2 !== 0;
 
 export const useAnimatedNodeTransforms = ({
   displayPositions,

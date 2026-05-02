@@ -123,7 +123,9 @@ describe("PeopleReviewContext", () => {
     }
 
     expect(taskCount).toBe(1);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("owns duplicate merge workflow and triggers full graph refresh", async () => {
@@ -168,6 +170,8 @@ describe("PeopleReviewContext", () => {
     expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(true);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(true);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });

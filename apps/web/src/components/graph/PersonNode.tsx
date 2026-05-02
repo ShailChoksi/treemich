@@ -19,6 +19,9 @@ import type { Person } from "../../lib/api";
 import { personThumbnailUrl } from "../../lib/api";
 import { applyCoverCrop } from "./useThumbnailLoader";
 import { useFrame, useThree } from "@react-three/fiber";
+import { resolvePersonInitials } from "./personNodeText";
+
+export { resolvePersonInitials } from "./personNodeText";
 
 export type PersonNodeProps = {
   person: Person;
@@ -37,17 +40,6 @@ const truncateName = (name: string, maxLength = 22) => {
     return name;
   }
   return `${name.slice(0, maxLength - 1)}...`;
-};
-
-export const resolvePersonInitials = (name: string) => {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-  return initials || "?";
 };
 
 const nodeScale = (isSelected: boolean, isHovered: boolean, isHighlighted: boolean) => {
@@ -197,6 +189,9 @@ const PersonNodeComponent = ({
   const ringGeometry = ringGeometryForState(isSelected, isHighlighted, "segments20");
   const ringMaterial = ringMaterialForState(isSelected, isHovered, isHighlighted);
   const haloMaterial = isSelected ? haloMaterialSelected : haloMaterialHighlighted;
+  const shouldRenderLocalRing = !instancedVisuals
+    ? showRing(isSelected, isHovered, isHighlighted)
+    : Boolean(texture);
 
   // Fallback TextureLoader path: only runs when no preloadedTexture is provided.
   useEffect(() => {
@@ -272,7 +267,7 @@ const PersonNodeComponent = ({
           {resolvePersonInitials(person.name)}
         </Text>
       ) : null}
-      {!instancedVisuals && showRing(isSelected, isHovered, isHighlighted) ? (
+      {shouldRenderLocalRing ? (
         <mesh position={[0, 0, -0.02]}>
           <primitive object={ringGeometry} attach="geometry" />
           <primitive object={ringMaterial} attach="material" />

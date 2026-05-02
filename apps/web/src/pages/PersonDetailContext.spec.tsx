@@ -162,7 +162,9 @@ describe("PersonDetailContext", () => {
     expect(selectedPersonId).toBe("p1");
     expect(givenName).toBe("Alex");
     expect(birthDate).toBe("1991-05-06");
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("uses Tier B relationship refresh after relationship life-event edits", async () => {
@@ -213,6 +215,8 @@ describe("PersonDetailContext", () => {
     expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(false);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });

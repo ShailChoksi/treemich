@@ -60,12 +60,14 @@ The tree is **not** DOM/SVG virtualization; it is a **3D scene** of meshes, line
 
 ### Motion, camera sampling, GL setup
 
-| Path                                                                                                            | Role                                                                                              |
-| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `apps/web/src/components/graph/scene/useAnimatedNodeTransforms.ts`                                              | `useFrame` lerp of node groups to targets; exposes animated positions for instanced visual meshes |
-| `apps/web/src/components/graph/scene/useOrbitPositionSync.ts`                                                   | Samples camera for culling: **throttled ~90ms**, min distance **0.2**                             |
-| `apps/web/src/components/graph/scene/createWebGlRenderer.ts`                                                    | WebGL2 renderer factory                                                                           |
-| `apps/web/src/components/graph/useGraphCamera.ts`, `useGraphCameraControls.ts`, `useGraphKeyboardNavigation.ts` | Framing, focus, arrow navigation                                                                  |
+| Path                                                                                                            | Role                                                                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/components/graph/scene/useAnimatedNodeTransforms.ts`                                              | `useFrame` lerp of node groups to targets; exposes animated positions for instanced visual meshes                                                                                                       |
+| `apps/web/src/components/graph/scene/useOrbitPositionSync.ts`                                                   | Samples camera for culling: **throttled ~90ms**, min distance **0.2**                                                                                                                                   |
+| `apps/web/src/components/graph/scene/createWebGlRenderer.ts`                                                    | WebGL2 renderer factory                                                                                                                                                                                 |
+| `apps/web/src/components/graph/useGraphCamera.ts`, `useGraphCameraControls.ts`, `useGraphKeyboardNavigation.ts` | Framing, focus, arrow navigation                                                                                                                                                                        |
+| `apps/web/src/components/graph/graphCameraPolicy.ts`                                                            | **Pure** startup camera priority: explicit focus → first-load selected focus → saved pose → frame-all; session kind (`hardPageLoad` vs `workspaceRemount`); readiness helpers                           |
+| `apps/web/src/components/graph/useGraphCameraOrchestrator.ts`                                                   | **Imperative sequencing:** applies startup intent only when R3F camera + OrbitControls + target layout exist; consumes focus requests after successful poses; notifies parent for persistence semantics |
 
 ### Thumbnails
 
@@ -111,9 +113,21 @@ The tree is **not** DOM/SVG virtualization; it is a **3D scene** of meshes, line
 8. **`useGraphLayoutState`** now composes:
    - **`useLayoutOrchestrator`:** if server layout is complete and revision matches → server positions; else topology cache (8 entries); else **worker** if people count **≥ 320**; else sync `positionPeople` on main thread.
    - **`useGraphVisibility`:** composes **`useGraphProgressiveRenderLimit`**, **`useGraphVisiblePeoplePipeline`**, **`useGraphCameraLodSlice`**, **`useGraphVisibleRelationshipLinesStep`** (same snapshot for nodes and lines).
-9. **`GraphCanvasScene`** mounts Canvas, restores graph UI snapshot from props/state, renders 2-point relationship edges as batched `THREE.LineSegments` grouped by style and keeps longer trunk polylines as Drei `<Line>`.
+9. **`GraphCanvasScene`** mounts Canvas, applies **low-level** `initialCameraState` from `PeopleGraph3D` (saved snapshot restore only — no competing policy vs `useGraphCameraOrchestrator`), signals **`onCanvasCameraSystemReady`** once refs exist, renders 2-point relationship edges as batched `THREE.LineSegments` grouped by style and keeps longer trunk polylines as Drei `<Line>`.
 10. **`AnimatedNodes`** renders display-only `InstancedMesh` disk/ring geometry per LOD tier, plus per-person meshes for hit areas, labels, halos, and unique thumbnail texture quads.
 11. **Thumbnails:** worker → bitmap → texture → module cache → `PersonNode` reads cache / fade-in material.
+
+---
+
+## 3b. Graph camera ownership (priority + persistence)
+
+**Policy order (pure, `graphCameraPolicy.ts`):** `explicit focus (search/profile)` → `first-load selected-person focus` → `saved camera snapshot` → `frame all`.
+
+- **`hardPageLoad` vs `workspaceRemount`:** `PeopleGraphDataProvider` calls `consumeGraphCameraSessionKindFromBrowser()` once. The first graph session in a tab (or immediately after a **reload**, detected via `PerformanceNavigationTiming`) uses `hardPageLoad`, so a persisted **camera focus person** can suppress a **stale saved camera** on refresh. Later SPA remounts of the provider use `workspaceRemount`, which **keeps the saved camera** even if a camera-focus id is still present, and clears the stale focus request without re-framing.
+- **Orchestration (`useGraphCameraOrchestrator.ts`):** startup paths run only when the canvas camera, OrbitControls, and (for person focus) a **visible layout position** exist. `GraphCanvasScene` bumps a generation counter when ready so the parent effect re-runs after refs attach.
+- **`GraphUiSnapshot` v2 (`workspaceUiState.ts`):** persisted UI includes `cameraIntent` (`manual` \| `selectedFocus` \| `explicitFocus` \| `frameAll` \| `topDown`) and optional `cameraPersonId` (context for manual orbit; not a focus command). **v1** snapshots with a `camera` block migrate to v2 as `cameraIntent: "manual"` and `cameraPersonId` from `focusPersonId`.
+- **Missing focus targets:** when graph data is ready but the requested person id is **not** in the filtered people set, the orchestrator stops waiting, applies **saved camera** if one exists (even when hard-load policy suppressed it for canvas), otherwise **frame-all**, and clears stale camera-focus / search-focus requests.
+- **Keyboard / UI:** `g` / center-from-search flows mark **`explicitFocus`** before imperative focus; `f` / center view → **`frameAll`**; `t` → **`topDown`**; passive orbit sampling → **`manual`**. `PeopleGraph3D` merges emitted UI state so **pre-mount** frames do not overwrite stored camera with fallback poses.
 
 ---
 

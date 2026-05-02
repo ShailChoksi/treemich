@@ -71,6 +71,8 @@ describe("ToastContext", () => {
     expect(getLatest().toasts).toEqual([]);
     expect(getLatest().status).toBeNull();
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });

@@ -113,6 +113,48 @@ describe("useThumbnailLoader hook", () => {
     }
   });
 
+  it("does not fetch generated placeholder thumbnails for people outside the thumbnail candidate set", async () => {
+    vi.mocked(loadThumbnailBatch).mockResolvedValue([
+      { personId: "candidate", status: "fulfilled", bitmap: makeFakeBitmap() }
+    ]);
+
+    const Probe = () => {
+      useThumbnailLoader({
+        peopleIds: ["candidate"],
+        prioritizedNodeIds: new Set(["selected-without-thumbnail"]),
+        renderNearPersonIds: ["candidate", "near-without-thumbnail"],
+        displayVisiblePeople: ["candidate", "near-without-thumbnail", "selected-without-thumbnail"].map(
+          (id, i) => ({
+            person: { id },
+            displayPosition: [i * 2, 0, 0] as [number, number, number]
+          })
+        ),
+        cameraSampleRef: { current: { x: 0, y: 0, z: 0 } } as unknown as MutableRefObject<Vector3>
+      });
+      return null;
+    };
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+      act(() => {
+        root.render(createElement(Probe));
+      });
+
+      expect(vi.mocked(loadThumbnailBatch)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(loadThumbnailBatch).mock.calls[0]?.[0]).toEqual([
+        { personId: "candidate", url: "/api/people/candidate/thumbnail" }
+      ]);
+    } finally {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
   it("pickThumbnailBatch skips IDs when hasCachedValue is true", () => {
     vi.mocked(hasCachedValue).mockImplementation((id: string) => id === "a");
     const batch = pickThumbnailBatch({

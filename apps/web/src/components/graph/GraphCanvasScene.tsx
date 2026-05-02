@@ -145,6 +145,13 @@ type Props = {
   lastCameraSampleRef: React.MutableRefObject<Vector3>;
   /** Reports thumbnail loading progress (loaded/total). */
   onThumbnailProgress?: (progress: { loaded: number; total: number }) => void;
+  /** Fires once when the R3F perspective camera and default OrbitControls refs are attached. */
+  onCanvasCameraSystemReady?: () => void;
+  /**
+   * When false, skips the one-shot restore of `initialCameraState` onto the R3F camera (orchestrator owns pose).
+   * Parent should set from `shouldCanvasApplyPersistedSnapshotRestore(...)`.
+   */
+  applyPersistedSnapshotRestore?: boolean;
 };
 
 export const GraphCanvasScene = ({
@@ -166,10 +173,13 @@ export const GraphCanvasScene = ({
   cameraRef,
   orbitControlsRef,
   lastCameraSampleRef,
-  onThumbnailProgress
+  onThumbnailProgress,
+  onCanvasCameraSystemReady,
+  applyPersistedSnapshotRestore = true
 }: Props) => {
   const { peopleIds, thumbnailCacheKeys, prioritizedNodeIds, renderNearPersonIds } = useGraphScene();
   const hasRestoredCameraRef = useRef(false);
+  const cameraSystemReadyFiredRef = useRef(false);
   const partitionedLines = useMemo(
     () => partitionLinesByStyle(visibleRelationshipLines),
     [visibleRelationshipLines]
@@ -226,8 +236,41 @@ export const GraphCanvasScene = ({
     onThumbnailProgress?.(thumbnailProgress);
   }, [thumbnailProgress, onThumbnailProgress]);
 
+  useLayoutEffect(() => {
+    if (!onCanvasCameraSystemReady || cameraSystemReadyFiredRef.current) {
+      return;
+    }
+    let cancelled = false;
+    let frames = 0;
+    const maxFrames = 45;
+    const tick = () => {
+      if (cancelled || cameraSystemReadyFiredRef.current) {
+        return;
+      }
+      if (cameraRef.current && orbitControlsRef.current) {
+        cameraSystemReadyFiredRef.current = true;
+        onCanvasCameraSystemReady();
+        return;
+      }
+      frames += 1;
+      if (frames >= maxFrames) {
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+    };
+  }, [cameraRef, onCanvasCameraSystemReady, orbitControlsRef]);
+
   useEffect(() => {
-    if (hasRestoredCameraRef.current || !initialCameraState || !cameraRef.current) {
+    if (
+      !applyPersistedSnapshotRestore ||
+      hasRestoredCameraRef.current ||
+      !initialCameraState ||
+      !cameraRef.current
+    ) {
       return;
     }
     hasRestoredCameraRef.current = true;
@@ -240,7 +283,14 @@ export const GraphCanvasScene = ({
     }
     onCameraSample(initialCameraState.position);
     invalidate();
-  }, [cameraRef, initialCameraState, lastCameraSampleRef, onCameraSample, orbitControlsRef]);
+  }, [
+    applyPersistedSnapshotRestore,
+    cameraRef,
+    initialCameraState,
+    lastCameraSampleRef,
+    onCameraSample,
+    orbitControlsRef
+  ]);
 
   return (
     <Canvas

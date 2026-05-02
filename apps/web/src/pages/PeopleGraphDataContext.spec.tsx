@@ -103,7 +103,9 @@ describe("PeopleGraphDataContext", () => {
     }
 
     expect(people).toEqual([expect.objectContaining({ id: "p1", name: "Alex Smith" })]);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("recognizes equivalent people lists", () => {
@@ -124,6 +126,65 @@ describe("PeopleGraphDataContext", () => {
       )
     ).toBe(true);
     expect(relationships).toEqual([]);
+  });
+
+  it("treats thumbnail and provider identity revisions as people list changes", () => {
+    const people: PersonRecord[] = [
+      {
+        id: "p1",
+        name: "Alex Smith",
+        hasRelationship: true,
+        birthDate: null,
+        profile: { id: "p1", gender: "UNKNOWN", givenName: "Alex", surname: "Smith", nicknames: null },
+        thumbnail: null,
+        thumbnailPath: null,
+        externalIdentities: []
+      }
+    ];
+
+    expect(
+      samePeopleList(people, [
+        {
+          ...people[0]!,
+          thumbnail: {
+            id: "thumb-1",
+            personId: "p1",
+            source: "UPLOADED",
+            sourceExternalIdentityId: null,
+            storageUrl: "treemich://thumb-1.jpg",
+            mimeType: "image/jpeg",
+            checksum: "checksum-1",
+            importedAt: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z"
+          },
+          thumbnailPath: "treemich://thumb-1.jpg"
+        }
+      ])
+    ).toBe(false);
+
+    expect(
+      samePeopleList(people, [
+        {
+          ...people[0]!,
+          externalIdentities: [
+            {
+              id: "identity-1",
+              personId: "p1",
+              provider: "IMMICH",
+              providerPersonId: "immich-person-1",
+              providerBaseUrl: "https://immich.example",
+              displayName: "Alex in Immich",
+              thumbnailImportedAt: "2026-01-02T00:00:00.000Z",
+              lastSeenAt: null,
+              metadata: {},
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-02T00:00:00.000Z"
+            }
+          ]
+        }
+      ])
+    ).toBe(false);
   });
 
   it("refreshes only people for the people-only tier", async () => {
@@ -165,7 +226,9 @@ describe("PeopleGraphDataContext", () => {
     expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(false);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(false);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("refreshes only relationships for the metadata-only relationship tier", async () => {
@@ -207,7 +270,9 @@ describe("PeopleGraphDataContext", () => {
     expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(false);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(false);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("uses full layout refresh for structural relationship creation", async () => {
@@ -250,7 +315,9 @@ describe("PeopleGraphDataContext", () => {
     expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(true);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("exposes retryGraphData that runs the same fetches as a full graph refresh", async () => {
@@ -303,7 +370,9 @@ describe("PeopleGraphDataContext", () => {
     expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
     expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(true);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("refetches people when the Immich labelled-people sync event fires", async () => {
@@ -352,6 +421,8 @@ describe("PeopleGraphDataContext", () => {
     });
     expect(peopleCalls.length).toBeGreaterThanOrEqual(1);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });

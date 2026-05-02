@@ -22,7 +22,9 @@ describe("GraphSurfaceOverlays", () => {
 
     expect(container.querySelector(".graph-skeleton")).toBeTruthy();
     expect(container.querySelector("[aria-label='Loading family graph']")).toBeTruthy();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it("renders retry actions for load and layout failures", async () => {
@@ -68,6 +70,8 @@ describe("GraphSurfaceOverlays", () => {
       retryLayoutButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onRetryLayout).toHaveBeenCalledTimes(1);
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });

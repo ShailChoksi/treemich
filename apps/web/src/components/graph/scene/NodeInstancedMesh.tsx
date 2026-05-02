@@ -17,6 +17,9 @@ import {
 } from "three";
 import type { Person } from "../../../lib/api";
 import type { NodePosition } from "../layout";
+import { instancedNodeLayerZ } from "./nodeInstancedMeshConstants";
+
+export { instancedNodeLayerZ } from "./nodeInstancedMeshConstants";
 
 export type NodeRenderTier = "detailed" | "thumbnail" | "minimal";
 
@@ -56,11 +59,6 @@ const tierGeometryConfig = {
     ringOuterRadius: 0.64,
     ringSegments: 12
   }
-} as const;
-
-export const instancedNodeLayerZ = {
-  disk: -0.035,
-  ring: -0.02
 } as const;
 
 const colorForState = ({

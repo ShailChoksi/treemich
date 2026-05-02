@@ -185,6 +185,52 @@ describe("useGraphLayoutState", () => {
     (globalThis as { Worker?: typeof Worker }).Worker = originalWorker;
   });
 
+  it("shows a sync layout immediately while a large-tree worker request is pending", async () => {
+    const originalWorker = globalThis.Worker;
+    (globalThis as { Worker?: typeof Worker }).Worker = class {} as unknown as typeof Worker;
+    vi.spyOn(layoutWorkerClient, "requestPositionPeopleInWorker").mockImplementation(
+      () => new Promise(() => {})
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root: Root = createRoot(container);
+    let visibleCount = 0;
+    let workerPending = false;
+
+    const people = Array.from({ length: 646 }, (_, index) => ({
+      id: `person-${index}`,
+      name: `Person ${index}`,
+      hasRelationship: true
+    })) as Person[];
+    const relationships = [{ fromPersonId: "person-0", toPersonId: "person-1", type: "SIBLING_OF" as const }];
+
+    const Probe = () => {
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships,
+          selectedPersonId: "person-0",
+          renderLimit: 120
+        })
+      );
+      visibleCount = state.displayVisiblePeople.length;
+      workerPending = state.isWorkerLayoutPending;
+      return null;
+    };
+
+    await act(async () => {
+      root.render(createElement(Probe));
+      await Promise.resolve();
+    });
+
+    expect(workerPending).toBe(true);
+    expect(visibleCount).toBeGreaterThan(0);
+
+    act(() => root.unmount());
+    container.remove();
+    (globalThis as { Worker?: typeof Worker }).Worker = originalWorker;
+  });
+
   it("ignores stale worker responses from older requests", async () => {
     const originalWorker = globalThis.Worker;
     (globalThis as { Worker?: typeof Worker }).Worker = class {} as unknown as typeof Worker;
@@ -237,15 +283,29 @@ describe("useGraphLayoutState", () => {
 
     expect(deferred).toHaveLength(2);
     await act(async () => {
-      deferred[1]?.resolve([{ personId: "anchor", position: [9, 0, 0] }]);
+      deferred[1]?.resolve(
+        refreshedPeople.map((person, index) => ({
+          personId: person.id,
+          position: person.id === "anchor" ? [9, 0, 0] : ([index, 0, 0] as NodePosition)
+        }))
+      );
       await Promise.resolve();
+      await Promise.resolve();
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     });
-    expect(anchorX).toBe(9);
+    const latestResolvedAnchorX = anchorX;
     await act(async () => {
-      deferred[0]?.resolve([{ personId: "anchor", position: [1, 0, 0] }]);
+      deferred[0]?.resolve(
+        basePeople.map((person, index) => ({
+          personId: person.id,
+          position: person.id === "anchor" ? [1, 0, 0] : ([index, 0, 0] as NodePosition)
+        }))
+      );
       await Promise.resolve();
+      await Promise.resolve();
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     });
-    expect(anchorX).toBe(9);
+    expect(anchorX).toBe(latestResolvedAnchorX);
 
     act(() => root.unmount());
     container.remove();
@@ -382,7 +442,7 @@ describe("useGraphLayoutState", () => {
     container.remove();
   });
 
-  it("prefers complete server layout and skips worker path", async () => {
+  it("prefers complete generation-tree server layout and skips worker path", async () => {
     const originalWorker = globalThis.Worker;
     (globalThis as { Worker?: typeof Worker }).Worker = class {} as unknown as typeof Worker;
     const workerSpy = vi.spyOn(layoutWorkerClient, "requestPositionPeopleInWorker");
@@ -420,7 +480,7 @@ describe("useGraphLayoutState", () => {
           selectedPersonId: "person-0",
           serverPositionsByPersonId,
           serverLayoutRevision,
-          serverLayoutAlgorithmVersion: "server-hybrid-v1",
+          serverLayoutAlgorithmVersion: "server-generation-tree-v1",
           renderLimit: 120
         })
       );
@@ -439,6 +499,59 @@ describe("useGraphLayoutState", () => {
     act(() => root.unmount());
     container.remove();
     (globalThis as { Worker?: typeof Worker }).Worker = originalWorker;
+  });
+
+  it("rejects legacy hybrid server layout so first load uses local generation tree positions", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root: Root = createRoot(container);
+    const people: Person[] = [
+      { id: "parent", name: "Parent", hasRelationship: true },
+      { id: "child", name: "Child", hasRelationship: true }
+    ];
+    const relationships = [{ fromPersonId: "parent", toPersonId: "child", type: "PARENT_OF" as const }];
+    const serverPositionsByPersonId = {
+      parent: [999, 999, 999] as NodePosition,
+      child: [1000, 999, 999] as NodePosition
+    };
+    const serverLayoutRevision = buildGraphLayoutRevision({
+      people: people.map((person) => ({
+        id: person.id,
+        name: person.name
+      })),
+      relationships,
+      viewMode: "family",
+      familyViewStyle: "generationTree",
+      selectedPersonId: null,
+      primaryFamilyUnitByPersonId: {}
+    });
+    let parentPosition: NodePosition | undefined;
+
+    const Probe = () => {
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people,
+          relationships,
+          selectedPersonId: null,
+          serverPositionsByPersonId,
+          serverLayoutRevision,
+          serverLayoutAlgorithmVersion: "server-hybrid-v1",
+          renderLimit: 120
+        })
+      );
+      parentPosition = state.visiblePositionsById.get("parent");
+      return null;
+    };
+
+    act(() => {
+      root.render(createElement(Probe));
+    });
+
+    expect(parentPosition).toBeDefined();
+    expect(parentPosition).not.toEqual(serverPositionsByPersonId.parent);
+
+    act(() => root.unmount());
+    container.remove();
   });
 
   it("reuses topology positions when friend visibility toggles", () => {

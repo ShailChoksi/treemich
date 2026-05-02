@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   treemichUserFindFirst: vi.fn(),
+  treemichUserFindMany: vi.fn(),
   treemichUserCount: vi.fn(),
   treemichUserCreate: vi.fn(),
   treemichUserUpdate: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("../db/client.js", () => ({
   prisma: {
     treemichUser: {
       findFirst: mocks.treemichUserFindFirst,
+      findMany: mocks.treemichUserFindMany,
       count: mocks.treemichUserCount,
       create: mocks.treemichUserCreate,
       update: mocks.treemichUserUpdate
@@ -69,6 +71,7 @@ const makeUser = (overrides: Record<string, unknown> = {}) => ({
   email: "alice@example.com",
   name: "alice@example.com",
   passwordHash: null,
+  _count: { profiles: 0 },
   createdAt: new Date("2025-01-01"),
   updatedAt: new Date("2025-01-01"),
   ...overrides
@@ -81,7 +84,7 @@ describe("AuthService.loginWithPassword", () => {
   });
 
   it("creates a new user and session when no users exist yet (first-user bootstrap)", async () => {
-    mocks.treemichUserFindFirst.mockResolvedValue(null); // no existing user
+    mocks.treemichUserFindMany.mockResolvedValue([]); // no existing user
     mocks.treemichUserCount.mockResolvedValue(0); // no native users
     const newUser = makeUser({ id: "user-new", email: "alice@example.com" });
     mocks.treemichUserCreate.mockResolvedValue(newUser);
@@ -100,7 +103,7 @@ describe("AuthService.loginWithPassword", () => {
   });
 
   it("rejects when user does not exist but other native users do", async () => {
-    mocks.treemichUserFindFirst.mockResolvedValue(null);
+    mocks.treemichUserFindMany.mockResolvedValue([]);
     mocks.treemichUserCount.mockResolvedValue(1);
 
     const { AuthService, TreemichAuthError } = await import("./service.js");
@@ -111,21 +114,21 @@ describe("AuthService.loginWithPassword", () => {
   });
 
   it("normalizes email to lowercase before lookup", async () => {
-    mocks.treemichUserFindFirst.mockResolvedValue(null);
+    mocks.treemichUserFindMany.mockResolvedValue([]);
     mocks.treemichUserCount.mockResolvedValue(0);
     mocks.treemichUserCreate.mockResolvedValue(makeUser({ email: "alice@example.com" }));
 
     const { AuthService } = await import("./service.js");
     await new AuthService().loginWithPassword("ALICE@Example.COM", "pw");
 
-    expect(mocks.treemichUserFindFirst).toHaveBeenCalledWith(
+    expect(mocks.treemichUserFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { email: "alice@example.com" } })
     );
   });
 
   it("sets password on existing user that has no passwordHash yet", async () => {
     const user = makeUser({ passwordHash: null, email: "alice@example.com" });
-    mocks.treemichUserFindFirst.mockResolvedValue(user);
+    mocks.treemichUserFindMany.mockResolvedValue([user]);
     mocks.treemichUserCount.mockResolvedValue(1);
     mocks.treemichUserUpdate.mockResolvedValue({ ...user, passwordHash: "hashed" });
 
@@ -145,7 +148,7 @@ describe("AuthService.loginWithPassword", () => {
     // Import the real hashPassword to set a known hash
     const { hashPassword } = await import("./crypto.js");
     const user = makeUser({ passwordHash: hashPassword("correctpass") });
-    mocks.treemichUserFindFirst.mockResolvedValue(user);
+    mocks.treemichUserFindMany.mockResolvedValue([user]);
     mocks.treemichUserCount.mockResolvedValue(1);
 
     const { AuthService, TreemichAuthError } = await import("./service.js");
@@ -158,7 +161,7 @@ describe("AuthService.loginWithPassword", () => {
   it("accepts correct password and creates a session", async () => {
     const { hashPassword } = await import("./crypto.js");
     const user = makeUser({ passwordHash: hashPassword("correctpass"), email: "alice@example.com" });
-    mocks.treemichUserFindFirst.mockResolvedValue(user);
+    mocks.treemichUserFindMany.mockResolvedValue([user]);
     mocks.treemichUserCount.mockResolvedValue(1);
 
     const { AuthService } = await import("./service.js");
@@ -170,10 +173,38 @@ describe("AuthService.loginWithPassword", () => {
     expect(result.state.linkStatus).toEqual({ linked: false });
   });
 
+  it("chooses the matching duplicate email account with the most people", async () => {
+    const { hashPassword } = await import("./crypto.js");
+    const oldDuplicate = makeUser({
+      id: "user-old",
+      passwordHash: hashPassword("correctpass"),
+      _count: { profiles: 253 },
+      updatedAt: new Date("2025-01-01")
+    });
+    const primaryAccount = makeUser({
+      id: "user-primary",
+      passwordHash: hashPassword("correctpass"),
+      _count: { profiles: 646 },
+      updatedAt: new Date("2025-01-02")
+    });
+    mocks.treemichUserFindMany.mockResolvedValue([oldDuplicate, primaryAccount]);
+    mocks.treemichUserCount.mockResolvedValue(2);
+
+    const { AuthService } = await import("./service.js");
+    const result = await new AuthService().loginWithPassword("alice@example.com", "correctpass");
+
+    expect(mocks.treemichSessionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ userId: "user-primary" })
+      })
+    );
+    expect(result.state.user?.id).toBe("user-primary");
+  });
+
   it("returns a standalone auth state with only Treemich-owned user identity", async () => {
     const { hashPassword } = await import("./crypto.js");
     const user = makeUser({ passwordHash: hashPassword("pw") });
-    mocks.treemichUserFindFirst.mockResolvedValue(user);
+    mocks.treemichUserFindMany.mockResolvedValue([user]);
     mocks.treemichUserCount.mockResolvedValue(1);
 
     const { AuthService } = await import("./service.js");

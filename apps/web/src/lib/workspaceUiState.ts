@@ -5,8 +5,10 @@
 export type Vector3Tuple = [number, number, number];
 export type LatLngTuple = [number, number];
 
+export type GraphCameraIntent = "manual" | "selectedFocus" | "explicitFocus" | "frameAll" | "topDown";
+
 export type GraphUiSnapshot = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   searchTerm: string;
   focusPersonId: string | null;
   pinnedPersonId: string | null;
@@ -15,6 +17,10 @@ export type GraphUiSnapshot = {
     position: Vector3Tuple;
     target: Vector3Tuple;
   } | null;
+  /** Why the camera pose was chosen (orbit samples → manual; keyboard g/f/t → explicitFocus/frameAll/topDown). */
+  cameraIntent: GraphCameraIntent;
+  /** Optional person context for the camera (does not imply a pending focus command). */
+  cameraPersonId: string | null;
 };
 
 export type MapUiSnapshot = {
@@ -26,7 +32,15 @@ export type MapUiSnapshot = {
   zoom: number;
 };
 
-export const GRAPH_UI_SNAPSHOT_VERSION = 1;
+export const GRAPH_UI_SNAPSHOT_VERSION = 2;
+
+const GRAPH_CAMERA_INTENTS: readonly GraphCameraIntent[] = [
+  "manual",
+  "selectedFocus",
+  "explicitFocus",
+  "frameAll",
+  "topDown"
+] as const;
 export const MAP_UI_SNAPSHOT_VERSION = 1;
 
 export const DEFAULT_GRAPH_UI_SNAPSHOT: GraphUiSnapshot = {
@@ -35,7 +49,9 @@ export const DEFAULT_GRAPH_UI_SNAPSHOT: GraphUiSnapshot = {
   focusPersonId: null,
   pinnedPersonId: null,
   highlightedPersonIds: [],
-  camera: null
+  camera: null,
+  cameraIntent: "frameAll",
+  cameraPersonId: null
 };
 
 export const DEFAULT_MAP_UI_SNAPSHOT: MapUiSnapshot = {
@@ -91,31 +107,73 @@ const clampNumber = (value: unknown, min: number, max: number, fallback: number)
   return Math.min(max, Math.max(min, value));
 };
 
+const parseCameraIntent = (value: unknown, hasCamera: boolean): GraphCameraIntent => {
+  if (typeof value === "string" && (GRAPH_CAMERA_INTENTS as readonly string[]).includes(value)) {
+    return value as GraphCameraIntent;
+  }
+  return hasCamera ? "manual" : "frameAll";
+};
+
+const parseGraphCameraRecord = (
+  parsed: Record<string, unknown>
+): { position: Vector3Tuple; target: Vector3Tuple } | null => {
+  const cameraRecord = isObject(parsed.camera) ? parsed.camera : null;
+  const camera =
+    cameraRecord != null
+      ? {
+          position: parseVector3(cameraRecord.position),
+          target: parseVector3(cameraRecord.target)
+        }
+      : null;
+  return camera?.position && camera.target ? { position: camera.position, target: camera.target } : null;
+};
+
+const parseGraphUiSnapshotV2Fields = (parsed: Record<string, unknown>): GraphUiSnapshot => {
+  const camera = parseGraphCameraRecord(parsed);
+  return {
+    schemaVersion: GRAPH_UI_SNAPSHOT_VERSION,
+    searchTerm: typeof parsed.searchTerm === "string" ? parsed.searchTerm : "",
+    focusPersonId: parseNullableString(parsed.focusPersonId),
+    pinnedPersonId: parseNullableString(parsed.pinnedPersonId),
+    highlightedPersonIds: parseStringArray(parsed.highlightedPersonIds),
+    camera,
+    cameraIntent: parseCameraIntent(parsed.cameraIntent, Boolean(camera)),
+    cameraPersonId: parseNullableString(parsed.cameraPersonId)
+  };
+};
+
+/** v1 had no intent; legacy saved camera is treated as user-driven orbit/pose → manual. */
+const migrateGraphUiSnapshotV1ToV2 = (parsed: Record<string, unknown>): GraphUiSnapshot => {
+  const camera = parseGraphCameraRecord(parsed);
+  const focusPersonId = parseNullableString(parsed.focusPersonId);
+  return {
+    schemaVersion: GRAPH_UI_SNAPSHOT_VERSION,
+    searchTerm: typeof parsed.searchTerm === "string" ? parsed.searchTerm : "",
+    focusPersonId,
+    pinnedPersonId: parseNullableString(parsed.pinnedPersonId),
+    highlightedPersonIds: parseStringArray(parsed.highlightedPersonIds),
+    camera,
+    cameraIntent: camera ? "manual" : "frameAll",
+    cameraPersonId: focusPersonId
+  };
+};
+
 export const parseGraphUiSnapshot = (raw: string | null): GraphUiSnapshot => {
   if (!raw) {
     return DEFAULT_GRAPH_UI_SNAPSHOT;
   }
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (!isObject(parsed) || parsed.schemaVersion !== GRAPH_UI_SNAPSHOT_VERSION) {
+    if (!isObject(parsed)) {
       return DEFAULT_GRAPH_UI_SNAPSHOT;
     }
-    const cameraRecord = isObject(parsed.camera) ? parsed.camera : null;
-    const camera =
-      cameraRecord != null
-        ? {
-            position: parseVector3(cameraRecord.position),
-            target: parseVector3(cameraRecord.target)
-          }
-        : null;
-    return {
-      schemaVersion: GRAPH_UI_SNAPSHOT_VERSION,
-      searchTerm: typeof parsed.searchTerm === "string" ? parsed.searchTerm : "",
-      focusPersonId: parseNullableString(parsed.focusPersonId),
-      pinnedPersonId: parseNullableString(parsed.pinnedPersonId),
-      highlightedPersonIds: parseStringArray(parsed.highlightedPersonIds),
-      camera: camera?.position && camera.target ? { position: camera.position, target: camera.target } : null
-    };
+    if (parsed.schemaVersion === GRAPH_UI_SNAPSHOT_VERSION) {
+      return parseGraphUiSnapshotV2Fields(parsed);
+    }
+    if (parsed.schemaVersion === 1) {
+      return migrateGraphUiSnapshotV1ToV2(parsed);
+    }
+    return DEFAULT_GRAPH_UI_SNAPSHOT;
   } catch {
     return DEFAULT_GRAPH_UI_SNAPSHOT;
   }

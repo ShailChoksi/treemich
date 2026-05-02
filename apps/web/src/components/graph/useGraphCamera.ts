@@ -13,7 +13,7 @@ type UseGraphCameraOptions = {
 
 const isGraphBackgroundTarget = (target: EventTarget | null) => {
   const el = target as HTMLElement | null;
-  if (!el) {
+  if (!el || typeof el.getAttribute !== "function") {
     return true;
   }
   const tag = el.tagName;
