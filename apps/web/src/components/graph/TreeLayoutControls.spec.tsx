@@ -34,14 +34,18 @@ const renderControls = (
 describe("TreeLayoutControls", () => {
   it("starts minimized and expands on demand", () => {
     const { container, root } = renderControls();
-    const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Expand tree layout controls"]');
+    const toggle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Expand tree layout controls"]'
+    );
 
     expect(toggle).toBeTruthy();
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
     expect(container.querySelectorAll('input[type="range"]')).toHaveLength(0);
 
     act(() => toggle!.click());
-    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Collapse tree layout controls"]')).toBeTruthy();
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Collapse tree layout controls"]')
+    ).toBeTruthy();
     expect(container.querySelectorAll('input[type="range"]')).toHaveLength(4);
 
     act(() => root.unmount());
@@ -56,7 +60,9 @@ describe("TreeLayoutControls", () => {
         spouseBranchSensitivity: 2
       }
     });
-    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Expand tree layout controls"]')!.click());
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Expand tree layout controls"]')!.click()
+    );
 
     expect(container.textContent).toContain("Horizontal spacing");
     expect(container.textContent).toContain("75%");
@@ -79,7 +85,9 @@ describe("TreeLayoutControls", () => {
       onPreferenceChange,
       onPreferenceReset
     });
-    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Expand tree layout controls"]')!.click());
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Expand tree layout controls"]')!.click()
+    );
     const horizontal = container.querySelector<HTMLInputElement>('input[aria-label="Horizontal spacing"]');
     expect(horizontal).toBeTruthy();
 
@@ -104,7 +112,9 @@ describe("TreeLayoutControls", () => {
       disabledReason: "Tree layout controls are only available in family Tree view.",
       onPreferenceChange
     });
-    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Expand tree layout controls"]')!.click());
+    act(() =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="Expand tree layout controls"]')!.click()
+    );
 
     expect(container.textContent).toContain("Tree layout controls are only available in family Tree view.");
     expect(

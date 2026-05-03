@@ -314,9 +314,9 @@ describe("PeopleGraphDataContext", () => {
       url: typeof input === "string" ? input : input.toString(),
       method: init?.method ?? "GET"
     }));
-    expect(calls.filter((call) => call.method === "POST" && call.url.includes("/people/p1/relationships"))).toHaveLength(
-      1
-    );
+    expect(
+      calls.filter((call) => call.method === "POST" && call.url.includes("/people/p1/relationships"))
+    ).toHaveLength(1);
     expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(false);
     expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(false);
     expect(calls.some((call) => call.method === "GET" && call.url.endsWith("/user/preferences"))).toBe(false);
