@@ -8,8 +8,6 @@ import { relationshipStyleByKind } from "./relationshipStyles";
 type Props = {
   filterVisibility: GraphFilterVisibility;
   onToggleFilter: (filter: GraphFilter) => void;
-  showSingleFamilyTree: boolean;
-  onShowSingleFamilyTreeChange: (next: boolean) => void;
 };
 
 const legendItems: Array<{ label: string; color: string; filter: GraphFilter }> = [
@@ -20,12 +18,7 @@ const legendItems: Array<{ label: string; color: string; filter: GraphFilter }> 
   { label: "Pet", color: relationshipStyleByKind.PET.color, filter: "pets" }
 ];
 
-export const GraphLayerControls = ({
-  filterVisibility,
-  onToggleFilter,
-  showSingleFamilyTree,
-  onShowSingleFamilyTreeChange
-}: Props) => {
+export const GraphLayerControls = ({ filterVisibility, onToggleFilter }: Props) => {
   return (
     <div className="graph-view-mode-selector">
       <div className="graph-layer-toggles" role="group" aria-label="Graph layer filters">
@@ -66,14 +59,6 @@ export const GraphLayerControls = ({
           Pets
         </label>
       </div>
-      <label className="graph-single-tree-toggle">
-        <input
-          type="checkbox"
-          checked={showSingleFamilyTree}
-          onChange={(event) => onShowSingleFamilyTreeChange(event.target.checked)}
-        />
-        Show only one family tree
-      </label>
       <div className="graph-edge-legend" role="list" aria-label="Relationship color legend">
         {legendItems.map((item) => (
           <span

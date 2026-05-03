@@ -2,7 +2,12 @@
  * @file Three.js relationship graph, overlays, search, and server layout integration.
  */
 
-import { defaultGraphRenderLimit } from "@treemich/shared";
+import {
+  defaultGraphRenderLimit,
+  defaultTreeLayoutPreferences,
+  resolveTreeLayoutPreferences,
+  type ResolvedTreeLayoutPreferences
+} from "@treemich/shared";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_GRAPH_UI_SNAPSHOT,
@@ -48,6 +53,7 @@ import { GraphSurfaceOverlays } from "./graph/GraphSurfaceOverlays";
 import { GraphFooterStatus } from "./graph/GraphFooterStatus";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { GraphLayerControls } from "./graph/GraphLayerControls";
+import { TreeLayoutControls } from "./graph/TreeLayoutControls";
 import { useGraphKeyboardNavigation } from "./graph/useGraphKeyboardNavigation";
 import { getPersonDisplayLabel } from "../lib/personDisplay";
 import { RELATIONSHIP_TYPES } from "../lib/relationshipConstants";
@@ -66,6 +72,8 @@ type GraphViewPreferencesState = {
   filterVisibility: NonNullable<UserPreferences["graphFilterVisibility"]>;
   showSingleFamilyTree: boolean;
 };
+
+type TreeLayoutPreferenceKey = keyof ResolvedTreeLayoutPreferences;
 
 type ProviderFilter = "all" | "linked" | "unlinked";
 
@@ -103,6 +111,8 @@ const thumbnailCacheKeyForPerson = (person: Person): string | undefined => {
     .join(":");
 };
 
+const TREE_LAYOUT_PREFERENCES_SAVE_DEBOUNCE_MS = 500;
+
 export const resolveAddRelativeRelationshipType = (
   slot: AddRelativeSlot,
   selectedRelationshipType?: RelationshipType
@@ -126,7 +136,7 @@ const resolveInitialGraphViewPreferences = (
     (defaultToNoRelationshipsGraphState
       ? noRelationshipsGraphFilterVisibility
       : defaultGraphFilterVisibility),
-  showSingleFamilyTree: savedPreferences?.showSingleFamilyTree ?? false
+  showSingleFamilyTree: false
 });
 
 /**
@@ -190,6 +200,10 @@ const PeopleGraph3DComponent = ({
       noRelationshipsGraphFilterVisibility
     )
   );
+  const [treeLayoutPreferences, setTreeLayoutPreferences] = useState<ResolvedTreeLayoutPreferences>(() =>
+    resolveTreeLayoutPreferences(savedPreferences?.treeLayoutPreferences)
+  );
+  const [treeLayoutSaveError, setTreeLayoutSaveError] = useState<string | null>(null);
   const { filterVisibility, showSingleFamilyTree } = graphViewPreferences;
   const [singleFamilyTreeAnchorId, setSingleFamilyTreeAnchorId] = useState<string | null>(null);
   const { initialCameraState, startupIntent } = useMemo(() => {
@@ -227,6 +241,7 @@ const PeopleGraph3DComponent = ({
   const lastAutoCenteredFocusPersonIdRef = useRef<string | null>(null);
   const lastKeyboardCameraIntentRef = useRef<GraphCameraIntent | null>(null);
   const pendingStartupCameraIntentRef = useRef<GraphCameraIntent | null>(null);
+  const treeLayoutSaveTimeoutRef = useRef<number | null>(null);
   const handleStartupCameraIntentApplied = useCallback((intent: GraphCameraIntent) => {
     pendingStartupCameraIntentRef.current = intent;
   }, []);
@@ -249,7 +264,17 @@ const PeopleGraph3DComponent = ({
         noRelationshipsGraphFilterVisibility
       )
     );
+    setTreeLayoutPreferences(resolveTreeLayoutPreferences(savedPreferences.treeLayoutPreferences));
   }, [defaultToNoRelationshipsGraphState, noRelationshipsGraphFilterVisibility, savedPreferences]);
+
+  useEffect(
+    () => () => {
+      if (treeLayoutSaveTimeoutRef.current !== null) {
+        window.clearTimeout(treeLayoutSaveTimeoutRef.current);
+      }
+    },
+    []
+  );
 
   const { selectedPersonId, setSelectedPersonId, clearSelection, handleNodeClick } = useGraphSelection({
     selectedPersonId: parentSelectedPersonId,
@@ -296,6 +321,7 @@ const PeopleGraph3DComponent = ({
     photoClusters: EMPTY_PHOTO_CLUSTERS,
     viewMode: "family",
     primaryFamilyUnitByPersonId: savedPreferences?.primaryFamilyUnitByPersonId,
+    treeLayoutPreferences,
     showSingleFamilyTree,
     singleFamilyTreeAnchorId,
     filterVisibility,
@@ -665,21 +691,43 @@ const PeopleGraph3DComponent = ({
     });
   };
 
-  const handleShowSingleFamilyTreeChange = (next: boolean) => {
-    setGraphViewPreferences((current) => {
-      const nextPreferences = { ...current, showSingleFamilyTree: next };
-      void onPreferencesChange({
-        showSingleFamilyTree: nextPreferences.showSingleFamilyTree,
-        graphFilterVisibility: nextPreferences.filterVisibility
+  const scheduleTreeLayoutPreferenceSave = useCallback(
+    (next: ResolvedTreeLayoutPreferences) => {
+      if (treeLayoutSaveTimeoutRef.current !== null) {
+        window.clearTimeout(treeLayoutSaveTimeoutRef.current);
+      }
+      treeLayoutSaveTimeoutRef.current = window.setTimeout(() => {
+        treeLayoutSaveTimeoutRef.current = null;
+        void onPreferencesChange({ treeLayoutPreferences: next }).then((saved) => {
+          if (saved) {
+            setTreeLayoutSaveError(null);
+            onRetryLayout?.();
+          } else {
+            setTreeLayoutSaveError("Could not save tree layout preferences.");
+          }
+        });
+      }, TREE_LAYOUT_PREFERENCES_SAVE_DEBOUNCE_MS);
+    },
+    [onPreferencesChange, onRetryLayout]
+  );
+
+  const handleTreeLayoutPreferenceChange = useCallback(
+    (key: TreeLayoutPreferenceKey, value: number) => {
+      setTreeLayoutPreferences((current) => {
+        const next = { ...current, [key]: value };
+        scheduleTreeLayoutPreferenceSave(next);
+        return next;
       });
-      return nextPreferences;
-    });
-    if (next) {
-      setSingleFamilyTreeAnchorId(selectedPersonId);
-    } else {
-      setSingleFamilyTreeAnchorId(null);
-    }
-  };
+    },
+    [scheduleTreeLayoutPreferenceSave]
+  );
+
+  const handleTreeLayoutPreferenceReset = useCallback(
+    (key: TreeLayoutPreferenceKey) => {
+      handleTreeLayoutPreferenceChange(key, defaultTreeLayoutPreferences[key]);
+    },
+    [handleTreeLayoutPreferenceChange]
+  );
 
   const graphSelectionSummary = selectedPerson
     ? `Selected person: ${getPersonDisplayLabel(selectedPerson)}. ${renderVisiblePeople.length} people and ${renderVisibleRelationshipLines.length} relationships are currently visible in the graph.`
@@ -696,21 +744,51 @@ const PeopleGraph3DComponent = ({
           onSearchTermChange={setSearchTerm}
           onSearchSubmit={handleSearchSubmit}
           onClearSearch={handleClearSearch}
-          onCenterView={frameAllNodesWithIntent}
           people={filteredPeople}
           searchFeedback={searchFeedback}
           treeValidationIssueCount={treeValidationIssueCount}
           treeValidationEngineDisabled={treeValidationEngineDisabled}
-          providerFilter={providerFilter}
-          onProviderFilterChange={setProviderFilter}
-          onNewPerson={onNewPerson}
         />
-        <GraphLayerControls
-          filterVisibility={filterVisibility}
-          onToggleFilter={handleToggleFilter}
-          showSingleFamilyTree={showSingleFamilyTree}
-          onShowSingleFamilyTreeChange={handleShowSingleFamilyTreeChange}
-        />
+        <div className="graph-bottom-left-controls">
+          <label className="graph-provider-filter-control">
+            <span>People</span>
+            <select
+              value={providerFilter}
+              onChange={(event) => setProviderFilter(event.target.value as ProviderFilter)}
+            >
+              <option value="all">All</option>
+              <option value="linked">Linked to Immich</option>
+              <option value="unlinked">Not linked to Immich</option>
+            </select>
+          </label>
+          <GraphLayerControls filterVisibility={filterVisibility} onToggleFilter={handleToggleFilter} />
+        </div>
+        <div className="graph-bottom-right-controls">
+          {onNewPerson ? (
+            <button
+              type="button"
+              className="secondary-button graph-add-person-button"
+              data-onboarding-target="new-person"
+              onClick={onNewPerson}
+            >
+              Add Person
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="secondary-button graph-center-view-button"
+            onClick={frameAllNodesWithIntent}
+            aria-label="Center graph view"
+          >
+            Center view (F)
+          </button>
+          <TreeLayoutControls
+            value={treeLayoutPreferences}
+            onPreferenceChange={handleTreeLayoutPreferenceChange}
+            onPreferenceReset={handleTreeLayoutPreferenceReset}
+          />
+          {treeLayoutSaveError ? <p className="tree-layout-controls-status">{treeLayoutSaveError}</p> : null}
+        </div>
         <GraphSurfaceOverlays
           isLoading={isLoading}
           loadError={loadError}

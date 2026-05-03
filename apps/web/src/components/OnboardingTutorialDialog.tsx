@@ -38,7 +38,7 @@ const TOUR_STEPS: readonly TourStep[] = [
   {
     targetKey: "new-person",
     title: "Add your first people",
-    body: "Use + New person to create someone directly in Treemich. You can also bring people in from GEDCOM or Immich later—every person gets a stable Treemich identity."
+    body: "Use Add Person to create someone directly in Treemich. You can also bring people in from GEDCOM or Immich later—every person gets a stable Treemich identity."
   },
   {
     targetKey: "relationship-search",

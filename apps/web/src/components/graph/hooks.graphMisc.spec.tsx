@@ -12,6 +12,7 @@ import {
   resolveNodeRenderTier,
   shouldRenderDetailedNode,
   shouldRenderInstancedVisualForNode,
+  shouldShowNodeLabel,
   shouldUseLargeGraphTier
 } from "./scene/graphRenderTiers";
 import { shouldSkipNodeAnimationFrame } from "./scene/nodeAnimationPolicy";
@@ -244,6 +245,18 @@ describe("render-tier helpers", () => {
         hasThumbnail: true
       })
     ).toBe("thumbnail");
+  });
+
+  it("keeps labels visible for near minimal-tier nodes in large GEDCOM graphs", () => {
+    expect(
+      resolveNodeRenderTier({
+        largeGraphTierEnabled: true,
+        isPriorityNode: false,
+        visibilityBucket: "near",
+        hasThumbnail: false
+      })
+    ).toBe("minimal");
+    expect(shouldShowNodeLabel({ visibilityBucket: "near", isPriorityNode: false })).toBe(true);
   });
 
   it("does not render the instanced fallback disk behind loaded thumbnails", () => {

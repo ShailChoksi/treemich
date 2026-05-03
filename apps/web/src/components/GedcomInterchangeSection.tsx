@@ -254,7 +254,7 @@ export const GedcomInterchangeSection = ({ people, onTreeChanged }: Props) => {
         }
       });
       setPageOffset(0);
-      if (created.summary.famMatchError) {
+      if (created.summary.famMatchError && !allowPartialMatches && !createMissingPeople) {
         setStatusNote(created.summary.famMatchError);
       }
     } catch (e) {

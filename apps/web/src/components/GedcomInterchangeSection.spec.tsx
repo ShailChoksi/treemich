@@ -158,6 +158,35 @@ describe("GedcomInterchangeSection", () => {
     container.remove();
   });
 
+  it("does not show family match errors while create-missing import is enabled", async () => {
+    apiMocks.createGedcomImportPreview.mockResolvedValue({
+      ...defaultCreateResponse(),
+      summary: {
+        ...defaultCreateResponse().summary,
+        totalIndis: 2,
+        totalFams: 1,
+        famMatchError: "FAM @F1@: missing person match for HUSB @I1@"
+      },
+      page: {
+        offset: 0,
+        limit: 50,
+        total: 2,
+        rows: [sampleRow("@I1@", "Walder Frey"), sampleRow("@I2@", "Perra Royce")]
+      }
+    });
+    const { root, container } = await mount();
+    await chooseGedFile(container, "ASOIAF.ged");
+
+    expect(container.textContent).toContain("2 people");
+    expect(container.textContent).toContain("Unmatched GEDCOM people will be created as Treemich people");
+    expect(container.textContent).not.toContain("FAM @F1@: missing person match for HUSB @I1@");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it("submits dry-runs via from-preview job without create confirmation", async () => {
     const confirmSpy = vi.mocked(globalThis.confirm);
     apiMocks.getGedcomPreviewIndisPage.mockImplementation(async (previewId, params) => ({

@@ -12,6 +12,10 @@ import {
   graphLineRoutingStyleSchema,
   inverseRelationshipType,
   relationshipTypeSchema,
+  defaultTreeLayoutPreferences,
+  positionGenerationTreePeople,
+  resolveTreeLayoutPreferences,
+  treeLayoutPreferencesSchema,
   userPreferencesSchema
 } from "../src/index.js";
 
@@ -126,6 +130,34 @@ describe("shared enums and preference schemas", () => {
       refreshIntervalDays: 7
     });
   });
+
+  it("resolves tree layout preferences with defaults and bounded values", () => {
+    expect(resolveTreeLayoutPreferences(undefined)).toEqual(defaultTreeLayoutPreferences);
+    expect(
+      treeLayoutPreferencesSchema.parse({
+        horizontalSpacing: 0.25,
+        verticalSpacing: 2,
+        spouseBranchZDistance: 1.25,
+        spouseBranchSensitivity: 0.75
+      })
+    ).toEqual({
+      horizontalSpacing: 0.25,
+      verticalSpacing: 2,
+      spouseBranchZDistance: 1.25,
+      spouseBranchSensitivity: 0.75
+    });
+    expect(
+      userPreferencesSchema.parse({
+        treeLayoutPreferences: {
+          horizontalSpacing: 1.1
+        }
+      }).treeLayoutPreferences
+    ).toEqual({
+      horizontalSpacing: 1.1
+    });
+    expect(() => treeLayoutPreferencesSchema.parse({ horizontalSpacing: 0.2 })).toThrow();
+    expect(() => treeLayoutPreferencesSchema.parse({ spouseBranchSensitivity: 2.1 })).toThrow();
+  });
 });
 
 describe("graphLayoutRequestSchema and buildGraphLayoutRevision", () => {
@@ -185,6 +217,36 @@ describe("graphLayoutRequestSchema and buildGraphLayoutRevision", () => {
     });
     expect(buildGraphLayoutRevision(withSpouse)).not.toBe(buildGraphLayoutRevision(withFriend));
   });
+
+  it("changes revision when tree layout preferences change", () => {
+    const base = graphLayoutRequestSchema.parse({
+      people: [
+        { id: "a", name: "A" },
+        { id: "b", name: "B" }
+      ],
+      relationships: [{ fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" }],
+      viewMode: "family",
+      familyViewStyle: "generationTree"
+    });
+    const baseRevision = buildGraphLayoutRevision(base);
+    const preferenceChanges = [
+      { horizontalSpacing: 1.1 },
+      { verticalSpacing: 1.1 },
+      { spouseBranchZDistance: 1.1 },
+      { spouseBranchSensitivity: 1.1 }
+    ];
+
+    for (const treeLayoutPreferences of preferenceChanges) {
+      expect(
+        buildGraphLayoutRevision(
+          graphLayoutRequestSchema.parse({
+            ...base,
+            treeLayoutPreferences
+          })
+        )
+      ).not.toBe(baseRevision);
+    }
+  });
 });
 
 describe("graphLayoutResponseSchema", () => {
@@ -202,5 +264,140 @@ describe("graphLayoutResponseSchema", () => {
         positionsByPersonId: { p1: [0, 1] }
       })
     ).toThrow();
+  });
+});
+
+describe("positionGenerationTreePeople", () => {
+  it("positions family relationships through the shared generation-tree layout", () => {
+    const positioned = positionGenerationTreePeople(
+      [
+        { id: "parent", name: "Parent Example" },
+        { id: "child", name: "Child Example" }
+      ],
+      [{ fromPersonId: "parent", toPersonId: "child", type: "PARENT_OF" }]
+    );
+    const parent = positioned.find((entry) => entry.person.id === "parent")?.position;
+    const child = positioned.find((entry) => entry.person.id === "child")?.position;
+
+    expect(parent).toBeDefined();
+    expect(child).toBeDefined();
+    expect(parent?.[1]).toBeGreaterThan(child?.[1] ?? Number.POSITIVE_INFINITY);
+  });
+
+  it("uses horizontal spacing to scale the family tree X spread", () => {
+    const people = [
+      { id: "parent-a", name: "Parent A" },
+      { id: "parent-b", name: "Parent B" },
+      { id: "child-a", name: "Child A" },
+      { id: "child-b", name: "Child B" },
+      { id: "child-c", name: "Child C" }
+    ];
+    const relationships = [
+      { fromPersonId: "parent-a", toPersonId: "parent-b", type: "SPOUSE_OF" as const },
+      { fromPersonId: "parent-a", toPersonId: "child-a", type: "PARENT_OF" as const },
+      { fromPersonId: "parent-b", toPersonId: "child-a", type: "PARENT_OF" as const },
+      { fromPersonId: "parent-a", toPersonId: "child-b", type: "PARENT_OF" as const },
+      { fromPersonId: "parent-b", toPersonId: "child-b", type: "PARENT_OF" as const },
+      { fromPersonId: "parent-a", toPersonId: "child-c", type: "PARENT_OF" as const },
+      { fromPersonId: "parent-b", toPersonId: "child-c", type: "PARENT_OF" as const }
+    ];
+    const xSpread = (horizontalSpacing: number) => {
+      const xs = positionGenerationTreePeople(people, relationships, {
+        treeLayoutPreferences: { horizontalSpacing }
+      }).map((entry) => entry.position[0]);
+      return Math.max(...xs) - Math.min(...xs);
+    };
+
+    expect(xSpread(2)).toBeGreaterThan(xSpread(0.5) * 1.5);
+  });
+
+  it("uses vertical spacing to scale generation Y gaps", () => {
+    const people = [
+      { id: "grandparent", name: "Grandparent Example" },
+      { id: "parent", name: "Parent Example" },
+      { id: "child", name: "Child Example" }
+    ];
+    const relationships = [
+      { fromPersonId: "grandparent", toPersonId: "parent", type: "PARENT_OF" as const },
+      { fromPersonId: "parent", toPersonId: "child", type: "PARENT_OF" as const }
+    ];
+    const yGap = (verticalSpacing: number) => {
+      const byId = new Map(
+        positionGenerationTreePeople(people, relationships, {
+          treeLayoutPreferences: { verticalSpacing }
+        }).map((entry) => [entry.person.id, entry.position])
+      );
+      return Math.abs((byId.get("grandparent")?.[1] ?? 0) - (byId.get("child")?.[1] ?? 0));
+    };
+
+    expect(yGap(2)).toBeGreaterThan(yGap(0.5) * 2);
+  });
+
+  it("uses spouse branch Z distance to scale rotated spouse-side depth", () => {
+    const people = [
+      { id: "A", name: "A Main" },
+      { id: "B", name: "B Spouse" },
+      { id: "pa1", name: "Parent A1" },
+      { id: "pa2", name: "Parent A2" },
+      { id: "sibA", name: "Sibling A" },
+      { id: "gpa1", name: "Grand A1" },
+      { id: "gpa2", name: "Grand A2" },
+      { id: "gpa3", name: "Grand A3" },
+      { id: "gpa4", name: "Grand A4" },
+      { id: "pb1", name: "Parent B1" }
+    ];
+    const relationships = [
+      { fromPersonId: "A", toPersonId: "B", type: "SPOUSE_OF" as const },
+      { fromPersonId: "pa1", toPersonId: "A", type: "PARENT_OF" as const },
+      { fromPersonId: "pa2", toPersonId: "A", type: "PARENT_OF" as const },
+      { fromPersonId: "pa1", toPersonId: "sibA", type: "PARENT_OF" as const },
+      { fromPersonId: "pa2", toPersonId: "sibA", type: "PARENT_OF" as const },
+      { fromPersonId: "gpa1", toPersonId: "pa1", type: "PARENT_OF" as const },
+      { fromPersonId: "gpa2", toPersonId: "pa1", type: "PARENT_OF" as const },
+      { fromPersonId: "gpa3", toPersonId: "pa2", type: "PARENT_OF" as const },
+      { fromPersonId: "gpa4", toPersonId: "pa2", type: "PARENT_OF" as const },
+      { fromPersonId: "pb1", toPersonId: "B", type: "PARENT_OF" as const }
+    ];
+    const zOffset = (spouseBranchZDistance: number) => {
+      const byId = new Map(
+        positionGenerationTreePeople(people, relationships, {
+          treeLayoutPreferences: { spouseBranchZDistance }
+        }).map((entry) => [entry.person.id, entry.position])
+      );
+      const mainPlaneZ = ((byId.get("pa1")?.[2] ?? 0) + (byId.get("pa2")?.[2] ?? 0)) / 2;
+      return Math.abs((byId.get("pb1")?.[2] ?? 0) - mainPlaneZ);
+    };
+
+    expect(zOffset(2)).toBeGreaterThan(zOffset(0.5) * 1.5);
+  });
+
+  it("uses spouse branch sensitivity to rotate more borderline spouse branches", () => {
+    const people = [
+      { id: "A", name: "A Main" },
+      { id: "B", name: "B Spouse" },
+      { id: "pa1", name: "Parent A1" },
+      { id: "gpa1", name: "Grand A1" },
+      { id: "sibA", name: "Sibling A" },
+      { id: "pb1", name: "Parent B1" },
+      { id: "sibB", name: "Sibling B" }
+    ];
+    const relationships = [
+      { fromPersonId: "A", toPersonId: "B", type: "SPOUSE_OF" as const },
+      { fromPersonId: "pa1", toPersonId: "A", type: "PARENT_OF" as const },
+      { fromPersonId: "pa1", toPersonId: "sibA", type: "PARENT_OF" as const },
+      { fromPersonId: "gpa1", toPersonId: "pa1", type: "PARENT_OF" as const },
+      { fromPersonId: "pb1", toPersonId: "B", type: "PARENT_OF" as const },
+      { fromPersonId: "pb1", toPersonId: "sibB", type: "PARENT_OF" as const }
+    ];
+    const zOffset = (spouseBranchSensitivity: number) => {
+      const byId = new Map(
+        positionGenerationTreePeople(people, relationships, {
+          treeLayoutPreferences: { spouseBranchSensitivity }
+        }).map((entry) => [entry.person.id, entry.position])
+      );
+      return Math.abs((byId.get("pb1")?.[2] ?? 0) - (byId.get("pa1")?.[2] ?? 0));
+    };
+
+    expect(zOffset(2)).toBeGreaterThan(zOffset(1) + 1);
   });
 });

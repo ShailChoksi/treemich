@@ -11,14 +11,10 @@ type Props = {
   onSearchTermChange: (value: string) => void;
   onSearchSubmit: (event: React.FormEvent) => void;
   onClearSearch: () => void;
-  onCenterView: () => void;
   people: Person[];
   searchFeedback: string | null;
   treeValidationIssueCount: number | null;
   treeValidationEngineDisabled: boolean;
-  providerFilter: "all" | "linked" | "unlinked";
-  onProviderFilterChange: (next: "all" | "linked" | "unlinked") => void;
-  onNewPerson?: () => void;
 };
 
 const SEARCH_TERM_DEBOUNCE_MS = 120;
@@ -60,14 +56,10 @@ const GraphSearchOverlayComponent = ({
   onSearchTermChange,
   onSearchSubmit,
   onClearSearch,
-  onCenterView,
   people,
   searchFeedback,
   treeValidationIssueCount,
-  treeValidationEngineDisabled,
-  providerFilter,
-  onProviderFilterChange,
-  onNewPerson
+  treeValidationEngineDisabled
 }: Props) => {
   const [draftSearchTerm, setDraftSearchTerm] = useState(searchTerm);
   const listId = useId();
@@ -152,17 +144,6 @@ const GraphSearchOverlayComponent = ({
           Search by name or try: "mother of Jessica", "sisters of Mike", "mother-in-law of Sue"
         </p>
       </div>
-      <label className="graph-search-provider-filter">
-        <span>People</span>
-        <select
-          value={providerFilter}
-          onChange={(e) => onProviderFilterChange(e.target.value as typeof providerFilter)}
-        >
-          <option value="all">All</option>
-          <option value="linked">Linked to Immich</option>
-          <option value="unlinked">Not linked to Immich</option>
-        </select>
-      </label>
       {treeValidationEngineDisabled ? (
         <p className="graph-tree-issues-hint">Full-tree validation is disabled (server setting).</p>
       ) : treeValidationIssueCount != null && treeValidationIssueCount > 0 ? (
@@ -173,24 +154,6 @@ const GraphSearchOverlayComponent = ({
           data {treeValidationIssueCount === 1 ? "issue" : "issues"} in this tree (see each person’s life
           events and relationships).
         </p>
-      ) : null}
-      <button
-        type="button"
-        className="graph-center-view-button secondary-button"
-        onClick={onCenterView}
-        aria-label="Center graph view"
-      >
-        Center view (F)
-      </button>
-      {onNewPerson ? (
-        <button
-          type="button"
-          className="secondary-button graph-new-person-button"
-          data-onboarding-target="new-person"
-          onClick={onNewPerson}
-        >
-          + New person
-        </button>
       ) : null}
       {searchFeedback ? (
         <p className="graph-search-feedback" aria-live="polite">

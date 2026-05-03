@@ -202,6 +202,7 @@ export * from "./researchTasks.js";
 export * from "./evidence.js";
 export * from "./validationFindings.js";
 export * from "./reports.js";
+export * from "./graphLayout/generationTree.js";
 
 /** Weighted edge between two people derived from shared photo appearances. */
 export type PhotoCooccurrenceEdge = {
@@ -437,6 +438,41 @@ export const defaultGraphLineRoutingStyle: GraphLineRoutingStyle = "orthogonal";
 /** Default: do not force single-family-tree mode. */
 export const defaultShowSingleFamilyTree = false;
 
+export const minTreeLayoutPreference = 0.25;
+export const maxTreeLayoutPreference = 2;
+
+/** Normalized family-tree spacing controls. Values are stored as multipliers where `1` is default. */
+export const treeLayoutPreferencesSchema = z
+  .object({
+    horizontalSpacing: z.number().min(minTreeLayoutPreference).max(maxTreeLayoutPreference).optional(),
+    verticalSpacing: z.number().min(minTreeLayoutPreference).max(maxTreeLayoutPreference).optional(),
+    spouseBranchZDistance: z.number().min(minTreeLayoutPreference).max(maxTreeLayoutPreference).optional(),
+    spouseBranchSensitivity: z.number().min(minTreeLayoutPreference).max(maxTreeLayoutPreference).optional()
+  })
+  .strict();
+
+export type TreeLayoutPreferences = z.infer<typeof treeLayoutPreferencesSchema>;
+export type ResolvedTreeLayoutPreferences = {
+  horizontalSpacing: number;
+  verticalSpacing: number;
+  spouseBranchZDistance: number;
+  spouseBranchSensitivity: number;
+};
+
+export const defaultTreeLayoutPreferences: ResolvedTreeLayoutPreferences = {
+  horizontalSpacing: 1,
+  verticalSpacing: 1,
+  spouseBranchZDistance: 1,
+  spouseBranchSensitivity: 1
+};
+
+export const resolveTreeLayoutPreferences = (
+  preferences: TreeLayoutPreferences | null | undefined
+): ResolvedTreeLayoutPreferences => ({
+  ...defaultTreeLayoutPreferences,
+  ...(preferences ?? {})
+});
+
 /** User-controlled co-occurrence refresh behavior. */
 export const cooccurrencePreferencesSchema = z.object({
   refreshEnabled: z.boolean(),
@@ -473,6 +509,7 @@ export const userPreferencesSchema = z.object({
   primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional(),
   dismissedSuggestions: z.array(z.string()).optional(),
   cooccurrence: cooccurrencePreferencesSchema.optional(),
+  treeLayoutPreferences: treeLayoutPreferencesSchema.optional(),
   /** When true, natural-language people search also matches stored alternate names. */
   searchIncludeAlternateNames: z.boolean().optional(),
   onboardingTutorial: onboardingTutorialSchema.optional()
@@ -503,7 +540,8 @@ export const graphLayoutRequestSchema = z.object({
   viewMode: graphLayoutModeSchema.default("family"),
   familyViewStyle: familyViewStyleSchema.optional(),
   selectedPersonId: z.string().nullable().optional(),
-  primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional()
+  primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional(),
+  treeLayoutPreferences: treeLayoutPreferencesSchema.optional()
 });
 /** Layout response: stable revision string plus positions keyed by Treemich person id. */
 export const graphLayoutResponseSchema = z.object({
@@ -551,12 +589,20 @@ export const buildGraphLayoutRevision = (request: GraphLayoutRequest) => {
         .map(([personId, unitKey]) => `${personId}:${unitKey}`)
         .join(",")
     : "";
+  const treeLayoutPreferences = resolveTreeLayoutPreferences(request.treeLayoutPreferences);
+  const treeLayoutSignature = [
+    `horizontal=${treeLayoutPreferences.horizontalSpacing}`,
+    `vertical=${treeLayoutPreferences.verticalSpacing}`,
+    `zDistance=${treeLayoutPreferences.spouseBranchZDistance}`,
+    `sensitivity=${treeLayoutPreferences.spouseBranchSensitivity}`
+  ].join(",");
   return [
     `mode=${request.viewMode}`,
     `style=${request.familyViewStyle ?? ""}`,
     `selected=${request.selectedPersonId ?? ""}`,
     `people=${hashString(peopleSignature)}`,
     `relationships=${hashString(relationshipSignature)}`,
-    `primary=${hashString(primaryFamilySignature)}`
+    `primary=${hashString(primaryFamilySignature)}`,
+    `treeLayout=${hashString(treeLayoutSignature)}`
   ].join("|");
 };

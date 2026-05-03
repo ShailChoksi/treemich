@@ -201,6 +201,20 @@ export const sameRelationshipList = (left: RelationshipRecord[], right: Relation
     );
   });
 
+const relationshipIdentityKey = (relationship: RelationshipRecord) =>
+  `${relationship.fromPersonId}:${relationship.toPersonId}:${relationship.type}`;
+
+const mergeRelationshipRecords = (
+  current: RelationshipRecord[],
+  created: RelationshipRecord[]
+): RelationshipRecord[] => {
+  const byKey = new Map(current.map((relationship) => [relationshipIdentityKey(relationship), relationship]));
+  for (const relationship of created) {
+    byKey.set(relationshipIdentityKey(relationship), relationship);
+  }
+  return sortRelationshipsStable([...byKey.values()]);
+};
+
 export const PeopleGraphDataProvider = ({
   immichBaseUrl,
   currentUserName,
@@ -520,8 +534,21 @@ export const PeopleGraphDataProvider = ({
     async (sourcePersonId: string, targetPersonId: string, relationshipType: RelationshipType) => {
       setIsSavingRelationship(true);
       try {
-        await createRelationship(sourcePersonId, targetPersonId, relationshipType);
-        await refreshGraphData({ bypassSaveGuard: true });
+        const created = await createRelationship(sourcePersonId, targetPersonId, relationshipType);
+        setRelationships((current) => mergeRelationshipRecords(current, [created.direct, created.inverse]));
+        setPeople((current) =>
+          current.map((person) =>
+            person.id === created.direct.fromPersonId ||
+            person.id === created.direct.toPersonId ||
+            person.id === created.inverse.fromPersonId ||
+            person.id === created.inverse.toPersonId
+              ? { ...person, hasRelationship: true }
+              : person
+          )
+        );
+        setServerLayout(null);
+        setGraphLayoutError(null);
+        setDataRevision((revision) => revision + 1);
         setStatus("Relationship saved");
       } catch (error: unknown) {
         setStatus(getErrorMessage(error));
@@ -530,7 +557,7 @@ export const PeopleGraphDataProvider = ({
         setIsSavingRelationship(false);
       }
     },
-    [refreshGraphData, setIsSavingRelationship, setStatus]
+    [setIsSavingRelationship, setStatus]
   );
 
   const handleCreatePerson = useCallback(

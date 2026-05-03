@@ -140,7 +140,13 @@ const filterIndiRows = (
 };
 
 const readPreviewMultipartFile = async (request: FastifyRequest) => {
-  const file = await request.file();
+  const file = await request.file({
+    limits: {
+      fileSize: maxGedcomMediaArchiveBytes(),
+      files: 1,
+      fields: 8
+    }
+  });
   if (!file) {
     const err = new Error("Missing GEDCOM .ged or .zip file");
     (err as Error & { statusCode: number }).statusCode = 400;

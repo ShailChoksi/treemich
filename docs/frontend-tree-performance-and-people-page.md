@@ -54,9 +54,11 @@ The tree is **not** DOM/SVG virtualization; it is a **3D scene** of meshes, line
 | `apps/web/src/components/graph/useGraphLayoutWorker.ts`                 | Hook around worker client with sync fallback                                                                                      |
 | `apps/web/src/components/graph/graphLayoutConstants.ts`                 | e.g. worker threshold **320** people                                                                                              |
 | `apps/web/src/components/graph/topologyLayoutCache.ts`                  | Insertion-ordered cache, cap **8** topology entries                                                                               |
+| `packages/shared/src/graphLayout/generationTree.ts`                     | Shared generation-tree layout engine used by web sync/worker layout and API `/graph/layout` v2                                    |
 | `apps/web/src/components/graph/graphVisibility.ts`                      | Camera LOD: **near / mid / far / culled** + hysteresis; minimum visible when culled                                               |
 | `apps/web/src/components/graph/graphRelationshipLines.ts`               | Edge segments from relationships + merged parent groups; `partitionLinesByStyle` for 2-point `LineSegments` batching              |
-| `apps/web/src/components/graph/layout/*`                                | Buchheim-style family tree, photo layout, overlap, naming, etc.                                                                   |
+| `apps/web/src/components/graph/layout/*`                                | Web layout facade and photo layout; family/generation-tree layout lives in `@treemich/shared`                                     |
+| `apps/web/src/components/graph/TreeLayoutControls.tsx`                  | Four account-backed tree layout sliders: horizontal spacing, vertical spacing, spouse Z distance, spouse Z branch sensitivity     |
 
 ### Motion, camera sampling, GL setup
 
@@ -103,15 +105,15 @@ The tree is **not** DOM/SVG virtualization; it is a **3D scene** of meshes, line
    - Sorts people and relationships stably (`sortPeopleStable`, `sortRelationshipsStable`).
    - Updates `people` / `relationships` / preferences inside `startTransition` (with **`samePeopleList` / `sameRelationshipList`** to avoid new array references when semantically unchanged).
    - **`resolvePeopleSelection`** → `setSelectedPersonId`, `setGraphCameraFocusPersonId`.
-   - Increments **`layoutRequestIdRef`**, clears `serverLayout`, then **`computeGraphLayout({...})`** (async `.then` / `.catch`) → **`setServerLayout`** or error + local layout fallback message.
+   - Increments **`layoutRequestIdRef`**, clears `serverLayout`, then **`computeGraphLayout({...})`** (async `.then` / `.catch`) with `treeLayoutPreferences` → **`setServerLayout`** or error + local layout fallback message.
 5. **Refresh tiers:** mutation callers now choose the cheapest safe path:
    - **Tier A `refreshPeopleOnly`:** `getPeople()` only; used for name/profile/thumbnail/Immich identity flows that do not change graph topology.
    - **Tier B `refreshRelationshipsOnly`:** `getRelationships()` only; scoped to metadata-only relationship updates such as spouse date/life-event metadata where person ids and relationship type are unchanged.
    - **Tier C `refreshGraphData`:** full people + relationships + preferences + server layout; used for create/delete person, create/delete/structurally change relationship, duplicate merge, imports, mount, retries.
 6. **`GraphContainer`** (memo, in `people.tsx`) wraps **`PeopleGraph3D`** when workspace is tree; passes **five memoised bundles** (model, status, preferences, handlers, view state). Handlers use **`graph.retryGraphData`** for retry buttons (no per-render inline `() => void refreshGraphData()`).
-7. **`PeopleGraph3D`** filters people/relationships if needed, calls **`useGraphLayoutState`** with server positions + revision + camera position + render limit (**starts at 120**, grows by **120** every **150ms** until full — progressive reveal).
+7. **`PeopleGraph3D`** filters people/relationships if needed, resolves account-backed **tree layout preferences**, and calls **`useGraphLayoutState`** with server positions + revision + camera position + render limit (**starts at 120**, grows by **120** every **150ms** until full — progressive reveal).
 8. **`useGraphLayoutState`** now composes:
-   - **`useLayoutOrchestrator`:** if server layout is complete and revision matches → server positions; else topology cache (8 entries); else **worker** if people count **≥ 320**; else sync `positionPeople` on main thread.
+   - **`useLayoutOrchestrator`:** if server layout is complete, revision matches, and algorithm is **`server-generation-tree-v2`** → server positions; else topology cache (8 entries); else **worker** if people count **≥ 320**; else sync `positionPeople` on main thread.
    - **`useGraphVisibility`:** composes **`useGraphProgressiveRenderLimit`**, **`useGraphVisiblePeoplePipeline`**, **`useGraphCameraLodSlice`**, **`useGraphVisibleRelationshipLinesStep`** (same snapshot for nodes and lines).
 9. **`GraphCanvasScene`** mounts Canvas, applies **low-level** `initialCameraState` from `PeopleGraph3D` (saved snapshot restore only — no competing policy vs `useGraphCameraOrchestrator`), signals **`onCanvasCameraSystemReady`** once refs exist, renders 2-point relationship edges as batched `THREE.LineSegments` grouped by style and keeps longer trunk polylines as Drei `<Line>`.
 10. **`AnimatedNodes`** renders display-only `InstancedMesh` disk/ring geometry per LOD tier, plus per-person meshes for hit areas, labels, halos, and unique thumbnail texture quads.
@@ -140,7 +142,8 @@ The tree is **not** DOM/SVG virtualization; it is a **3D scene** of meshes, line
 - **Refresh tiers:** `refreshPeopleOnly`, `refreshRelationshipsOnly`, and full `refreshGraphData` avoid unnecessary full reload + layout work for metadata-only edits.
 - **Tier B UX:** after relationship-scoped life-event mutations, **`refreshRelationshipsOnly`** runs in the **background** (`void …catch`) once local relationship-event caches are updated, so the UI does not block on the refetch.
 - **Transitions:** large people/relationship/preference state setters in full refresh are wrapped in `startTransition`; loading/layout state remains urgent.
-- **Layout:** server layout when available; topology cache; **Web Worker** for large graphs; **request id** discard for stale layout responses.
+- **Layout:** shared generation-tree layout in `@treemich/shared`; server layout v2 when available; topology cache; **Web Worker** for large graphs; **request id** discard for stale layout responses.
+- **Tree layout controls:** `TreeLayoutControls` previews spacing locally immediately, then debounces account preference saves by **500ms**. Successful saves trigger Tier C layout refresh so server v2 catches up; failed saves keep the local preview and show a non-blocking status.
 - **Layout architecture:** `useLayoutOrchestrator` owns server/worker/sync positioning; visibility is split across **`useGraphVisibility`** + focused hooks (progressive cap, visible-people pipeline, camera LOD, visible lines).
 - **Visibility:** 4-bucket camera LOD + hysteresis; progressive **render limit**; **`pickNearest`** when over limit.
 - **GPU:** `frameloop="demand"`; `dpr` cap; large-graph **frame skipping** for non-priority node lerps; instanced disk/ring geometry per LOD tier.
@@ -190,7 +193,9 @@ The important invariant: **anything that changes topology must use Tier C** beca
 | `apps/web/src/pages/PeopleReviewContext.spec.tsx`                       | Page-scoped review provider lazy loads, workspace refresh handlers, duplicate merge full refresh        |
 | `apps/web/src/pages/PersonDetailContext.spec.tsx`                       | Detail provider draft/life-event behavior and Tier-B relationship life-event reconciliation             |
 | `apps/web/src/components/PeopleGraph3D.spec.tsx`                        | Graph component behavior                                                                                |
+| `apps/web/src/components/graph/TreeLayoutControls.spec.tsx`             | Tree layout sliders: percent labels, per-slider reset, disabled state                                   |
 | `apps/web/src/components/graph/hooks.layoutState.spec.tsx`              | Layout state, worker fallback/staleness, server layout preference, progressive reveal, culling          |
+| `apps/web/src/components/graph/layout.spec.ts`                          | Family layout invariants through web facade and worker-style serialization                              |
 | `apps/web/src/components/graph/useGraphProgressiveRenderLimit.spec.tsx` | Progressive cap timing and topology reset                                                               |
 | `apps/web/src/components/graph/graphRelationshipLines.spec.ts`          | Relationship line construction, `partitionLinesByStyle`, **`relationshipLineStyleKey`** dashed vs solid |
 | `apps/web/src/components/graph/scene/NodeInstancedMesh.spec.ts`         | Instanced node layer ordering for disk/ring vs thumbnails                                               |
@@ -299,4 +304,4 @@ Workspace chrome: `activeWorkspace`, `leftPaneOpen`, `contextPaneOpen`, `layoutR
 
 ---
 
-_Last updated: April 30, 2026 — `PeopleReviewProvider`, connected research section, graph scene context, explicit Tier-B relationship life-event tests, line material constants, T1 thumbnail profiling/atlas gate, refreshed line counts, and April 30 architecture review decisions._
+_Last updated: May 3, 2026 — shared generation-tree layout in `@treemich/shared`, `server-generation-tree-v2`, account-backed tree layout controls, spacing-aware revisions, and local/worker fallback behavior._
