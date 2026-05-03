@@ -1156,18 +1156,13 @@ body {
   gap: 6px 10px;
 }
 
-.graph-search-alt-names,
-.graph-search-provider-filter {
+.graph-search-alt-names {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 0.8rem;
   color: #94a3b8;
   margin: 0;
-}
-
-.graph-search-provider-filter select {
-  max-width: 170px;
 }
 
 .graph-tree-issues {
@@ -1562,6 +1557,10 @@ body {
   display: none !important;
 }
 
+:root {
+  --graph-left-panel-width: min(460px, calc(100vw - 24px));
+}
+
 .graph-search-overlay {
   position: absolute;
   top: 12px;
@@ -1570,7 +1569,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: min(320px, calc(100% - 24px));
+  width: var(--graph-left-panel-width);
   padding: 10px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 14px;
@@ -1583,17 +1582,20 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%;
 }
 
 .graph-search-form {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
 }
 
 .graph-search-form input {
+  flex: 1 1 auto;
   min-width: 0;
-  width: 220px;
+  width: auto;
   background: rgba(15, 23, 42, 0.88);
   color: #f8fafc;
   border-color: #64748b;
@@ -1604,6 +1606,7 @@ body {
 }
 
 .graph-search-icon-button {
+  flex: 0 0 40px;
   width: 40px;
   height: 40px;
   padding: 0;
@@ -1640,22 +1643,53 @@ body {
 }
 
 .graph-center-view-button {
-  align-self: flex-start;
   min-height: 34px;
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 700;
 }
 
-.graph-view-mode-selector {
+.graph-bottom-left-controls {
   position: absolute;
   left: 12px;
   bottom: 12px;
   z-index: 11;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  width: var(--graph-left-panel-width);
+}
+
+.graph-provider-filter-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.74);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.3);
+}
+
+.graph-provider-filter-control select {
+  flex: 1 1 auto;
+  max-width: 260px;
+  min-height: 34px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+}
+
+.graph-view-mode-selector {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  width: min(330px, calc(100% - 24px));
+  width: 100%;
   padding: 9px 10px;
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 12px;
@@ -1700,22 +1734,6 @@ body {
   accent-color: #38bdf8;
 }
 
-.graph-single-tree-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #cbd5e1;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.graph-single-tree-toggle input[type="checkbox"] {
-  margin: 0;
-  width: 14px;
-  height: 14px;
-  accent-color: #38bdf8;
-}
-
 .graph-edge-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1749,6 +1767,152 @@ body {
   height: 8px;
   border-radius: 999px;
   flex: 0 0 8px;
+}
+
+@media (min-width: 900px) {
+  .graph-layer-toggles,
+  .graph-edge-legend {
+    flex-wrap: nowrap;
+  }
+}
+
+.graph-bottom-right-controls {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.graph-add-person-button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tree-layout-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(330px, calc(100vw - 24px));
+  max-height: min(52vh, 430px);
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.3);
+  color: #e2e8f0;
+}
+
+.tree-layout-controls-collapsed {
+  width: auto;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+}
+
+.tree-layout-controls-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tree-layout-controls-expanded .tree-layout-controls-toggle {
+  background: transparent;
+  padding: 0;
+}
+
+.tree-layout-controls-toggle span:last-child {
+  color: #7dd3fc;
+  font-size: 11px;
+}
+
+.tree-layout-controls-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tree-layout-controls-header strong {
+  font-size: 13px;
+}
+
+.tree-layout-controls-header span,
+.tree-layout-control small,
+.tree-layout-controls-status {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.tree-layout-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.tree-layout-control label {
+  display: grid;
+  gap: 4px;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tree-layout-control label span {
+  display: grid;
+  gap: 1px;
+}
+
+.tree-layout-control output {
+  color: #e0f2fe;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tree-layout-control input[type="range"] {
+  width: 100%;
+  accent-color: #38bdf8;
+}
+
+.tree-layout-control button {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tree-layout-control button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.tree-layout-controls-status {
+  margin: 0;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(127, 29, 29, 0.82);
+  color: #fecaca;
+  font-weight: 700;
 }
 
 .node-action-btn {

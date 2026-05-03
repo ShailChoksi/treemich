@@ -2,7 +2,7 @@
  * @file Message types exchanged with the layout Web Worker.
  */
 
-import type { Person, PhotoCluster, RelationshipRecord } from "../../lib/api";
+import type { Person, PhotoCluster, RelationshipRecord, TreeLayoutPreferences } from "../../lib/api";
 import type { GraphLayoutMode, NodePosition } from "./layout";
 
 export type LayoutWorkerPayload = {
@@ -12,6 +12,7 @@ export type LayoutWorkerPayload = {
     mode?: GraphLayoutMode;
     photoClusters?: PhotoCluster[];
     primaryFamilyUnitByPersonId?: Record<string, string>;
+    treeLayoutPreferences?: TreeLayoutPreferences;
   };
 };
 

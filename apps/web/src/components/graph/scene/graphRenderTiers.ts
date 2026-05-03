@@ -50,3 +50,11 @@ export const resolveNodeRenderTier = ({
 
 export const shouldRenderInstancedVisualForNode = ({ hasThumbnail }: { hasThumbnail: boolean }) =>
   !hasThumbnail;
+
+export const shouldShowNodeLabel = ({
+  visibilityBucket,
+  isPriorityNode
+}: {
+  visibilityBucket: GraphVisibilityBucket;
+  isPriorityNode: boolean;
+}) => isPriorityNode || visibilityBucket === "near" || visibilityBucket === "mid";

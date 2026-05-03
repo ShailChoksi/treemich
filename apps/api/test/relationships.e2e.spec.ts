@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import AdmZip from "adm-zip";
+import { buildGraphLayoutRevision, positionGenerationTreePeople } from "@treemich/shared";
 import { HttpConflictError, HttpNotFoundError, HttpValidationError } from "../src/lifeEvents/errors.js";
 import { EXPENSIVE_ROUTE_RATE_LIMIT } from "../src/routes/rate-limit.js";
 import type { AppServices } from "../src/services.js";
@@ -2012,24 +2013,28 @@ describe("Treemich API routes", () => {
   });
 
   describe("graph layout route", () => {
-    it("returns deterministic layout positions and revision", async () => {
+    it("returns generation-tree v2 layout positions and revision", async () => {
+      const payload = {
+        people: [
+          { id: "p1", name: "Alex" },
+          { id: "p2", name: "Blair" },
+          { id: "p3", name: "Casey" }
+        ],
+        relationships: [
+          { fromPersonId: "p1", toPersonId: "p2", type: "SPOUSE_OF" as const },
+          { fromPersonId: "p1", toPersonId: "p3", type: "PARENT_OF" as const }
+        ],
+        viewMode: "family" as const,
+        familyViewStyle: "generationTree" as const,
+        selectedPersonId: "p1",
+        treeLayoutPreferences: {
+          horizontalSpacing: 1.25
+        }
+      };
       const response = await app.inject({
         method: "POST",
         url: "/graph/layout",
-        payload: {
-          people: [
-            { id: "p1", name: "Alex" },
-            { id: "p2", name: "Blair" },
-            { id: "p3", name: "Casey" }
-          ],
-          relationships: [
-            { fromPersonId: "p1", toPersonId: "p2", type: "SPOUSE_OF" },
-            { fromPersonId: "p1", toPersonId: "p3", type: "PARENT_OF" }
-          ],
-          viewMode: "family",
-          familyViewStyle: "generationTree",
-          selectedPersonId: "p1"
-        }
+        payload
       });
 
       expect(response.statusCode).toBe(200);
@@ -2038,12 +2043,16 @@ describe("Treemich API routes", () => {
         algorithmVersion: string;
         positionsByPersonId: Record<string, [number, number, number]>;
       };
-      expect(body.algorithmVersion).toBe("server-hybrid-v1");
-      expect(body.layoutRevision.length).toBeGreaterThan(1);
+      const expectedRevision = buildGraphLayoutRevision(payload);
+      const expectedPositions = Object.fromEntries(
+        positionGenerationTreePeople(payload.people, payload.relationships, {
+          treeLayoutPreferences: payload.treeLayoutPreferences
+        }).map((entry) => [entry.person.id, entry.position])
+      );
+      expect(body.algorithmVersion).toBe("server-generation-tree-v2");
+      expect(body.layoutRevision).toBe(expectedRevision);
       expect(Object.keys(body.positionsByPersonId).sort()).toEqual(["p1", "p2", "p3"]);
-      expect(body.positionsByPersonId.p1).toBeDefined();
-      expect(body.positionsByPersonId.p2).toBeDefined();
-      expect(body.positionsByPersonId.p3).toBeDefined();
+      expect(body.positionsByPersonId).toEqual(expectedPositions);
     });
 
     it("returns same revision and positions for same topology", async () => {
@@ -2079,6 +2088,42 @@ describe("Treemich API routes", () => {
       };
       expect(firstBody.layoutRevision).toBe(secondBody.layoutRevision);
       expect(secondBody.positionsByPersonId).toEqual(firstBody.positionsByPersonId);
+    });
+
+    it("changes layout revision when tree layout preferences change", async () => {
+      const basePayload = {
+        people: [
+          { id: "p1", name: "Alex" },
+          { id: "p2", name: "Blair" },
+          { id: "p3", name: "Casey" }
+        ],
+        relationships: [
+          { fromPersonId: "p1", toPersonId: "p2", type: "SPOUSE_OF" as const },
+          { fromPersonId: "p1", toPersonId: "p3", type: "PARENT_OF" as const }
+        ],
+        viewMode: "family" as const,
+        familyViewStyle: "generationTree" as const
+      };
+      const compact = await app.inject({
+        method: "POST",
+        url: "/graph/layout",
+        payload: {
+          ...basePayload,
+          treeLayoutPreferences: { horizontalSpacing: 0.5 }
+        }
+      });
+      const loose = await app.inject({
+        method: "POST",
+        url: "/graph/layout",
+        payload: {
+          ...basePayload,
+          treeLayoutPreferences: { horizontalSpacing: 2 }
+        }
+      });
+
+      expect(compact.statusCode).toBe(200);
+      expect(loose.statusCode).toBe(200);
+      expect(compact.json().layoutRevision).not.toBe(loose.json().layoutRevision);
     });
   });
 

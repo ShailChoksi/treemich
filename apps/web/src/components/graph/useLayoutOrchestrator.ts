@@ -4,7 +4,7 @@
 
 import { buildGraphLayoutRevision } from "@treemich/shared";
 import { useEffect, useMemo, useRef } from "react";
-import type { Person, PhotoCluster, RelationshipRecord } from "../../lib/api";
+import type { Person, PhotoCluster, RelationshipRecord, TreeLayoutPreferences } from "../../lib/api";
 import { getLocalStorageItem } from "../../lib/safeLocalStorage";
 import { positionPeople, type GraphLayoutMode, type NodePosition } from "./layout";
 import { shouldUseLayoutWorker, TOPOLOGY_LAYOUT_CACHE_MAX_ENTRIES } from "./graphLayoutConstants";
@@ -12,7 +12,7 @@ import { evictOldestMapEntriesToCap } from "./topologyLayoutCache";
 import { useGraphLayoutWorker } from "./useGraphLayoutWorker";
 import type { LayoutWorkerPayload } from "./layoutWorkerTypes";
 
-const SERVER_LAYOUT_ALGORITHM_VERSION = "server-generation-tree-v1";
+const SERVER_LAYOUT_ALGORITHM_VERSION = "server-generation-tree-v2";
 
 const shouldMeasureGraphLayout =
   typeof window !== "undefined" && getLocalStorageItem("treemich:profile-graph-layout") === "1";
@@ -37,6 +37,7 @@ type UseLayoutOrchestratorOptions = {
   photoClusters: PhotoCluster[];
   viewMode: GraphLayoutMode;
   primaryFamilyUnitByPersonId?: Record<string, string>;
+  treeLayoutPreferences?: TreeLayoutPreferences;
   selectedPersonId: string | null;
   serverPositionsByPersonId?: Record<string, NodePosition>;
   serverLayoutRevision?: string | null;
@@ -50,6 +51,7 @@ export const useLayoutOrchestrator = ({
   photoClusters,
   viewMode,
   primaryFamilyUnitByPersonId,
+  treeLayoutPreferences,
   selectedPersonId,
   serverPositionsByPersonId,
   serverLayoutRevision,
@@ -77,9 +79,17 @@ export const useLayoutOrchestrator = ({
         viewMode,
         familyViewStyle: "generationTree",
         selectedPersonId,
-        primaryFamilyUnitByPersonId
+        primaryFamilyUnitByPersonId,
+        treeLayoutPreferences
       }),
-    [people, primaryFamilyUnitByPersonId, selectedPersonId, topologyRelationships, viewMode]
+    [
+      people,
+      primaryFamilyUnitByPersonId,
+      selectedPersonId,
+      topologyRelationships,
+      treeLayoutPreferences,
+      viewMode
+    ]
   );
   const hasCompleteServerCoverage = useMemo(() => {
     if (!serverPositionsByPersonId) {
@@ -110,10 +120,18 @@ export const useLayoutOrchestrator = ({
       options: {
         mode: viewMode,
         photoClusters,
-        primaryFamilyUnitByPersonId
+        primaryFamilyUnitByPersonId,
+        treeLayoutPreferences
       }
     }),
-    [topologyRelationships, people, photoClusters, primaryFamilyUnitByPersonId, viewMode]
+    [
+      topologyRelationships,
+      people,
+      photoClusters,
+      primaryFamilyUnitByPersonId,
+      treeLayoutPreferences,
+      viewMode
+    ]
   );
   const { workerPositions, isWorkerFallbackEnabled } = useGraphLayoutWorker({
     shouldUseWorker,
@@ -138,7 +156,8 @@ export const useLayoutOrchestrator = ({
       positionPeople(people, topologyRelationships, {
         mode: viewMode,
         photoClusters,
-        primaryFamilyUnitByPersonId
+        primaryFamilyUnitByPersonId,
+        treeLayoutPreferences
       })
     );
     topologyLayoutCacheRef.current.set(
@@ -158,6 +177,7 @@ export const useLayoutOrchestrator = ({
     peopleById,
     photoClusters,
     primaryFamilyUnitByPersonId,
+    treeLayoutPreferences,
     shouldUseServerLayout,
     shouldUseWorker,
     viewMode

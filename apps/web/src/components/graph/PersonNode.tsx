@@ -371,6 +371,7 @@ const PersonNodeMinimalComponent = ({
   isSelected,
   isHovered,
   isHighlighted,
+  showLabel = false,
   instancedVisuals = false,
   onClick,
   onHover
@@ -409,6 +410,19 @@ const PersonNodeMinimalComponent = ({
           <primitive object={ringGeometryLite} attach="geometry" />
           <primitive object={ringMaterial} attach="material" />
         </mesh>
+      ) : null}
+      {showLabel ? (
+        <Text
+          position={[0, -0.9, 0]}
+          fontSize={isSelected ? 0.21 : 0.19}
+          color={isSelected ? "#f8fafc" : isHighlighted ? "#c4b5fd" : "#e2e8f0"}
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.012}
+          outlineColor="#0f172a"
+        >
+          {truncateName(person.name)}
+        </Text>
       ) : null}
     </Billboard>
   );

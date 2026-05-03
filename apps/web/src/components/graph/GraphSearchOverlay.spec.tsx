@@ -15,7 +15,7 @@ type RenderResult = {
   root: Root;
 };
 
-const renderOverlay = (onCenterView = vi.fn()): RenderResult => {
+const renderOverlay = (): RenderResult => {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -27,13 +27,10 @@ const renderOverlay = (onCenterView = vi.fn()): RenderResult => {
         onSearchTermChange={() => undefined}
         onSearchSubmit={(event) => event.preventDefault()}
         onClearSearch={() => undefined}
-        onCenterView={onCenterView}
         people={[person({ id: "person-1", name: "Alex" })]}
         searchFeedback={null}
         treeValidationIssueCount={null}
         treeValidationEngineDisabled={false}
-        providerFilter="all"
-        onProviderFilterChange={() => undefined}
       />
     );
   });
@@ -47,7 +44,7 @@ afterEach(() => {
 });
 
 describe("GraphSearchOverlay", () => {
-  it("exposes onboarding anchors for relationship search and new person", () => {
+  it("exposes onboarding anchor for relationship search", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -59,20 +56,16 @@ describe("GraphSearchOverlay", () => {
           onSearchTermChange={() => undefined}
           onSearchSubmit={(event) => event.preventDefault()}
           onClearSearch={() => undefined}
-          onCenterView={() => undefined}
           people={[]}
           searchFeedback={null}
           treeValidationIssueCount={null}
           treeValidationEngineDisabled={false}
-          providerFilter="all"
-          onProviderFilterChange={() => undefined}
-          onNewPerson={() => undefined}
         />
       );
     });
 
     expect(container.querySelector('[data-onboarding-target="relationship-search"]')).not.toBeNull();
-    expect(container.querySelector('[data-onboarding-target="new-person"]')).not.toBeNull();
+    expect(container.querySelector('[data-onboarding-target="new-person"]')).toBeNull();
 
     act(() => {
       root.unmount();
@@ -80,30 +73,11 @@ describe("GraphSearchOverlay", () => {
     container.remove();
   });
 
-  it("renders a center view button with an accessible label", () => {
+  it("does not render controls owned by the graph chrome", () => {
     const { container, root } = renderOverlay();
 
-    const centerButton = container.querySelector('button[aria-label="Center graph view"]');
-    expect(centerButton).toBeTruthy();
-    expect(centerButton?.textContent).toContain("Center view");
-
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  it("invokes center view callback when clicked", () => {
-    const onCenterView = vi.fn();
-    const { container, root } = renderOverlay(onCenterView);
-    const centerButton = container.querySelector('button[aria-label="Center graph view"]');
-    expect(centerButton).toBeTruthy();
-
-    act(() => {
-      centerButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(onCenterView).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('button[aria-label="Center graph view"]')).toBeNull();
+    expect(container.querySelector(".graph-provider-filter-control")).toBeNull();
 
     act(() => {
       root.unmount();
@@ -129,13 +103,10 @@ describe("GraphSearchOverlay", () => {
           onSearchTermChange={() => undefined}
           onSearchSubmit={(event) => event.preventDefault()}
           onClearSearch={() => undefined}
-          onCenterView={() => undefined}
           people={people}
           searchFeedback={null}
           treeValidationIssueCount={null}
           treeValidationEngineDisabled={false}
-          providerFilter="all"
-          onProviderFilterChange={() => undefined}
         />
       );
     });
@@ -160,7 +131,6 @@ describe("GraphSearchOverlay", () => {
           onSearchTermChange={() => undefined}
           onSearchSubmit={(event) => event.preventDefault()}
           onClearSearch={() => undefined}
-          onCenterView={() => undefined}
           people={[
             person({ id: "standalone-1", name: "Standalone Person" }),
             person({ id: "immich-1", name: "Immich Person" })
@@ -168,8 +138,6 @@ describe("GraphSearchOverlay", () => {
           searchFeedback={null}
           treeValidationIssueCount={null}
           treeValidationEngineDisabled={false}
-          providerFilter="all"
-          onProviderFilterChange={() => undefined}
         />
       );
     });
@@ -179,43 +147,6 @@ describe("GraphSearchOverlay", () => {
     );
     expect(options).toContain("Standalone Person");
     expect(options).not.toContain("Immich Person");
-
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  it("notifies when linked status filter changes", () => {
-    const onProviderFilterChange = vi.fn();
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    act(() => {
-      root.render(
-        <GraphSearchOverlay
-          searchTerm=""
-          onSearchTermChange={() => undefined}
-          onSearchSubmit={(event) => event.preventDefault()}
-          onClearSearch={() => undefined}
-          onCenterView={() => undefined}
-          people={[person({ id: "person-1", name: "Alex" })]}
-          searchFeedback={null}
-          treeValidationIssueCount={null}
-          treeValidationEngineDisabled={false}
-          providerFilter="all"
-          onProviderFilterChange={onProviderFilterChange}
-        />
-      );
-    });
-
-    const select = container.querySelector(".graph-search-provider-filter select") as HTMLSelectElement;
-    act(() => {
-      select.value = "unlinked";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    expect(onProviderFilterChange).toHaveBeenCalledWith("unlinked");
 
     act(() => {
       root.unmount();
@@ -235,7 +166,6 @@ describe("GraphSearchOverlay", () => {
           onSearchTermChange={() => undefined}
           onSearchSubmit={(event) => event.preventDefault()}
           onClearSearch={() => undefined}
-          onCenterView={() => undefined}
           people={[
             person({
               id: "p1",
@@ -261,8 +191,6 @@ describe("GraphSearchOverlay", () => {
           searchFeedback={null}
           treeValidationIssueCount={null}
           treeValidationEngineDisabled={false}
-          providerFilter="all"
-          onProviderFilterChange={() => undefined}
         />
       );
     });

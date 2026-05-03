@@ -61,6 +61,7 @@ import type {
   SourceRecord,
   TargetMediaLinkRecord,
   TreemichPersonProfile,
+  TreeLayoutPreferences,
   UserPreferences,
   ValidationFindingRecord,
   ValidationFindingStatus,
@@ -124,6 +125,7 @@ export type {
   SourceRecord,
   TargetMediaLinkRecord,
   TreemichPersonProfile,
+  TreeLayoutPreferences,
   UserPreferences,
   ValidationFindingRecord,
   ValidationFindingStatus,
@@ -570,7 +572,7 @@ export const createRelationship = async (
   toPersonId: string,
   relationshipType: RelationshipType,
   spouseDates?: SpouseRelationshipDates
-) => {
+): Promise<{ direct: RelationshipRecord; inverse: RelationshipRecord }> => {
   const response = await fetch(
     `${treemichApi}/people/${fromPersonId}/relationships`,
     withSession({
@@ -586,7 +588,7 @@ export const createRelationship = async (
     })
   );
   await ensureOk(response, "Failed to create relationship");
-  return response.json();
+  return (await response.json()) as { direct: RelationshipRecord; inverse: RelationshipRecord };
 };
 
 /** `PATCH /people/:fromPersonId/relationships` — update marriage/divorce dates only. */

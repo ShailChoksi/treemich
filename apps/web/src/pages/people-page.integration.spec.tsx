@@ -256,7 +256,10 @@ describe("PeoplePage + life events (integration)", () => {
       }
 
       if (method === "POST" && url.includes("/people/p1/relationships")) {
-        return jsonResponse({ id: "r2", fromPersonId: "p1", toPersonId: "p3", type: "SIBLING_OF" });
+        return jsonResponse({
+          direct: { id: "r2", fromPersonId: "p1", toPersonId: "p2", type: "SIBLING_OF" },
+          inverse: { id: "r3", fromPersonId: "p2", toPersonId: "p1", type: "SIBLING_OF" }
+        });
       }
 
       if (method === "GET" && url.includes("/people/p1/life-events/validation")) {
@@ -749,7 +752,7 @@ describe("PeoplePage + life events (integration)", () => {
     container.remove();
   });
 
-  it("refreshes people and relationships after creating a relationship while save state is active", async () => {
+  it("merges created relationships without refetching graph data while save state is active", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -768,25 +771,25 @@ describe("PeoplePage + life events (integration)", () => {
     }
 
     await act(async () => {
-      await latestGraphProps?.graphHandlers.onCreateRelationship?.("p1", "p3", "SIBLING_OF");
+      await latestGraphProps?.graphHandlers.onCreateRelationship?.("p1", "p2", "SIBLING_OF");
     });
 
     for (let i = 0; i < 30; i += 1) {
       await act(async () => {
         await Promise.resolve();
       });
-      if (latestGraphProps?.graphModel.people?.some((person) => person.id === "p3")) {
+      if (latestGraphProps?.graphModel.relationships?.some((relationship) => relationship.id === "r2")) {
         break;
       }
     }
 
-    expect(peopleLoadCount).toBeGreaterThanOrEqual(2);
-    expect(relationshipsLoadCount).toBeGreaterThanOrEqual(2);
-    expect(latestGraphProps?.graphModel.people).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "p3", name: "Charlie Brown" })])
-    );
+    expect(peopleLoadCount).toBe(1);
+    expect(relationshipsLoadCount).toBe(1);
     expect(latestGraphProps?.graphModel.relationships).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "r2", toPersonId: "p3" })])
+      expect.arrayContaining([
+        expect.objectContaining({ id: "r2", fromPersonId: "p1", toPersonId: "p2" }),
+        expect.objectContaining({ id: "r3", fromPersonId: "p2", toPersonId: "p1" })
+      ])
     );
 
     act(() => {

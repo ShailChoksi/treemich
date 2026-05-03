@@ -4,7 +4,13 @@
 
 import { useMemo } from "react";
 import { filterGraphLayoutTopologyRelationships } from "@treemich/shared";
-import type { Person, PhotoCluster, PhotoCooccurrenceEdge, RelationshipRecord } from "../../lib/api";
+import type {
+  Person,
+  PhotoCluster,
+  PhotoCooccurrenceEdge,
+  RelationshipRecord,
+  TreeLayoutPreferences
+} from "../../lib/api";
 import { buildParentChildIndex, type GraphLayoutMode, type NodePosition } from "./layout";
 import { relationshipFilterForType, type GraphFilterVisibility } from "./relationshipStyles";
 import type { GraphVisibilityThresholds } from "./graphVisibility";
@@ -18,6 +24,7 @@ type UseGraphLayoutStateOptions = {
   photoClusters: PhotoCluster[];
   viewMode: GraphLayoutMode;
   primaryFamilyUnitByPersonId?: Record<string, string>;
+  treeLayoutPreferences?: TreeLayoutPreferences;
   showSingleFamilyTree?: boolean;
   singleFamilyTreeAnchorId?: string | null;
   filterVisibility: GraphFilterVisibility;
@@ -130,6 +137,7 @@ export const useGraphLayoutState = ({
   photoClusters,
   viewMode,
   primaryFamilyUnitByPersonId,
+  treeLayoutPreferences,
   filterVisibility,
   selectedPersonId,
   hoveredPersonId,
@@ -156,6 +164,7 @@ export const useGraphLayoutState = ({
     photoClusters,
     viewMode,
     primaryFamilyUnitByPersonId,
+    treeLayoutPreferences,
     selectedPersonId,
     serverPositionsByPersonId,
     serverLayoutRevision,

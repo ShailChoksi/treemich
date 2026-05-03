@@ -14,6 +14,7 @@ import { NodeInstancedMesh, type NodeRenderTier } from "./NodeInstancedMesh";
 import { useAnimatedNodeTransforms } from "./useAnimatedNodeTransforms";
 import {
   resolveNodeRenderTier,
+  shouldShowNodeLabel,
   shouldRenderInstancedVisualForNode,
   shouldUseLargeGraphTier
 } from "./graphRenderTiers";
@@ -22,6 +23,7 @@ export {
   resolveNodeRenderTier,
   shouldRenderDetailedNode,
   shouldRenderInstancedVisualForNode,
+  shouldShowNodeLabel,
   shouldUseLargeGraphTier
 } from "./graphRenderTiers";
 
@@ -176,7 +178,7 @@ export const AnimatedNodes = ({
           largeGraphTierEnabled,
           hasThumbnail: showThumbnail
         });
-        const showLabel = isPriorityNode || visibilityBucket === "near" || visibilityBucket === "mid";
+        const showLabel = shouldShowNodeLabel({ visibilityBucket, isPriorityNode });
 
         return (
           <group key={person.id} ref={(group) => registerGroupRef(person.id, group)}>
@@ -186,7 +188,7 @@ export const AnimatedNodes = ({
                 isSelected={isSelected}
                 isHovered={isHovered}
                 isHighlighted={isHighlighted}
-                showLabel={false}
+                showLabel={showLabel}
                 instancedVisuals
                 onClick={onNodeClick}
                 onHover={onNodeHover}

@@ -480,7 +480,7 @@ describe("useGraphLayoutState", () => {
           selectedPersonId: "person-0",
           serverPositionsByPersonId,
           serverLayoutRevision,
-          serverLayoutAlgorithmVersion: "server-generation-tree-v1",
+          serverLayoutAlgorithmVersion: "server-generation-tree-v2",
           renderLimit: 120
         })
       );

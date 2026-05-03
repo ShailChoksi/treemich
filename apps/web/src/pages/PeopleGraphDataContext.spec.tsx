@@ -52,7 +52,10 @@ describe("PeopleGraphDataContext", () => {
         return jsonResponse({ layoutRevision: "lr1", algorithmVersion: "alg1", positionsByPersonId: {} });
       }
       if (method === "POST" && url.includes("/people/p1/relationships")) {
-        return jsonResponse({ id: "r2", fromPersonId: "p1", toPersonId: "p2", type: "SIBLING_OF" });
+        return jsonResponse({
+          direct: { id: "r2", fromPersonId: "p1", toPersonId: "p2", type: "SIBLING_OF" },
+          inverse: { id: "r3", fromPersonId: "p2", toPersonId: "p1", type: "SIBLING_OF" }
+        });
       }
       if (method === "GET" && url.includes("/tree/validation")) {
         return jsonResponse({ findings: [], engineDisabled: false, persist: false });
@@ -275,10 +278,10 @@ describe("PeopleGraphDataContext", () => {
     });
   });
 
-  it("uses full layout refresh for structural relationship creation", async () => {
-    let graph: ReturnType<typeof usePeopleGraphData> | null = null;
+  it("merges created relationships locally without a full graph refresh burst", async () => {
+    const graphBox: { current: ReturnType<typeof usePeopleGraphData> | null } = { current: null };
     const Probe = () => {
-      graph = usePeopleGraphData();
+      graphBox.current = usePeopleGraphData();
       return null;
     };
     const container = document.createElement("div");
@@ -303,7 +306,7 @@ describe("PeopleGraphDataContext", () => {
     vi.mocked(globalThis.fetch).mockClear();
 
     await act(async () => {
-      await graph?.onCreateRelationship("p1", "p2", "SIBLING_OF");
+      await graphBox.current?.onCreateRelationship("p1", "p2", "SIBLING_OF");
       await Promise.resolve();
     });
 
@@ -311,9 +314,18 @@ describe("PeopleGraphDataContext", () => {
       url: typeof input === "string" ? input : input.toString(),
       method: init?.method ?? "GET"
     }));
-    expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(true);
-    expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(true);
-    expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(true);
+    expect(calls.filter((call) => call.method === "POST" && call.url.includes("/people/p1/relationships"))).toHaveLength(
+      1
+    );
+    expect(calls.some((call) => call.method === "GET" && /\/people$/.test(call.url))).toBe(false);
+    expect(calls.some((call) => call.method === "GET" && call.url.includes("/relationships?"))).toBe(false);
+    expect(calls.some((call) => call.method === "GET" && call.url.endsWith("/user/preferences"))).toBe(false);
+    expect(calls.some((call) => call.method === "POST" && call.url.includes("/graph/layout"))).toBe(false);
+    expect(graphBox.current?.relationships).toEqual([
+      { id: "r1", fromPersonId: "p1", toPersonId: "p2", type: "PARENT_OF" },
+      { id: "r2", fromPersonId: "p1", toPersonId: "p2", type: "SIBLING_OF" },
+      { id: "r3", fromPersonId: "p2", toPersonId: "p1", type: "SIBLING_OF" }
+    ]);
 
     act(() => {
       root.unmount();
