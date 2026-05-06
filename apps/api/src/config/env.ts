@@ -69,6 +69,7 @@ const envSchema = z
     TREEMICH_ENCRYPTION_KEY: z
       .string()
       .regex(/^[0-9a-fA-F]{64}$/, "TREEMICH_ENCRYPTION_KEY must be a 64-character hex string"),
+    TREEMICH_ADMIN_PASSWORD: z.string().min(1).default("treemich-pass!"),
     TREEMICH_SESSION_COOKIE_NAME: z.string().min(1).default("treemich_session"),
     TREEMICH_SESSION_TTL_MS: z.coerce
       .number()

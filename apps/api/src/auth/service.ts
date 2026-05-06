@@ -163,7 +163,7 @@ export class AuthService {
   constructor() {}
 
   private userState(
-    user: Pick<SessionWithUserLight["user"], "id" | "email" | "name">,
+    user: Pick<SessionWithUserLight["user"], "id" | "email" | "name" | "isAdmin" | "passwordChangeRequired">,
     linkStatus?: AuthState["linkStatus"]
   ): AuthState {
     return {
@@ -171,7 +171,9 @@ export class AuthService {
       user: {
         id: user.id,
         email: user.email ?? user.id,
-        name: user.name ?? user.email ?? user.id
+        name: user.name ?? user.email ?? user.id,
+        isAdmin: user.isAdmin,
+        passwordChangeRequired: user.passwordChangeRequired
       },
       linkStatus: linkStatus ?? { linked: false }
     };
@@ -383,6 +385,23 @@ export class AuthService {
     await prisma.treemichSession.deleteMany({
       where: {
         tokenHash
+      }
+    });
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await prisma.treemichUser.findUnique({ where: { id: userId } });
+    if (!user || !user.passwordHash) {
+      throw new TreemichAuthError("Invalid password");
+    }
+    if (!verifyPassword(currentPassword, user.passwordHash)) {
+      throw new TreemichAuthError("Invalid password");
+    }
+    await prisma.treemichUser.update({
+      where: { id: userId },
+      data: {
+        passwordHash: hashPassword(newPassword),
+        passwordChangeRequired: false
       }
     });
   }

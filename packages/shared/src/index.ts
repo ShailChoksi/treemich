@@ -378,6 +378,8 @@ export type AuthUser = {
   id: string;
   email: string;
   name: string;
+  isAdmin: boolean;
+  passwordChangeRequired: boolean;
 };
 
 /** Whether the Treemich account is linked to Immich and basic link metadata. */

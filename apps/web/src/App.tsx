@@ -1,11 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AuthScreen } from "./components/AuthScreen";
+import { SetPasswordScreen } from "./components/SetPasswordScreen";
 import {
   CURRENT_ONBOARDING_TUTORIAL_VERSION,
   OnboardingTutorialDialog
 } from "./components/OnboardingTutorialDialog";
 import {
+  changePassword,
   getCurrentUser,
   getLinkStatus,
   getUserPreferences,
@@ -285,6 +287,18 @@ export const App = () => {
 
   if (!authState?.authenticated || !currentUser) {
     return <AuthScreen busy={isSubmittingAuth} error={authError} onSubmit={handleLogin} />;
+  }
+
+  if (currentUser.passwordChangeRequired) {
+    return (
+      <SetPasswordScreen
+        onSubmit={changePassword}
+        onPasswordChanged={async () => {
+          const freshState = await getCurrentUser();
+          setAuthState(freshState);
+        }}
+      />
+    );
   }
 
   return (

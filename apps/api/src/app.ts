@@ -14,6 +14,7 @@ import { readCookie } from "./auth/request.js";
 import { TreemichAuthError } from "./auth/service.js";
 import { env, maxGedcomMediaArchiveBytes } from "./config/env.js";
 import { prisma } from "./db/client.js";
+import { registerAuthChangePasswordRoute } from "./routes/auth.change-password.js";
 import { registerAuthImmichLinkRoutes } from "./routes/auth.immich-link.js";
 import { registerAuthLinkStatusRoute } from "./routes/auth.link-status.js";
 import { registerAuthLoginRoute } from "./routes/auth.login.js";
@@ -217,6 +218,7 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerAuthLoginRoute);
   app.register(registerAuthLogoutRoute);
   app.register(registerAuthMeRoute);
+  app.register(registerAuthChangePasswordRoute);
   app.register(registerAuthImmichLinkRoutes);
   app.register(registerAuthLinkStatusRoute);
   app.register(registerCooccurrenceComputePostRoute);
