@@ -12,8 +12,10 @@ type RenderResult = {
 };
 
 const renderScreen = (
-  onSubmit = vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
-  onPasswordChanged = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+  onSubmit = vi
+    .fn<(currentPassword: string, newPassword: string) => Promise<void>>()
+    .mockResolvedValue(undefined),
+  onPasswordChanged = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
 ): RenderResult => {
   const container = document.createElement("div");
   document.body.appendChild(container);
