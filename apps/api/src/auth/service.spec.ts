@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   treemichUserFindFirst: vi.fn(),
+  treemichUserFindUnique: vi.fn(),
   treemichUserFindMany: vi.fn(),
   treemichUserCount: vi.fn(),
   treemichUserCreate: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock("../db/client.js", () => ({
   prisma: {
     treemichUser: {
       findFirst: mocks.treemichUserFindFirst,
+      findUnique: mocks.treemichUserFindUnique,
       findMany: mocks.treemichUserFindMany,
       count: mocks.treemichUserCount,
       create: mocks.treemichUserCreate,
@@ -315,5 +317,68 @@ describe("AuthService.linkImmichAccount", () => {
 
     expect(result).toEqual({ linked: false });
     expect(mocks.linkedImmichAccountDeleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
+  });
+});
+
+describe("AuthService.changePassword", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("updates passwordHash and clears passwordChangeRequired on success", async () => {
+    const { hashPassword } = await import("./crypto.js");
+    const user = makeUser({ passwordHash: hashPassword("old-pass"), passwordChangeRequired: true });
+    mocks.treemichUserFindUnique.mockResolvedValue(user);
+    mocks.treemichUserUpdate.mockResolvedValue({
+      ...user,
+      passwordHash: "new-hash",
+      passwordChangeRequired: false
+    });
+
+    const { AuthService } = await import("./service.js");
+    await new AuthService().changePassword("user-1", "old-pass", "new-password-123");
+
+    expect(mocks.treemichUserUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "user-1" },
+        data: expect.objectContaining({
+          passwordHash: expect.any(String),
+          passwordChangeRequired: false
+        })
+      })
+    );
+  });
+
+  it("throws TreemichAuthError when current password is wrong", async () => {
+    const { hashPassword } = await import("./crypto.js");
+    const user = makeUser({ passwordHash: hashPassword("correct-pass") });
+    mocks.treemichUserFindUnique.mockResolvedValue(user);
+
+    const { AuthService, TreemichAuthError } = await import("./service.js");
+    await expect(
+      new AuthService().changePassword("user-1", "wrong-pass", "new-password-123")
+    ).rejects.toBeInstanceOf(TreemichAuthError);
+    expect(mocks.treemichUserUpdate).not.toHaveBeenCalled();
+  });
+
+  it("throws TreemichAuthError when user does not exist", async () => {
+    mocks.treemichUserFindUnique.mockResolvedValue(null);
+
+    const { AuthService, TreemichAuthError } = await import("./service.js");
+    await expect(
+      new AuthService().changePassword("nonexistent", "pass", "new-pass-123")
+    ).rejects.toBeInstanceOf(TreemichAuthError);
+    expect(mocks.treemichUserUpdate).not.toHaveBeenCalled();
+  });
+
+  it("throws TreemichAuthError when user has no passwordHash", async () => {
+    const user = makeUser({ passwordHash: null });
+    mocks.treemichUserFindUnique.mockResolvedValue(user);
+
+    const { AuthService, TreemichAuthError } = await import("./service.js");
+    await expect(new AuthService().changePassword("user-1", "pass", "new-pass-123")).rejects.toBeInstanceOf(
+      TreemichAuthError
+    );
+    expect(mocks.treemichUserUpdate).not.toHaveBeenCalled();
   });
 });

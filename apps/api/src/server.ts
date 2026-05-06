@@ -4,12 +4,31 @@
  */
 
 import { buildApp } from "./app.js";
+import { hashPassword } from "./auth/crypto.js";
 import { CooccurrenceConflictError } from "./cooccurrence/service.js";
 import { env, isAutoPhase4FamilyBackfillEnabled } from "./config/env.js";
 import { prisma } from "./db/client.js";
 import { maybeRunAutomaticPhase4FamilyBackfillOnBoot } from "./families/phase4BackfillFromParentEdges.js";
 
 const app = buildApp();
+
+const ensureAdminAccount = async () => {
+  const existingAdmin = await prisma.treemichUser.findFirst({ where: { isAdmin: true } });
+  if (existingAdmin) {
+    return;
+  }
+  await prisma.treemichUser.create({
+    data: {
+      email: "admin@treemich.local",
+      name: "Admin",
+      passwordHash: hashPassword(env.TREEMICH_ADMIN_PASSWORD),
+      isAdmin: true,
+      passwordChangeRequired: true
+    }
+  });
+  app.log.info("Seeded default admin account (admin@treemich.local)");
+};
+
 const sessionCleanupIntervalMs = 60 * 60_000;
 const cooccurrenceRefreshIntervalMs = 5 * 60_000;
 let sessionCleanupTimer: NodeJS.Timeout | null = null;
@@ -107,6 +126,7 @@ const shutdown = async (signal: NodeJS.Signals) => {
 
 const start = async () => {
   try {
+    await ensureAdminAccount();
     await app.listen({ port: env.PORT, host: "::" });
     app.log.info(`Treemich API listening on ${env.PORT}`);
     app.log.info(`Treemich API booted at ${new Date().toISOString()}`);

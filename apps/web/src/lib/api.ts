@@ -325,6 +325,19 @@ export const getCurrentUser = async (): Promise<AuthState> => {
   return (await response.json()) as AuthState;
 };
 
+/** `POST /auth/change-password` — change current user password and clear forced-change flag. */
+export const changePassword = async (currentPassword: string, newPassword: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/auth/change-password`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword })
+    })
+  );
+  await ensureOk(response, "Failed to change password");
+};
+
 /** `GET /auth/link-status` — Immich link metadata. */
 export const getLinkStatus = async (): Promise<LinkStatus> => {
   const response = await fetchWithRetry(`${treemichApi}/auth/link-status`, {
