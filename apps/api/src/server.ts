@@ -15,7 +15,10 @@ const app = buildApp();
 const ensureAdminAccount = async () => {
   const existingAdmin = await prisma.treemichUser.findFirst({ where: { isAdmin: true } });
   if (existingAdmin) {
-    if (!verifyPassword(env.TREEMICH_ADMIN_PASSWORD, existingAdmin.passwordHash)) {
+    if (
+      !existingAdmin.passwordHash ||
+      !verifyPassword(env.TREEMICH_ADMIN_PASSWORD, existingAdmin.passwordHash)
+    ) {
       await prisma.treemichUser.update({
         where: { id: existingAdmin.id },
         data: { passwordHash: hashPassword(env.TREEMICH_ADMIN_PASSWORD) }
