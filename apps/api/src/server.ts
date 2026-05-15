@@ -4,40 +4,13 @@
  */
 
 import { buildApp } from "./app.js";
-import { hashPassword, verifyPassword } from "./auth/crypto.js";
+import { ensureAdminAccount } from "./auth/adminSeed.js";
 import { CooccurrenceConflictError } from "./cooccurrence/service.js";
 import { env, isAutoPhase4FamilyBackfillEnabled } from "./config/env.js";
 import { prisma } from "./db/client.js";
 import { maybeRunAutomaticPhase4FamilyBackfillOnBoot } from "./families/phase4BackfillFromParentEdges.js";
 
 const app = buildApp();
-
-const ensureAdminAccount = async () => {
-  const existingAdmin = await prisma.treemichUser.findFirst({ where: { isAdmin: true } });
-  if (existingAdmin) {
-    if (
-      !existingAdmin.passwordHash ||
-      !verifyPassword(env.TREEMICH_ADMIN_PASSWORD, existingAdmin.passwordHash)
-    ) {
-      await prisma.treemichUser.update({
-        where: { id: existingAdmin.id },
-        data: { passwordHash: hashPassword(env.TREEMICH_ADMIN_PASSWORD) }
-      });
-      app.log.info("Updated admin password from env TREEMICH_ADMIN_PASSWORD");
-    }
-    return;
-  }
-  await prisma.treemichUser.create({
-    data: {
-      email: "admin@treemich.local",
-      name: "Admin",
-      passwordHash: hashPassword(env.TREEMICH_ADMIN_PASSWORD),
-      isAdmin: true,
-      passwordChangeRequired: true
-    }
-  });
-  app.log.info("Seeded default admin account (admin@treemich.local)");
-};
 
 const sessionCleanupIntervalMs = 60 * 60_000;
 const cooccurrenceRefreshIntervalMs = 5 * 60_000;

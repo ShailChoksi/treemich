@@ -214,6 +214,21 @@ describe("AuthService.loginWithPassword", () => {
 
     expect(state.user).toEqual({ id: "user-1", email: "alice@example.com", name: "alice@example.com" });
   });
+
+  it("reflects passwordChangeRequired flag from the user record", async () => {
+    const { hashPassword } = await import("./crypto.js");
+    const user = makeUser({
+      passwordHash: hashPassword("pw"),
+      passwordChangeRequired: true
+    });
+    mocks.treemichUserFindMany.mockResolvedValue([user]);
+    mocks.treemichUserCount.mockResolvedValue(1);
+
+    const { AuthService } = await import("./service.js");
+    const { state } = await new AuthService().loginWithPassword("alice@example.com", "pw");
+
+    expect(state.user!.passwordChangeRequired).toBe(true);
+  });
 });
 
 describe("AuthService.loginWithImmich", () => {

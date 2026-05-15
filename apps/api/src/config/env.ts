@@ -71,6 +71,8 @@ const envSchema = z
       .regex(/^[0-9a-fA-F]{64}$/, "TREEMICH_ENCRYPTION_KEY must be a 64-character hex string"),
     TREEMICH_ADMIN_PASSWORD: z.string().min(1).default("treemich-pass!"),
     TREEMICH_SESSION_COOKIE_NAME: z.string().min(1).default("treemich_session"),
+    /** When false, omit the Secure attribute on session cookies (required when serving over HTTP). */
+    TREEMICH_COOKIE_SECURE: z.string().optional(),
     TREEMICH_SESSION_TTL_MS: z.coerce
       .number()
       .int()
@@ -155,6 +157,16 @@ export type AppEnv = z.infer<typeof envSchema>;
 
 /** Parsed and validated environment (throws at boot on misconfiguration). */
 export const env: AppEnv = envSchema.parse(process.env);
+
+/** Whether to set the Secure flag on session cookies. Defaults to true in production. */
+export const isCookieSecure = (cookieSecure?: string, nodeEnv?: string): boolean => {
+  const secure = cookieSecure ?? env.TREEMICH_COOKIE_SECURE;
+  const envName = nodeEnv ?? env.NODE_ENV;
+  if (secure == null || secure === "") {
+    return envName === "production";
+  }
+  return !["0", "false", "no", "off"].includes(secure.toLowerCase());
+};
 
 /** Feature flag: whole-tree validation engine (`GET /tree/validation`). */
 export const isTreeValidationEngineEnabled = (): boolean => {

@@ -1,3 +1,4 @@
+import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppServices } from "../services.js";
@@ -36,7 +37,8 @@ vi.mock("../config/env.js", () => ({
     TREEMICH_ENCRYPTION_KEY: "a".repeat(64),
     IMMICH_BASE_URL: "https://immich.example",
     IMMICH_HTTP_TIMEOUT_MS: 5000
-  }
+  },
+  isCookieSecure: () => false
 }));
 
 vi.mock("../integrations/immich/client.js", () => ({
@@ -107,13 +109,16 @@ describe("Treemich login to people route integration", () => {
       getConnectedPersonIds: vi.fn(async (_userId: string, personIds: string[]) => new Set(personIds))
     };
     const authService = new AuthService();
-    const app = Fastify();
+    const app = Fastify({ trustProxy: false });
     app.decorateRequest("auth", null);
     app.decorate("services", {
       authService,
       personService,
       relationshipService
     } as unknown as AppServices);
+
+    await app.register(rateLimit, { max: 300, timeWindow: 60_000 });
+
     app.addHook("preHandler", async (request, reply) => {
       if (request.routeOptions.url === "/auth/login") {
         return;
@@ -127,6 +132,7 @@ describe("Treemich login to people route integration", () => {
         throw error;
       }
     });
+
     await app.register(registerAuthLoginRoute);
     registerPeopleGetRoute(app);
 

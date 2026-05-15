@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { env } from "../config/env.js";
+import { env, isCookieSecure } from "../config/env.js";
 import { TreemichAuthError, type AuthenticatedRequestContext } from "./service.js";
 
 const sessionCookieName = env.TREEMICH_SESSION_COOKIE_NAME;
@@ -40,7 +40,7 @@ export const setSessionCookie = (reply: FastifyReply, token: string) => {
     "SameSite=Lax",
     `Max-Age=${Math.floor(env.TREEMICH_SESSION_TTL_MS / 1000)}`
   ];
-  appendCookieAttribute(parts, env.NODE_ENV === "production", "Secure");
+  appendCookieAttribute(parts, isCookieSecure(), "Secure");
   reply.header("Set-Cookie", parts.join("; "));
 };
 
@@ -53,7 +53,7 @@ export const clearSessionCookie = (reply: FastifyReply) => {
     "Max-Age=0",
     "Expires=Thu, 01 Jan 1970 00:00:00 GMT"
   ];
-  appendCookieAttribute(parts, env.NODE_ENV === "production", "Secure");
+  appendCookieAttribute(parts, isCookieSecure(), "Secure");
   reply.header("Set-Cookie", parts.join("; "));
 };
 

@@ -120,6 +120,54 @@ describe("session-auth API helpers", () => {
       })
     );
   });
+
+  it("login throws ApiHttpError when credentials are wrong", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ statusCode: 401, error: "Invalid email or password" }), {
+        status: 401,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    await expect(login("alice@example.com", "wrongpass")).rejects.toThrow("Invalid email or password");
+  });
+
+  it("login throws ApiHttpError on server error", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ statusCode: 500, error: "Internal Server Error" }), {
+        status: 500,
+        headers: { "content-type": "application/json" }
+      })
+    );
+
+    await expect(login("alice@example.com", "somepass")).rejects.toThrow("Internal Server Error");
+  });
+
+  it("login returns passwordChangeRequired flag from the auth state", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          authenticated: true,
+          user: {
+            id: "u1",
+            email: "admin@treemich.local",
+            name: "Admin",
+            isAdmin: true,
+            passwordChangeRequired: true
+          },
+          linkStatus: { linked: false }
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      )
+    );
+
+    const result = await login("admin@treemich.local", "treemich-pass!");
+    expect(result.authenticated).toBe(true);
+    expect(result.user?.passwordChangeRequired).toBe(true);
+  });
 });
 
 describe("immichPersonUrl", () => {

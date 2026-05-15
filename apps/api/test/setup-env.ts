@@ -10,3 +10,4 @@ process.env.TREEMICH_SESSION_COOKIE_NAME ??= "treemich_session";
 process.env.TREEMICH_SESSION_TTL_MS ??= "2592000000";
 process.env.RATE_LIMIT_MAX ??= "300";
 process.env.RATE_LIMIT_TIME_WINDOW_MS ??= "60000";
+process.env.TREEMICH_COOKIE_SECURE ??= "false";

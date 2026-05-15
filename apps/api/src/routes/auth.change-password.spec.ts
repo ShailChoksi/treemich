@@ -28,7 +28,8 @@ vi.mock("../config/env.js", () => ({
     TREEMICH_SESSION_TTL_MS: 2_592_000_000,
     TREEMICH_ENCRYPTION_KEY: "a".repeat(64),
     TREEMICH_ADMIN_PASSWORD: "treemich-pass!"
-  }
+  },
+  isCookieSecure: () => false
 }));
 
 vi.mock("../integrations/immich/client.js", () => ({
