@@ -23,7 +23,7 @@ The Focus Anchor's ancestors and descendants reached via parent/child relationsh
 _Avoid_: family line (vague), connected component (graph islands, not kinship direction)
 
 **Collateral depth**:
-How many generations of descendants to include from each sibling of a Bloodline person in Focus mode. Zero means those siblings appear without their children.
+How many generations of descendants to include from each sibling of a Bloodline person in Focus mode. Zero means those siblings appear without their children. UI label: **Siblings** (preference key remains `focusCollateralDepth`).
 _Avoid_: cousin mode, extended family (vague)
 
 **Family**:

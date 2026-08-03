@@ -506,18 +506,21 @@ const PeopleGraph3DComponent = ({
       return;
     }
     setFocusAnchorId(null);
-    setGraphViewPreferences((current) => {
-      if (!current.showSingleFamilyTree) {
-        return current;
-      }
-      const next = { ...current, showSingleFamilyTree: false };
-      void onPreferencesChange({
-        graphFilterVisibility: next.filterVisibility,
-        showSingleFamilyTree: false
-      });
-      return next;
+    setGraphViewPreferences((current) =>
+      current.showSingleFamilyTree ? { ...current, showSingleFamilyTree: false } : current
+    );
+    // Persist outside the setState updater — updaters can run during render.
+    void onPreferencesChange({
+      graphFilterVisibility: filterVisibility,
+      showSingleFamilyTree: false
     });
-  }, [focusAnchorLocked, onPreferencesChange, selectedPersonId, showSingleFamilyTree]);
+  }, [
+    filterVisibility,
+    focusAnchorLocked,
+    onPreferencesChange,
+    selectedPersonId,
+    showSingleFamilyTree
+  ]);
 
   useEffect(() => {
     if (!focusPersonId) {
@@ -719,16 +722,20 @@ const PeopleGraph3DComponent = ({
   );
 
   const handleToggleFilter = (filter: GraphFilter) => {
-    setGraphViewPreferences((current) => {
-      const next = {
-        ...current,
-        filterVisibility: { ...current.filterVisibility, [filter]: !current.filterVisibility[filter] }
-      };
-      void onPreferencesChange({
-        graphFilterVisibility: next.filterVisibility,
-        showSingleFamilyTree: next.showSingleFamilyTree
-      });
-      return next;
+    const nextFilterVisibility = {
+      ...filterVisibility,
+      [filter]: !filterVisibility[filter]
+    };
+    setGraphViewPreferences((current) => ({
+      ...current,
+      filterVisibility: {
+        ...current.filterVisibility,
+        [filter]: !current.filterVisibility[filter]
+      }
+    }));
+    void onPreferencesChange({
+      graphFilterVisibility: nextFilterVisibility,
+      showSingleFamilyTree
     });
   };
 
@@ -767,11 +774,9 @@ const PeopleGraph3DComponent = ({
         setFocusAnchorLocked(false);
         setFocusAnchorId(null);
       }
-      setGraphViewPreferences((current) => {
-        const updated = { ...current, showSingleFamilyTree: next };
-        persistFocusPreferences({ showSingleFamilyTree: next });
-        return updated;
-      });
+      setGraphViewPreferences((current) => ({ ...current, showSingleFamilyTree: next }));
+      // Persist outside the setState updater — updaters can run during render.
+      persistFocusPreferences({ showSingleFamilyTree: next });
     },
     [focusAnchorLocked, persistFocusPreferences, selectedPersonId]
   );
@@ -981,6 +986,7 @@ const PeopleGraph3DComponent = ({
               showNodeActionButtons={!addRelativeIntent}
               hoveredPersonId={hoveredPersonId}
               highlightedPersonIds={highlightedPersonIds}
+              focusLockedPersonId={focusAnchorLocked ? focusAnchorId : null}
               setHoveredPersonId={setHoveredPersonId}
               onNodeClick={handlePersonNodeClick}
               onNodeActionOpen={handleOpenAddRelative}
