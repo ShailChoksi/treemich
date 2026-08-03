@@ -26,9 +26,7 @@ describe("GraphLayerControls", () => {
     });
 
     expect(container.textContent).toContain("Focus mode");
-    const focusInput = container.querySelector(
-      ".graph-focus-mode-toggle input"
-    ) as HTMLInputElement | null;
+    const focusInput = container.querySelector(".graph-focus-mode-toggle input") as HTMLInputElement | null;
     expect(focusInput).not.toBeNull();
     expect(focusInput?.disabled).toBe(true);
     expect(focusInput?.checked).toBe(false);
@@ -56,9 +54,7 @@ describe("GraphLayerControls", () => {
       );
     });
 
-    const focusInput = container.querySelector(
-      ".graph-focus-mode-toggle input"
-    ) as HTMLInputElement | null;
+    const focusInput = container.querySelector(".graph-focus-mode-toggle input") as HTMLInputElement | null;
     expect(focusInput?.disabled).toBe(false);
     expect(focusInput?.checked).toBe(true);
 

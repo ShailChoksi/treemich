@@ -54,11 +54,7 @@ const LockIcon = ({ locked }: { locked: boolean }) => (
     focusable="false"
   >
     <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-    {locked ? (
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    ) : (
-      <path d="M7 11V7a5 5 0 0 1 9.9-1" />
-    )}
+    {locked ? <path d="M7 11V7a5 5 0 0 1 10 0v4" /> : <path d="M7 11V7a5 5 0 0 1 9.9-1" />}
   </svg>
 );
 
@@ -149,9 +145,7 @@ export const FocusSelectionChrome = ({
       onClick={onToggleLock}
       aria-pressed={locked}
       aria-label={
-        locked && lockedAnchorLabel
-          ? `${LOCK_FOCUS_TOOLTIP} (${lockedAnchorLabel})`
-          : LOCK_FOCUS_TOOLTIP
+        locked && lockedAnchorLabel ? `${LOCK_FOCUS_TOOLTIP} (${lockedAnchorLabel})` : LOCK_FOCUS_TOOLTIP
       }
       title={LOCK_FOCUS_TOOLTIP}
     >

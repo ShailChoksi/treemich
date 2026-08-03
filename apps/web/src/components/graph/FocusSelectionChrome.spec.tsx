@@ -43,9 +43,7 @@ describe("FocusSelectionChrome", () => {
     );
     expect(siblingsLabel?.getAttribute("title")).toContain("siblings only");
 
-    const lockButton = container.querySelector(
-      "button.graph-focus-lock-button"
-    ) as HTMLButtonElement | null;
+    const lockButton = container.querySelector("button.graph-focus-lock-button") as HTMLButtonElement | null;
     expect(lockButton).not.toBeNull();
     expect(lockButton?.getAttribute("title")).toBe("Lock Focus on Person");
     expect(lockButton?.getAttribute("aria-label")).toBe("Lock Focus on Person");

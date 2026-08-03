@@ -514,13 +514,7 @@ const PeopleGraph3DComponent = ({
       graphFilterVisibility: filterVisibility,
       showSingleFamilyTree: false
     });
-  }, [
-    filterVisibility,
-    focusAnchorLocked,
-    onPreferencesChange,
-    selectedPersonId,
-    showSingleFamilyTree
-  ]);
+  }, [filterVisibility, focusAnchorLocked, onPreferencesChange, selectedPersonId, showSingleFamilyTree]);
 
   useEffect(() => {
     if (!focusPersonId) {

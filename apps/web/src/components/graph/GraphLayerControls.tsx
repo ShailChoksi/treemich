@@ -69,7 +69,10 @@ export const GraphLayerControls = ({
           <input type="checkbox" checked={filterVisibility.pets} onChange={() => onToggleFilter("pets")} />
           Pets
         </label>
-        <label className="graph-focus-mode-toggle" title={focusDisabled ? "Select a person first" : undefined}>
+        <label
+          className="graph-focus-mode-toggle"
+          title={focusDisabled ? "Select a person first" : undefined}
+        >
           <input
             type="checkbox"
             checked={showFocusMode}

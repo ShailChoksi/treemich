@@ -106,8 +106,7 @@ export const useGraphLayoutState = ({
   serverLayoutAlgorithmVersion,
   renderLimit
 }: UseGraphLayoutStateOptions) => {
-  const focusActive =
-    showSingleFamilyTree && viewMode === "family" && Boolean(focusAnchorId);
+  const focusActive = showSingleFamilyTree && viewMode === "family" && Boolean(focusAnchorId);
 
   const membershipIds = useMemo(() => {
     if (!focusActive) {
@@ -139,9 +138,7 @@ export const useGraphLayoutState = ({
     if (!membershipIds) {
       return relationships;
     }
-    return relationships.filter((relationship) =>
-      relationshipTouchesMembership(relationship, membershipIds)
-    );
+    return relationships.filter((relationship) => relationshipTouchesMembership(relationship, membershipIds));
   }, [membershipIds, relationships]);
 
   const graphRelationships = useMemo(

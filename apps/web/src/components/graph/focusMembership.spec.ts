@@ -33,12 +33,14 @@ const buildTicket01Graph = (): RelationshipRecord[] => [
 
 describe("pickFocusMembershipIds", () => {
   it("returns empty without an anchor", () => {
-    expect(pickFocusMembershipIds(buildTicket01Graph(), {
-      anchorId: null,
-      ancestorDepth: 3,
-      descendantDepth: 3,
-      collateralDepth: 0
-    }).size).toBe(0);
+    expect(
+      pickFocusMembershipIds(buildTicket01Graph(), {
+        anchorId: null,
+        ancestorDepth: 3,
+        descendantDepth: 3,
+        collateralDepth: 0
+      }).size
+    ).toBe(0);
   });
 
   it("matches ticket 01 table at collateral depth 0", () => {
@@ -114,10 +116,7 @@ describe("pickFocusMembershipIds", () => {
   });
 
   it("respects ancestor depth cap", () => {
-    const relationships = [
-      rel("Mid", "A", "PARENT_OF"),
-      rel("Far", "Mid", "PARENT_OF")
-    ];
+    const relationships = [rel("Mid", "A", "PARENT_OF"), rel("Far", "Mid", "PARENT_OF")];
     const ids = pickFocusMembershipIds(relationships, {
       anchorId: "A",
       ancestorDepth: 1,

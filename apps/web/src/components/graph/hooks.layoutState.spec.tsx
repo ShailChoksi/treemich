@@ -784,15 +784,12 @@ describe("useGraphLayoutState", () => {
 
 describe("pickFocusMembershipIds via layout export", () => {
   it("returns empty without an anchor", () => {
-    const ids = pickFocusMembershipIds(
-      [{ fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" } as never],
-      {
-        anchorId: null,
-        ancestorDepth: 3,
-        descendantDepth: 3,
-        collateralDepth: 0
-      }
-    );
+    const ids = pickFocusMembershipIds([{ fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" } as never], {
+      anchorId: null,
+      ancestorDepth: 3,
+      descendantDepth: 3,
+      collateralDepth: 0
+    });
     expect(ids.size).toBe(0);
   });
 });

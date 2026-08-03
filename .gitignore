@@ -6,3 +6,6 @@ dist
 coverage
 apps/api/generated
 *.tsbuildinfo
+.scratch/
+.continue/
+**/graphify-out/

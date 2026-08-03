@@ -29,4 +29,3 @@ _Avoid_: cousin mode, extended family (vague)
 **Family**:
 A GEDCOM-style union of up to two parents with children and pedigree types — a stored record, not a graph viewing mode.
 _Avoid_: using Family to mean Focus mode or the whole tree
-

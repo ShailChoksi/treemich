@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+apps/api/generated
+*.tsbuildinfo
+.env
+.env.*
+package-lock.json
+.scratch/
+.continue/
+**/graphify-out/
+datasets/

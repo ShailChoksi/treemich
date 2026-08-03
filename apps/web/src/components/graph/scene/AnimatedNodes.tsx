@@ -174,11 +174,7 @@ export const AnimatedNodes = ({
         const isHighlighted = highlightedPersonIds.has(person.id);
         const showFocusLock = focusLockedPersonId === person.id;
         const isPriorityNode =
-          isSelected ||
-          isHovered ||
-          isHighlighted ||
-          showFocusLock ||
-          prioritizedNodeIds.has(person.id);
+          isSelected || isHovered || isHighlighted || showFocusLock || prioritizedNodeIds.has(person.id);
         const visibilityBucket = renderVisibilityBucketByPersonId.get(person.id) ?? "near";
         const showThumbnail = thumbnailNodeIds.has(person.id);
         const renderTier = resolveNodeRenderTier({

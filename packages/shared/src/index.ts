@@ -518,24 +518,9 @@ export const userPreferencesSchema = z.object({
   graphRenderLimit: z.number().int().min(minGraphRenderLimit).max(maxGraphRenderLimit).optional(),
   /** Focus mode on/off (legacy preference name). */
   showSingleFamilyTree: z.boolean().optional(),
-  focusAncestorDepth: z
-    .number()
-    .int()
-    .min(minFocusBloodlineDepth)
-    .max(maxFocusBloodlineDepth)
-    .optional(),
-  focusDescendantDepth: z
-    .number()
-    .int()
-    .min(minFocusBloodlineDepth)
-    .max(maxFocusBloodlineDepth)
-    .optional(),
-  focusCollateralDepth: z
-    .number()
-    .int()
-    .min(minFocusCollateralDepth)
-    .max(maxFocusCollateralDepth)
-    .optional(),
+  focusAncestorDepth: z.number().int().min(minFocusBloodlineDepth).max(maxFocusBloodlineDepth).optional(),
+  focusDescendantDepth: z.number().int().min(minFocusBloodlineDepth).max(maxFocusBloodlineDepth).optional(),
+  focusCollateralDepth: z.number().int().min(minFocusCollateralDepth).max(maxFocusCollateralDepth).optional(),
   lastSelectedPersonId: z.string().nullable().optional(),
   primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional(),
   dismissedSuggestions: z.array(z.string()).optional(),
