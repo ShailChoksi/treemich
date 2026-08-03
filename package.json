@@ -26,7 +26,10 @@
     "minimatch": "10.2.5",
     "vite": "8.0.9",
     "react": "19.2.5",
-    "react-dom": "19.2.5"
+    "react-dom": "19.2.5",
+    "fast-uri": "3.1.5",
+    "find-my-way": "9.7.0",
+    "adm-zip": "0.6.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
