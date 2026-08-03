@@ -19,7 +19,10 @@ import { getPersonDisplayLabel } from "../../lib/personDisplay";
 
 type ReportKind = "pedigree" | "descendants" | "family-group" | "register";
 type ReportResult =
-  PedigreeReportResponse | DescendantReportResponse | FamilyGroupSheetResponse | RegisterReportResponse;
+  | PedigreeReportResponse
+  | DescendantReportResponse
+  | FamilyGroupSheetResponse
+  | RegisterReportResponse;
 
 type Props = {
   people: Person[];
