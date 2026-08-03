@@ -3,7 +3,12 @@
  */
 
 import { useMemo } from "react";
-import { filterGraphLayoutTopologyRelationships } from "@treemich/shared";
+import {
+  defaultFocusAncestorDepth,
+  defaultFocusCollateralDepth,
+  defaultFocusDescendantDepth,
+  filterGraphLayoutTopologyRelationships
+} from "@treemich/shared";
 import type {
   Person,
   PhotoCluster,
@@ -12,6 +17,7 @@ import type {
   TreeLayoutPreferences
 } from "../../lib/api";
 import { buildParentChildIndex, type GraphLayoutMode, type NodePosition } from "./layout";
+import { pickFocusMembershipIds } from "./focusMembership";
 import { relationshipFilterForType, type GraphFilterVisibility } from "./relationshipStyles";
 import type { GraphVisibilityThresholds } from "./graphVisibility";
 import { useLayoutOrchestrator } from "./useLayoutOrchestrator";
@@ -25,8 +31,13 @@ type UseGraphLayoutStateOptions = {
   viewMode: GraphLayoutMode;
   primaryFamilyUnitByPersonId?: Record<string, string>;
   treeLayoutPreferences?: TreeLayoutPreferences;
+  /** Focus mode on/off (family layout only). */
   showSingleFamilyTree?: boolean;
-  singleFamilyTreeAnchorId?: string | null;
+  /** Session Focus Anchor person id. */
+  focusAnchorId?: string | null;
+  focusAncestorDepth?: number;
+  focusDescendantDepth?: number;
+  focusCollateralDepth?: number;
   filterVisibility: GraphFilterVisibility;
   selectedPersonId: string | null;
   hoveredPersonId: string | null;
@@ -41,6 +52,7 @@ type UseGraphLayoutStateOptions = {
 };
 
 export { pickNearest } from "./pickNearest";
+export { pickFocusMembershipIds } from "./focusMembership";
 
 export const filterRelationshipsByLayer = (
   relationships: RelationshipRecord[],
@@ -66,69 +78,8 @@ const buildGraphRelationships = (
   };
 };
 
-export const pickSingleFamilyTreeIds = (
-  relationships: RelationshipRecord[],
-  preferredPersonId: string | null
-) => {
-  const adjacency = new Map<string, Set<string>>();
-  for (const relationship of relationships) {
-    const from = relationship.fromPersonId;
-    const to = relationship.toPersonId;
-    if (!adjacency.has(from)) {
-      adjacency.set(from, new Set());
-    }
-    if (!adjacency.has(to)) {
-      adjacency.set(to, new Set());
-    }
-    adjacency.get(from)?.add(to);
-    adjacency.get(to)?.add(from);
-  }
-
-  const visited = new Set<string>();
-  const components: string[][] = [];
-  for (const startId of adjacency.keys()) {
-    if (visited.has(startId)) {
-      continue;
-    }
-    const queue = [startId];
-    visited.add(startId);
-    const component: string[] = [];
-    let queueIndex = 0;
-    while (queueIndex < queue.length) {
-      const currentId = queue[queueIndex];
-      queueIndex += 1;
-      if (!currentId) {
-        continue;
-      }
-      component.push(currentId);
-      for (const nextId of adjacency.get(currentId) ?? []) {
-        if (visited.has(nextId)) {
-          continue;
-        }
-        visited.add(nextId);
-        queue.push(nextId);
-      }
-    }
-    components.push(component);
-  }
-
-  if (components.length === 0) {
-    return preferredPersonId ? new Set([preferredPersonId]) : new Set<string>();
-  }
-
-  if (preferredPersonId) {
-    const selectedComponent = components.find((component) => component.includes(preferredPersonId));
-    if (selectedComponent) {
-      return new Set(selectedComponent);
-    }
-    return new Set([preferredPersonId]);
-  }
-
-  const largestComponent = components.reduce((largest, current) =>
-    current.length > largest.length ? current : largest
-  );
-  return new Set(largestComponent);
-};
+const relationshipTouchesMembership = (relationship: RelationshipRecord, membership: Set<string>) =>
+  membership.has(relationship.fromPersonId) && membership.has(relationship.toPersonId);
 
 export const useGraphLayoutState = ({
   people,
@@ -138,6 +89,11 @@ export const useGraphLayoutState = ({
   viewMode,
   primaryFamilyUnitByPersonId,
   treeLayoutPreferences,
+  showSingleFamilyTree = false,
+  focusAnchorId = null,
+  focusAncestorDepth = defaultFocusAncestorDepth,
+  focusDescendantDepth = defaultFocusDescendantDepth,
+  focusCollateralDepth = defaultFocusCollateralDepth,
   filterVisibility,
   selectedPersonId,
   hoveredPersonId,
@@ -150,15 +106,56 @@ export const useGraphLayoutState = ({
   serverLayoutAlgorithmVersion,
   renderLimit
 }: UseGraphLayoutStateOptions) => {
+  const focusActive =
+    showSingleFamilyTree && viewMode === "family" && Boolean(focusAnchorId);
+
+  const membershipIds = useMemo(() => {
+    if (!focusActive) {
+      return null;
+    }
+    return pickFocusMembershipIds(relationships, {
+      anchorId: focusAnchorId,
+      ancestorDepth: focusAncestorDepth,
+      descendantDepth: focusDescendantDepth,
+      collateralDepth: focusCollateralDepth
+    });
+  }, [
+    focusActive,
+    focusAnchorId,
+    focusAncestorDepth,
+    focusCollateralDepth,
+    focusDescendantDepth,
+    relationships
+  ]);
+
+  const layoutPeople = useMemo(() => {
+    if (!membershipIds) {
+      return people;
+    }
+    return people.filter((person) => membershipIds.has(person.id));
+  }, [membershipIds, people]);
+
+  const layoutRelationships = useMemo(() => {
+    if (!membershipIds) {
+      return relationships;
+    }
+    return relationships.filter((relationship) =>
+      relationshipTouchesMembership(relationship, membershipIds)
+    );
+  }, [membershipIds, relationships]);
+
   const graphRelationships = useMemo(
-    () => buildGraphRelationships(relationships, filterVisibility),
-    [filterVisibility, relationships]
+    () => buildGraphRelationships(layoutRelationships, filterVisibility),
+    [filterVisibility, layoutRelationships]
   );
   const filteredRelationships = graphRelationships.filteredRelationships;
   const topologyRelationships = graphRelationships.topologyRelationships;
-  const peopleById = useMemo(() => new Map(people.map((person) => [person.id, person])), [people]);
+  const peopleById = useMemo(
+    () => new Map(layoutPeople.map((person) => [person.id, person])),
+    [layoutPeople]
+  );
   const { positionedPeople, topologyRevision, isWorkerLayoutPending } = useLayoutOrchestrator({
-    people,
+    people: layoutPeople,
     peopleById,
     topologyRelationships,
     photoClusters,

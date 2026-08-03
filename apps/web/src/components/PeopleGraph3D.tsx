@@ -3,8 +3,15 @@
  */
 
 import {
+  defaultFocusAncestorDepth,
+  defaultFocusCollateralDepth,
+  defaultFocusDescendantDepth,
   defaultGraphRenderLimit,
   defaultTreeLayoutPreferences,
+  maxFocusBloodlineDepth,
+  maxFocusCollateralDepth,
+  minFocusBloodlineDepth,
+  minFocusCollateralDepth,
   resolveTreeLayoutPreferences,
   type ResolvedTreeLayoutPreferences
 } from "@treemich/shared";
@@ -52,6 +59,7 @@ import { GraphSceneProvider } from "./graph/GraphSceneContext";
 import { GraphSurfaceOverlays } from "./graph/GraphSurfaceOverlays";
 import { GraphFooterStatus } from "./graph/GraphFooterStatus";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { FocusSelectionChrome } from "./graph/FocusSelectionChrome";
 import { GraphLayerControls } from "./graph/GraphLayerControls";
 import { TreeLayoutControls } from "./graph/TreeLayoutControls";
 import { useGraphKeyboardNavigation } from "./graph/useGraphKeyboardNavigation";
@@ -136,7 +144,7 @@ const resolveInitialGraphViewPreferences = (
     (defaultToNoRelationshipsGraphState
       ? noRelationshipsGraphFilterVisibility
       : defaultGraphFilterVisibility),
-  showSingleFamilyTree: false
+  showSingleFamilyTree: savedPreferences?.showSingleFamilyTree ?? false
 });
 
 /**
@@ -205,7 +213,17 @@ const PeopleGraph3DComponent = ({
   );
   const [treeLayoutSaveError, setTreeLayoutSaveError] = useState<string | null>(null);
   const { filterVisibility, showSingleFamilyTree } = graphViewPreferences;
-  const [singleFamilyTreeAnchorId, setSingleFamilyTreeAnchorId] = useState<string | null>(null);
+  const [focusAnchorId, setFocusAnchorId] = useState<string | null>(null);
+  const [focusAnchorLocked, setFocusAnchorLocked] = useState(false);
+  const [focusAncestorDepth, setFocusAncestorDepth] = useState(
+    () => savedPreferences?.focusAncestorDepth ?? defaultFocusAncestorDepth
+  );
+  const [focusDescendantDepth, setFocusDescendantDepth] = useState(
+    () => savedPreferences?.focusDescendantDepth ?? defaultFocusDescendantDepth
+  );
+  const [focusCollateralDepth, setFocusCollateralDepth] = useState(
+    () => savedPreferences?.focusCollateralDepth ?? defaultFocusCollateralDepth
+  );
   const { initialCameraState, startupIntent } = useMemo(() => {
     const restored = resolveRestoredCameraSnapshotForCanvas({
       sessionKind: graphCameraSessionKind,
@@ -265,6 +283,9 @@ const PeopleGraph3DComponent = ({
       )
     );
     setTreeLayoutPreferences(resolveTreeLayoutPreferences(savedPreferences.treeLayoutPreferences));
+    setFocusAncestorDepth(savedPreferences.focusAncestorDepth ?? defaultFocusAncestorDepth);
+    setFocusDescendantDepth(savedPreferences.focusDescendantDepth ?? defaultFocusDescendantDepth);
+    setFocusCollateralDepth(savedPreferences.focusCollateralDepth ?? defaultFocusCollateralDepth);
   }, [defaultToNoRelationshipsGraphState, noRelationshipsGraphFilterVisibility, savedPreferences]);
 
   useEffect(
@@ -323,7 +344,10 @@ const PeopleGraph3DComponent = ({
     primaryFamilyUnitByPersonId: savedPreferences?.primaryFamilyUnitByPersonId,
     treeLayoutPreferences,
     showSingleFamilyTree,
-    singleFamilyTreeAnchorId,
+    focusAnchorId,
+    focusAncestorDepth,
+    focusDescendantDepth,
+    focusCollateralDepth,
     filterVisibility,
     selectedPersonId,
     hoveredPersonId,
@@ -470,13 +494,30 @@ const PeopleGraph3DComponent = ({
 
   useEffect(() => {
     if (!showSingleFamilyTree) {
-      setSingleFamilyTreeAnchorId(null);
+      setFocusAnchorId(null);
+      setFocusAnchorLocked(false);
+      return;
+    }
+    if (focusAnchorLocked) {
       return;
     }
     if (selectedPersonId) {
-      setSingleFamilyTreeAnchorId(selectedPersonId);
+      setFocusAnchorId(selectedPersonId);
+      return;
     }
-  }, [selectedPersonId, showSingleFamilyTree]);
+    setFocusAnchorId(null);
+    setGraphViewPreferences((current) => {
+      if (!current.showSingleFamilyTree) {
+        return current;
+      }
+      const next = { ...current, showSingleFamilyTree: false };
+      void onPreferencesChange({
+        graphFilterVisibility: next.filterVisibility,
+        showSingleFamilyTree: false
+      });
+      return next;
+    });
+  }, [focusAnchorLocked, onPreferencesChange, selectedPersonId, showSingleFamilyTree]);
 
   useEffect(() => {
     if (!focusPersonId) {
@@ -691,6 +732,102 @@ const PeopleGraph3DComponent = ({
     });
   };
 
+  const persistFocusPreferences = useCallback(
+    (patch: {
+      showSingleFamilyTree?: boolean;
+      focusAncestorDepth?: number;
+      focusDescendantDepth?: number;
+      focusCollateralDepth?: number;
+    }) => {
+      void onPreferencesChange({
+        showSingleFamilyTree: patch.showSingleFamilyTree ?? showSingleFamilyTree,
+        focusAncestorDepth: patch.focusAncestorDepth ?? focusAncestorDepth,
+        focusDescendantDepth: patch.focusDescendantDepth ?? focusDescendantDepth,
+        focusCollateralDepth: patch.focusCollateralDepth ?? focusCollateralDepth
+      });
+    },
+    [
+      focusAncestorDepth,
+      focusCollateralDepth,
+      focusDescendantDepth,
+      onPreferencesChange,
+      showSingleFamilyTree
+    ]
+  );
+
+  const handleShowFocusModeChange = useCallback(
+    (next: boolean) => {
+      if (next && !selectedPersonId && !focusAnchorLocked) {
+        return;
+      }
+      if (next && selectedPersonId) {
+        setFocusAnchorId(selectedPersonId);
+      }
+      if (!next) {
+        setFocusAnchorLocked(false);
+        setFocusAnchorId(null);
+      }
+      setGraphViewPreferences((current) => {
+        const updated = { ...current, showSingleFamilyTree: next };
+        persistFocusPreferences({ showSingleFamilyTree: next });
+        return updated;
+      });
+    },
+    [focusAnchorLocked, persistFocusPreferences, selectedPersonId]
+  );
+
+  const handleToggleFocusLock = useCallback(() => {
+    setFocusAnchorLocked((locked) => {
+      if (locked) {
+        if (selectedPersonId) {
+          setFocusAnchorId(selectedPersonId);
+        }
+        return false;
+      }
+      const anchorId = focusAnchorId ?? selectedPersonId;
+      if (!anchorId) {
+        return false;
+      }
+      setFocusAnchorId(anchorId);
+      return true;
+    });
+  }, [focusAnchorId, selectedPersonId]);
+
+  const clampBloodlineDepth = (value: number) =>
+    Math.min(maxFocusBloodlineDepth, Math.max(minFocusBloodlineDepth, value));
+  const clampCollateralDepth = (value: number) =>
+    Math.min(maxFocusCollateralDepth, Math.max(minFocusCollateralDepth, value));
+
+  const handleAncestorDepthChange = useCallback(
+    (value: number) => {
+      const next = clampBloodlineDepth(value);
+      setFocusAncestorDepth(next);
+      persistFocusPreferences({ focusAncestorDepth: next });
+    },
+    [persistFocusPreferences]
+  );
+  const handleDescendantDepthChange = useCallback(
+    (value: number) => {
+      const next = clampBloodlineDepth(value);
+      setFocusDescendantDepth(next);
+      persistFocusPreferences({ focusDescendantDepth: next });
+    },
+    [persistFocusPreferences]
+  );
+  const handleCollateralDepthChange = useCallback(
+    (value: number) => {
+      const next = clampCollateralDepth(value);
+      setFocusCollateralDepth(next);
+      persistFocusPreferences({ focusCollateralDepth: next });
+    },
+    [persistFocusPreferences]
+  );
+
+  const lockedAnchorPerson = focusAnchorId
+    ? (people.find((person) => person.id === focusAnchorId) ?? null)
+    : null;
+  const lockedAnchorLabel = lockedAnchorPerson ? getPersonDisplayLabel(lockedAnchorPerson) : null;
+
   const scheduleTreeLayoutPreferenceSave = useCallback(
     (next: ResolvedTreeLayoutPreferences) => {
       if (treeLayoutSaveTimeoutRef.current !== null) {
@@ -761,7 +898,26 @@ const PeopleGraph3DComponent = ({
               <option value="unlinked">Not linked to Immich</option>
             </select>
           </label>
-          <GraphLayerControls filterVisibility={filterVisibility} onToggleFilter={handleToggleFilter} />
+          <GraphLayerControls
+            filterVisibility={filterVisibility}
+            onToggleFilter={handleToggleFilter}
+            showFocusMode={showSingleFamilyTree}
+            onShowFocusModeChange={handleShowFocusModeChange}
+            canEnableFocus={Boolean(selectedPersonId) || (showSingleFamilyTree && focusAnchorLocked)}
+          />
+          {showSingleFamilyTree ? (
+            <FocusSelectionChrome
+              ancestorDepth={focusAncestorDepth}
+              descendantDepth={focusDescendantDepth}
+              collateralDepth={focusCollateralDepth}
+              locked={focusAnchorLocked}
+              lockedAnchorLabel={lockedAnchorLabel}
+              onAncestorDepthChange={handleAncestorDepthChange}
+              onDescendantDepthChange={handleDescendantDepthChange}
+              onCollateralDepthChange={handleCollateralDepthChange}
+              onToggleLock={handleToggleFocusLock}
+            />
+          ) : null}
         </div>
         <div className="graph-bottom-right-controls">
           {onNewPerson ? (

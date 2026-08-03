@@ -437,8 +437,18 @@ export const graphLineRoutingStyleSchema = z.enum(graphLineRoutingStyleValues);
 export type GraphLineRoutingStyle = z.infer<typeof graphLineRoutingStyleSchema>;
 /** Default edge routing when preferences omit the field. */
 export const defaultGraphLineRoutingStyle: GraphLineRoutingStyle = "orthogonal";
-/** Default: do not force single-family-tree mode. */
+/** Default: Focus mode off (`showSingleFamilyTree` preference flag). */
 export const defaultShowSingleFamilyTree = false;
+/** Default Focus Bloodline ancestor depth (generations up). */
+export const defaultFocusAncestorDepth = 3;
+/** Default Focus Bloodline descendant depth (generations down). */
+export const defaultFocusDescendantDepth = 3;
+/** Default Focus collateral depth (descendants of Bloodline-siblings). */
+export const defaultFocusCollateralDepth = 0;
+export const minFocusBloodlineDepth = 0;
+export const maxFocusBloodlineDepth = 20;
+export const minFocusCollateralDepth = 0;
+export const maxFocusCollateralDepth = 5;
 
 export const minTreeLayoutPreference = 0.25;
 export const maxTreeLayoutPreference = 2;
@@ -506,7 +516,26 @@ export const userPreferencesSchema = z.object({
   familyViewStyle: familyViewStyleSchema.optional(),
   graphLineRoutingStyle: graphLineRoutingStyleSchema.optional(),
   graphRenderLimit: z.number().int().min(minGraphRenderLimit).max(maxGraphRenderLimit).optional(),
+  /** Focus mode on/off (legacy preference name). */
   showSingleFamilyTree: z.boolean().optional(),
+  focusAncestorDepth: z
+    .number()
+    .int()
+    .min(minFocusBloodlineDepth)
+    .max(maxFocusBloodlineDepth)
+    .optional(),
+  focusDescendantDepth: z
+    .number()
+    .int()
+    .min(minFocusBloodlineDepth)
+    .max(maxFocusBloodlineDepth)
+    .optional(),
+  focusCollateralDepth: z
+    .number()
+    .int()
+    .min(minFocusCollateralDepth)
+    .max(maxFocusCollateralDepth)
+    .optional(),
   lastSelectedPersonId: z.string().nullable().optional(),
   primaryFamilyUnitByPersonId: z.record(z.string(), z.string()).optional(),
   dismissedSuggestions: z.array(z.string()).optional(),

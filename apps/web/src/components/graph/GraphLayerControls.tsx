@@ -1,5 +1,5 @@
 /**
- * @file Toggles for relationship categories and graph display options.
+ * @file Toggles for relationship categories and Focus mode.
  */
 
 import type { GraphFilter, GraphFilterVisibility } from "./relationshipStyles";
@@ -8,6 +8,9 @@ import { relationshipStyleByKind } from "./relationshipStyles";
 type Props = {
   filterVisibility: GraphFilterVisibility;
   onToggleFilter: (filter: GraphFilter) => void;
+  showFocusMode: boolean;
+  onShowFocusModeChange: (next: boolean) => void;
+  canEnableFocus: boolean;
 };
 
 const legendItems: Array<{ label: string; color: string; filter: GraphFilter }> = [
@@ -18,7 +21,15 @@ const legendItems: Array<{ label: string; color: string; filter: GraphFilter }> 
   { label: "Pet", color: relationshipStyleByKind.PET.color, filter: "pets" }
 ];
 
-export const GraphLayerControls = ({ filterVisibility, onToggleFilter }: Props) => {
+export const GraphLayerControls = ({
+  filterVisibility,
+  onToggleFilter,
+  showFocusMode,
+  onShowFocusModeChange,
+  canEnableFocus
+}: Props) => {
+  const focusDisabled = !showFocusMode && !canEnableFocus;
+
   return (
     <div className="graph-view-mode-selector">
       <div className="graph-layer-toggles" role="group" aria-label="Graph layer filters">
@@ -57,6 +68,15 @@ export const GraphLayerControls = ({ filterVisibility, onToggleFilter }: Props) 
         <label>
           <input type="checkbox" checked={filterVisibility.pets} onChange={() => onToggleFilter("pets")} />
           Pets
+        </label>
+        <label className="graph-focus-mode-toggle" title={focusDisabled ? "Select a person first" : undefined}>
+          <input
+            type="checkbox"
+            checked={showFocusMode}
+            disabled={focusDisabled}
+            onChange={(event) => onShowFocusModeChange(event.target.checked)}
+          />
+          Focus mode
         </label>
       </div>
       <div className="graph-edge-legend" role="list" aria-label="Relationship color legend">
