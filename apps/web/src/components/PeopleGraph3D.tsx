@@ -108,9 +108,7 @@ export const filterPeopleByView = (people: Person[], view: PeopleViewFilter): Pe
 
 export const canLoadPersonThumbnail = (person: Person) =>
   Boolean(
-    person.thumbnailPath?.trim() ||
-    person.thumbnail?.storageUrl?.trim() ||
-    personIsImmichLinked(person)
+    person.thumbnailPath?.trim() || person.thumbnail?.storageUrl?.trim() || personIsImmichLinked(person)
   );
 
 const thumbnailCacheKeyForPerson = (person: Person): string | undefined => {

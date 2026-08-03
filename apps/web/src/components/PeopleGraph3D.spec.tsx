@@ -65,9 +65,7 @@ describe("PeopleGraph3D people view filter", () => {
   });
 
   it("filters Immich-linked people separately from tree membership", () => {
-    expect(filterPeopleByView(people, "immich-linked").map((person) => person.id)).toEqual([
-      "orphan-immich"
-    ]);
+    expect(filterPeopleByView(people, "immich-linked").map((person) => person.id)).toEqual(["orphan-immich"]);
     expect(filterPeopleByView(people, "immich-unlinked").map((person) => person.id)).toEqual(["in-tree"]);
   });
 });
