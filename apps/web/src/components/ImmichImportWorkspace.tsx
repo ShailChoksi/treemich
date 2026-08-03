@@ -243,10 +243,14 @@ export const ImmichImportWorkspace = ({ people, onImported }: Props) => {
           <div className="toolbar-row">
             <label>
               Show{" "}
-              <select value={showFilter} onChange={(e) => setShowFilter(e.target.value as typeof showFilter)}>
-                <option value="unlinked">Unlinked</option>
-                <option value="linked">Linked</option>
-                <option value="all">All</option>
+              <select
+                value={showFilter}
+                onChange={(e) => setShowFilter(e.target.value as typeof showFilter)}
+                aria-label="Immich people link filter"
+              >
+                <option value="unlinked">Not linked to Treemich</option>
+                <option value="linked">Only linked people</option>
+                <option value="all">All Immich people</option>
               </select>
             </label>
             <label>

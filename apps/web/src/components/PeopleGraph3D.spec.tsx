@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { PersonRecord } from "../lib/api";
 import { RELATIONSHIP_TYPES } from "../lib/relationshipConstants";
 import { resolveRestoredCameraSnapshotForCanvas } from "./graph/graphCameraPolicy";
-import { canLoadPersonThumbnail, resolveAddRelativeRelationshipType } from "./PeopleGraph3D";
+import {
+  canLoadPersonThumbnail,
+  filterPeopleByView,
+  resolveAddRelativeRelationshipType
+} from "./PeopleGraph3D";
 
 const makePerson = (overrides: Partial<PersonRecord> = {}): PersonRecord => ({
   id: "person-1",
@@ -17,6 +21,55 @@ const makePerson = (overrides: Partial<PersonRecord> = {}): PersonRecord => ({
   thumbnail: null,
   thumbnailPath: null,
   ...overrides
+});
+
+describe("PeopleGraph3D people view filter", () => {
+  const inTree = makePerson({
+    id: "in-tree",
+    name: "In Tree",
+    hasRelationship: true,
+    externalIdentities: []
+  });
+  const orphanImmich = makePerson({
+    id: "orphan-immich",
+    name: "Orphan Immich",
+    hasRelationship: false,
+    externalIdentities: [
+      {
+        id: "identity-1",
+        personId: "orphan-immich",
+        provider: "IMMICH",
+        providerPersonId: "immich-1",
+        providerBaseUrl: "https://immich.example",
+        displayName: "Orphan Immich",
+        thumbnailImportedAt: null,
+        lastSeenAt: null,
+        metadata: {},
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      }
+    ]
+  });
+  const people = [inTree, orphanImmich];
+
+  it("keeps everyone for All people", () => {
+    expect(filterPeopleByView(people, "all")).toHaveLength(2);
+  });
+
+  it("filters to Only people in tree via hasRelationship", () => {
+    expect(filterPeopleByView(people, "in-tree").map((person) => person.id)).toEqual(["in-tree"]);
+  });
+
+  it("filters orphans to people without relationships", () => {
+    expect(filterPeopleByView(people, "orphans").map((person) => person.id)).toEqual(["orphan-immich"]);
+  });
+
+  it("filters Immich-linked people separately from tree membership", () => {
+    expect(filterPeopleByView(people, "immich-linked").map((person) => person.id)).toEqual([
+      "orphan-immich"
+    ]);
+    expect(filterPeopleByView(people, "immich-unlinked").map((person) => person.id)).toEqual(["in-tree"]);
+  });
 });
 
 describe("PeopleGraph3D thumbnail eligibility", () => {

@@ -75,13 +75,34 @@ type GraphViewPreferencesState = {
 
 type TreeLayoutPreferenceKey = keyof ResolvedTreeLayoutPreferences;
 
-type ProviderFilter = "all" | "linked" | "unlinked";
+/** Graph People dropdown: tree membership and Immich identity filters. */
+export type PeopleViewFilter = "all" | "in-tree" | "orphans" | "immich-linked" | "immich-unlinked";
+
+const personIsImmichLinked = (person: Person) =>
+  Boolean(person.externalIdentities?.some((identity) => identity.provider === "IMMICH"));
+
+/** Filters people for the graph People view selector. */
+export const filterPeopleByView = (people: Person[], view: PeopleViewFilter): Person[] => {
+  switch (view) {
+    case "in-tree":
+      return people.filter((person) => Boolean(person.hasRelationship));
+    case "orphans":
+      return people.filter((person) => !person.hasRelationship);
+    case "immich-linked":
+      return people.filter(personIsImmichLinked);
+    case "immich-unlinked":
+      return people.filter((person) => !personIsImmichLinked(person));
+    case "all":
+    default:
+      return people;
+  }
+};
 
 export const canLoadPersonThumbnail = (person: Person) =>
   Boolean(
     person.thumbnailPath?.trim() ||
     person.thumbnail?.storageUrl?.trim() ||
-    person.externalIdentities?.some((identity) => identity.provider === "IMMICH")
+    personIsImmichLinked(person)
   );
 
 const thumbnailCacheKeyForPerson = (person: Person): string | undefined => {
@@ -192,7 +213,7 @@ const PeopleGraph3DComponent = ({
   const [pinnedPersonId, setPinnedPersonId] = useState<string | null>(initialUiState?.pinnedPersonId ?? null);
   const [addRelativeIntent, setAddRelativeIntent] = useState<AddRelativeIntent | null>(null);
   const [thumbnailProgress, setThumbnailProgress] = useState<{ loaded: number; total: number } | null>(null);
-  const [providerFilter, setProviderFilter] = useState<ProviderFilter>("all");
+  const [peopleViewFilter, setPeopleViewFilter] = useState<PeopleViewFilter>("all");
   const [graphViewPreferences, setGraphViewPreferences] = useState<GraphViewPreferencesState>(() =>
     resolveInitialGraphViewPreferences(
       savedPreferences ?? null,
@@ -282,15 +303,10 @@ const PeopleGraph3DComponent = ({
     setPinnedPersonId,
     onSelectedPersonChange
   });
-  const filteredPeople = useMemo(() => {
-    if (providerFilter === "all") {
-      return people;
-    }
-    return people.filter((person) => {
-      const linkedToImmich = person.externalIdentities?.some((identity) => identity.provider === "IMMICH");
-      return providerFilter === "linked" ? linkedToImmich : !linkedToImmich;
-    });
-  }, [people, providerFilter]);
+  const filteredPeople = useMemo(
+    () => filterPeopleByView(people, peopleViewFilter),
+    [people, peopleViewFilter]
+  );
   const filteredPersonIds = useMemo(
     () => new Set(filteredPeople.map((person) => person.id)),
     [filteredPeople]
@@ -753,12 +769,15 @@ const PeopleGraph3DComponent = ({
           <label className="graph-provider-filter-control">
             <span>People</span>
             <select
-              value={providerFilter}
-              onChange={(event) => setProviderFilter(event.target.value as ProviderFilter)}
+              value={peopleViewFilter}
+              onChange={(event) => setPeopleViewFilter(event.target.value as PeopleViewFilter)}
+              aria-label="People view filter"
             >
-              <option value="all">All</option>
-              <option value="linked">Linked to Immich</option>
-              <option value="unlinked">Not linked to Immich</option>
+              <option value="all">All people</option>
+              <option value="in-tree">Only people in tree</option>
+              <option value="orphans">Not in tree (orphans)</option>
+              <option value="immich-linked">Only Immich-linked</option>
+              <option value="immich-unlinked">Not linked to Immich</option>
             </select>
           </label>
           <GraphLayerControls filterVisibility={filterVisibility} onToggleFilter={handleToggleFilter} />
