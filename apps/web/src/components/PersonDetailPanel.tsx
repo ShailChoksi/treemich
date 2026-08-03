@@ -63,7 +63,6 @@ const DEFAULT_COLLAPSED_SECTIONS = {
   friends: false,
   pets: false,
   editRelationship: false,
-  removeRelationship: false,
   lifeEvents: true,
   timeline: true,
   researchTasks: true,
@@ -256,7 +255,6 @@ const PersonDetailPanelComponent = ({
     ...sectionCollapsedOverrides
   }));
   const relationshipEditorFirstFieldRef = useRef<HTMLSelectElement | null>(null);
-  const relationshipDeleteConfirmRef = useRef<HTMLButtonElement | null>(null);
   const relationshipActionReturnFocusRef = useRef<HTMLElement | null>(null);
   const peopleById = useMemo(() => new Map(people.map((entry) => [entry.id, entry])), [people]);
   const relationshipsByPersonId = useMemo(() => indexRelationshipsByPersonId(relationships), [relationships]);
@@ -428,12 +426,6 @@ const PersonDetailPanelComponent = ({
       relationshipEditorFirstFieldRef.current?.focus();
     }
   }, [activeRelationship]);
-
-  useEffect(() => {
-    if (pendingDeleteRelationship) {
-      relationshipDeleteConfirmRef.current?.focus();
-    }
-  }, [pendingDeleteRelationship]);
 
   const startEditingRelationship = (relationship: RelativeItem) => {
     relationshipActionReturnFocusRef.current = document.activeElement as HTMLElement | null;
@@ -628,6 +620,24 @@ const PersonDetailPanelComponent = ({
             busy={isDeletingPerson}
             onConfirm={handleDeletePerson}
             onCancel={() => setShowDeletePersonConfirm(false)}
+          />
+          <DestructiveConfirmDialog
+            open={pendingDeleteRelationship !== null}
+            title="Remove relationship?"
+            description={
+              pendingDeleteRelationship
+                ? `Remove the relationship between ${person.name} and ${pendingDeleteRelationship.relatedName}. This will remove the link in both directions for this pair.`
+                : ""
+            }
+            confirmLabel="Remove relationship"
+            cancelLabel="Cancel"
+            busy={isSavingRelationship}
+            onConfirm={() => {
+              if (pendingDeleteRelationship) {
+                return handleRelationshipDelete(pendingDeleteRelationship);
+              }
+            }}
+            onCancel={stopDeletingRelationship}
           />
           <CollapsibleSection
             sectionKey="profile"
@@ -1101,45 +1111,6 @@ const PersonDetailPanelComponent = ({
                   type="button"
                   className="secondary-button"
                   onClick={stopEditingRelationship}
-                  disabled={isSavingRelationship}
-                >
-                  Cancel
-                </button>
-              </div>
-            </CollapsibleSection>
-          ) : null}
-          {pendingDeleteRelationship ? (
-            <CollapsibleSection
-              sectionKey="remove-relationship"
-              title="Remove relationship"
-              subtitle={`Remove the relationship between ${person.name} and ${pendingDeleteRelationship.relatedName}.`}
-              isCollapsed={collapsedSections.removeRelationship}
-              onToggleCollapsed={() => toggleSectionCollapsed("removeRelationship")}
-              className="relationship-editor danger-surface"
-            >
-              <button
-                type="button"
-                className="text-link-button"
-                onClick={stopDeletingRelationship}
-                disabled={isSavingRelationship}
-              >
-                Close
-              </button>
-              <p className="hint">This will remove the link in both directions for this pair.</p>
-              <div className="add-relative-actions">
-                <button
-                  ref={relationshipDeleteConfirmRef}
-                  type="button"
-                  className="secondary-button danger-button"
-                  disabled={isSavingRelationship}
-                  onClick={() => void handleRelationshipDelete(pendingDeleteRelationship)}
-                >
-                  {isSavingRelationship ? "Removing..." : "Remove relationship"}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={stopDeletingRelationship}
                   disabled={isSavingRelationship}
                 >
                   Cancel
