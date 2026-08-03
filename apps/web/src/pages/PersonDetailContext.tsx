@@ -98,6 +98,8 @@ type PersonDetailContextValue = {
   handleBirthCityChange: (birthCity: string) => void;
   handleBirthCountryChange: (birthCountry: string) => void;
   onProfileSave: () => Promise<void>;
+  /** Incremented after profile save so Names section reloads synced primary PersonName. */
+  personNamesReloadToken: number;
   onUpdateExistingRelationship: (
     relationship: RelationshipRecord,
     relatedPersonId: string,
@@ -151,6 +153,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
   const [familyLifeEventsById, setFamilyLifeEventsById] = useState<
     Partial<Record<string, LifeEventRecord[]>>
   >({});
+  const [personNamesReloadToken, setPersonNamesReloadToken] = useState(0);
 
   const genderByPersonIdRef = useRef(genderByPersonId);
   const givenNameByPersonIdRef = useRef(givenNameByPersonId);
@@ -625,6 +628,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
         return next;
       });
       graph.setProfileDraftDirty(false);
+      setPersonNamesReloadToken((token) => token + 1);
       setStatus("Profile saved");
     } catch (error: unknown) {
       setStatus(getErrorMessage(error));
@@ -1024,6 +1028,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       handleBirthCityChange,
       handleBirthCountryChange,
       onProfileSave,
+      personNamesReloadToken,
       onUpdateExistingRelationship,
       handlePersonLifeEventCreate,
       handlePersonLifeEventPatch,
@@ -1071,6 +1076,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       nicknamesByPersonId,
       onProfileSave,
       onUpdateExistingRelationship,
+      personNamesReloadToken,
       personTimelineById,
       relationshipLifeEventsById,
       selectedProfileEventFields,

@@ -136,6 +136,7 @@ export type PersonDetailPanelProps = {
   ) => Promise<void>;
   onRelationshipLifeEventDelete?: (relationshipId: string, eventId: string) => Promise<void>;
   onPersonNamesChanged?: () => void;
+  personNamesReloadToken?: number;
   personTimeline?: TimelineEventRecord[];
   researchTasks?: ResearchTaskRecord[];
   /** Loaded family unions for this person; omit until fetched from `GET /people/:id/families`. */
@@ -218,6 +219,7 @@ const PersonDetailPanelComponent = ({
   onRelationshipLifeEventPatch,
   onRelationshipLifeEventDelete,
   onPersonNamesChanged,
+  personNamesReloadToken = 0,
   personTimeline,
   researchTasks,
   families,
@@ -829,6 +831,7 @@ const PersonDetailPanelComponent = ({
               <PersonNamesSection
                 personId={person.id}
                 onNamesChanged={onPersonNamesChanged}
+                reloadToken={personNamesReloadToken}
                 disabled={isSavingProfile || isSavingRelationship}
               />
             </CollapsibleSection>
