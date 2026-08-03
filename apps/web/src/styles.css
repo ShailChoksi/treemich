@@ -1731,6 +1731,90 @@ body {
   font-weight: 600;
 }
 
+.graph-focus-mode-toggle {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.graph-focus-selection-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.graph-focus-depth-stepper {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.graph-focus-depth-stepper-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.graph-focus-depth-stepper-controls strong {
+  min-width: 1.4rem;
+  text-align: center;
+  color: #f8fafc;
+  font-size: 12px;
+}
+
+.graph-focus-depth-stepper-controls button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: #1e293b;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.graph-focus-depth-stepper-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.graph-focus-lock-button {
+  min-width: 32px;
+  min-height: 32px;
+  align-self: end;
+  border-radius: 8px;
+  color: #e2e8f0;
+}
+
+.graph-focus-lock-on {
+  border-color: rgba(56, 189, 248, 0.65) !important;
+  background: rgba(3, 105, 161, 0.55) !important;
+  color: #f0f9ff !important;
+}
+
+.graph-focus-lock-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.75);
+  background: rgba(3, 105, 161, 0.92);
+  color: #f0f9ff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.55);
+}
+
 .graph-layer-toggles input[type="checkbox"] {
   margin: 0;
   width: 14px;

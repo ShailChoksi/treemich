@@ -1,11 +1,12 @@
 node_modules
 dist
-.env
-.env.local
-.DS_Store
 coverage
 apps/api/generated
 *.tsbuildinfo
+.env
+.env.*
+package-lock.json
 .scratch/
 .continue/
 **/graphify-out/
+datasets/
