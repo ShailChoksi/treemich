@@ -227,6 +227,10 @@ body {
   color: #fecaca;
 }
 
+.auth-card .hint--danger {
+  color: #fca5a5;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
