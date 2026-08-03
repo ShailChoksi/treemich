@@ -492,7 +492,9 @@ describe("PersonDetailPanelWithProps", () => {
     const header = container.querySelector(".person-detail-header");
     expect(header?.textContent).not.toContain("Delete person");
 
-    const dangerZone = container.querySelector("details.person-detail-danger-zone");
+    const dangerZone = container.querySelector(
+      "details.person-detail-danger-zone"
+    ) as HTMLDetailsElement | null;
     expect(dangerZone).toBeTruthy();
     expect(dangerZone?.open).toBe(false);
     expect(dangerZone?.textContent).toContain("Danger zone");

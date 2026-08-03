@@ -2,7 +2,11 @@ import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PeopleGraphDataProvider, usePeopleGraphData } from "./PeopleGraphDataContext";
-import { PersonDetailProvider, usePersonDetail } from "./PersonDetailContext";
+import {
+  PersonDetailProvider,
+  usePersonDetail,
+  type PersonDetailContextValue
+} from "./PersonDetailContext";
 import { ToastProvider } from "./ToastContext";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
@@ -168,12 +172,14 @@ describe("PersonDetailContext", () => {
   });
 
   it("keeps profile form values after save when PATCH returns a PersonRecord", async () => {
-    let detail: ReturnType<typeof usePersonDetail> | null = null;
-    let selectedId: string | null = null;
+    const probe = {
+      detail: null as PersonDetailContextValue | null,
+      selectedId: null as string | null
+    };
     const Probe = () => {
       const graph = usePeopleGraphData();
-      detail = usePersonDetail();
-      selectedId = graph.selectedPersonId;
+      probe.detail = usePersonDetail();
+      probe.selectedId = graph.selectedPersonId;
       return null;
     };
     const container = document.createElement("div");
@@ -197,17 +203,17 @@ describe("PersonDetailContext", () => {
       await act(async () => {
         await Promise.resolve();
       });
-      if (selectedId === "p1" && detail?.selectedProfileEventFields.birthDate) {
+      if (probe.selectedId === "p1" && probe.detail?.selectedProfileEventFields.birthDate) {
         break;
       }
     }
-    expect(selectedId).toBe("p1");
+    expect(probe.selectedId).toBe("p1");
 
     await act(async () => {
-      detail?.handleGivenNameChange("Alexandra");
-      detail?.handleSurnameChange("Smithson");
-      detail?.handleBirthCityChange("Berlin");
-      detail?.handleBirthCountryChange("Germany");
+      probe.detail?.handleGivenNameChange("Alexandra");
+      probe.detail?.handleSurnameChange("Smithson");
+      probe.detail?.handleBirthCityChange("Berlin");
+      probe.detail?.handleBirthCountryChange("Germany");
     });
 
     vi.mocked(globalThis.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
@@ -246,14 +252,14 @@ describe("PersonDetailContext", () => {
     });
 
     await act(async () => {
-      await detail?.onProfileSave();
+      await probe.detail?.onProfileSave();
     });
 
-    expect(detail?.givenNameByPersonId.p1).toBe("Alexandra");
-    expect(detail?.surnameByPersonId.p1).toBe("Smithson");
-    expect(detail?.selectedProfileEventFields.birthDate).toBe("1991-05-06");
-    expect(detail?.selectedProfileEventFields.birthCity).toBe("Berlin");
-    expect(detail?.selectedProfileEventFields.birthCountry).toBe("Germany");
+    expect(probe.detail?.givenNameByPersonId.p1).toBe("Alexandra");
+    expect(probe.detail?.surnameByPersonId.p1).toBe("Smithson");
+    expect(probe.detail?.selectedProfileEventFields.birthDate).toBe("1991-05-06");
+    expect(probe.detail?.selectedProfileEventFields.birthCity).toBe("Berlin");
+    expect(probe.detail?.selectedProfileEventFields.birthCountry).toBe("Germany");
 
     act(() => {
       root.unmount();
@@ -261,9 +267,9 @@ describe("PersonDetailContext", () => {
   });
 
   it("uses Tier B relationship refresh after relationship life-event edits", async () => {
-    let detail: ReturnType<typeof usePersonDetail> | null = null;
+    const probe = { detail: null as PersonDetailContextValue | null };
     const Probe = () => {
-      detail = usePersonDetail();
+      probe.detail = usePersonDetail();
       return null;
     };
     const container = document.createElement("div");
@@ -288,7 +294,7 @@ describe("PersonDetailContext", () => {
     vi.mocked(globalThis.fetch).mockClear();
 
     await act(async () => {
-      await detail?.handleRelationshipLifeEventCreate("r-spouse", {
+      await probe.detail?.handleRelationshipLifeEventCreate("r-spouse", {
         eventType: "MARRIAGE",
         dateQualifier: "EXACT",
         year: 2000,

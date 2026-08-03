@@ -75,7 +75,7 @@ type ProfileEventFields = {
   birthCountry: string;
 };
 
-type PersonDetailContextValue = {
+export type PersonDetailContextValue = {
   genders: Gender[];
   genderByPersonId: Record<string, Gender>;
   givenNameByPersonId: Record<string, string>;
@@ -1087,7 +1087,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
   return <PersonDetailContext.Provider value={value}>{children}</PersonDetailContext.Provider>;
 };
 
-export const usePersonDetail = () => {
+export const usePersonDetail = (): PersonDetailContextValue => {
   const context = useContext(PersonDetailContext);
   if (!context) {
     throw new Error("usePersonDetail must be used within PersonDetailProvider");
