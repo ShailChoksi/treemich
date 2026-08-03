@@ -2,7 +2,7 @@ import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PeopleGraphDataProvider, usePeopleGraphData } from "./PeopleGraphDataContext";
-import { PersonDetailProvider, usePersonDetail } from "./PersonDetailContext";
+import { PersonDetailProvider, usePersonDetail, type PersonDetailContextValue } from "./PersonDetailContext";
 import { ToastProvider } from "./ToastContext";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
@@ -167,10 +167,105 @@ describe("PersonDetailContext", () => {
     });
   });
 
-  it("uses Tier B relationship refresh after relationship life-event edits", async () => {
-    let detail: ReturnType<typeof usePersonDetail> | null = null;
+  it("keeps profile form values after save when PATCH returns a PersonRecord", async () => {
+    const probe = {
+      detail: null as PersonDetailContextValue | null,
+      selectedId: null as string | null
+    };
     const Probe = () => {
-      detail = usePersonDetail();
+      const graph = usePeopleGraphData();
+      probe.detail = usePersonDetail();
+      probe.selectedId = graph.selectedPersonId;
+      return null;
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          ToastProvider,
+          null,
+          createElement(
+            PeopleGraphDataProvider,
+            { immichBaseUrl: null, currentUserName: null },
+            createElement(PersonDetailProvider, null, createElement(Probe))
+          )
+        )
+      );
+    });
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (probe.selectedId === "p1" && probe.detail?.selectedProfileEventFields.birthDate) {
+        break;
+      }
+    }
+    expect(probe.selectedId).toBe("p1");
+
+    await act(async () => {
+      probe.detail?.handleGivenNameChange("Alexandra");
+      probe.detail?.handleSurnameChange("Smithson");
+      probe.detail?.handleBirthCityChange("Berlin");
+      probe.detail?.handleBirthCountryChange("Germany");
+    });
+
+    vi.mocked(globalThis.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
+      if (method === "PATCH" && /\/people\/p1$/.test(url)) {
+        return jsonResponse({
+          id: "p1",
+          name: "Alexandra Smithson",
+          birthDate: null,
+          profile: {
+            id: "p1",
+            gender: "MALE",
+            givenName: "Alexandra",
+            surname: "Smithson",
+            nicknames: "Al"
+          }
+        });
+      }
+      if (method === "PATCH" && url.includes("/people/p1/life-events/")) {
+        return jsonResponse({
+          ...birthEvent,
+          place: {
+            id: "place-1",
+            name: "Berlin, Germany",
+            locality: "Berlin",
+            adminArea: "Germany",
+            countryCode: null
+          }
+        });
+      }
+      if (method === "GET" && url.includes("/people/p1/life-events")) {
+        return jsonResponse({ lifeEvents: [birthEvent] });
+      }
+      return jsonResponse({ error: `unmocked ${method} ${url}` }, 404);
+    });
+
+    await act(async () => {
+      await probe.detail?.onProfileSave();
+    });
+
+    expect(probe.detail?.givenNameByPersonId.p1).toBe("Alexandra");
+    expect(probe.detail?.surnameByPersonId.p1).toBe("Smithson");
+    expect(probe.detail?.selectedProfileEventFields.birthDate).toBe("1991-05-06");
+    expect(probe.detail?.selectedProfileEventFields.birthCity).toBe("Berlin");
+    expect(probe.detail?.selectedProfileEventFields.birthCountry).toBe("Germany");
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("uses Tier B relationship refresh after relationship life-event edits", async () => {
+    const probe = { detail: null as PersonDetailContextValue | null };
+    const Probe = () => {
+      probe.detail = usePersonDetail();
       return null;
     };
     const container = document.createElement("div");
@@ -195,7 +290,7 @@ describe("PersonDetailContext", () => {
     vi.mocked(globalThis.fetch).mockClear();
 
     await act(async () => {
-      await detail?.handleRelationshipLifeEventCreate("r-spouse", {
+      await probe.detail?.handleRelationshipLifeEventCreate("r-spouse", {
         eventType: "MARRIAGE",
         dateQualifier: "EXACT",
         year: 2000,

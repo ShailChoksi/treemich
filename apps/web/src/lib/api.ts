@@ -487,7 +487,7 @@ export const mergeDuplicateCandidate = async (
   return (await response.json()) as PersonMergeResult;
 };
 
-/** `PATCH /people/:id` — Treemich profile fields (gender, names, etc.). */
+/** `PATCH /people/:id` — Treemich profile fields (gender, names, etc.). Returns the full person record. */
 export const updatePersonProfile = async (
   personId: string,
   profile: {
@@ -500,7 +500,7 @@ export const updatePersonProfile = async (
     birthCity?: string | null;
     birthCountry?: string | null;
   }
-) => {
+): Promise<PersonRecord> => {
   const response = await fetch(
     `${treemichApi}/people/${personId}`,
     withSession({
@@ -512,7 +512,7 @@ export const updatePersonProfile = async (
     })
   );
   await ensureOk(response, "Failed to update profile");
-  return (await response.json()) as TreemichPersonProfile;
+  return (await response.json()) as PersonRecord;
 };
 
 /** `GET /people/:id/external-identities` — provider links for this Treemich person. */

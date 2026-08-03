@@ -69,6 +69,60 @@ export class PersonNameService {
     }
   }
 
+  private async syncProfileFromNameParts(
+    personProfileId: string,
+    parts: { givenName: string | null; surname: string | null }
+  ) {
+    await prisma.personProfile.update({
+      where: { id: personProfileId },
+      data: {
+        givenName: parts.givenName,
+        surname: parts.surname
+      }
+    });
+  }
+
+  /**
+   * Keep the primary PersonName row aligned with profile given/surname edits
+   * (Save profile form). Creates a BIRTH primary row when none exists.
+   */
+  async syncPrimaryFromProfile(
+    userId: string,
+    personId: string,
+    parts: { givenName: string | null; surname: string | null }
+  ) {
+    const profile = await this.resolveProfileOrNull(userId, personId);
+    if (!profile) {
+      return;
+    }
+    const existing = await prisma.personName.findFirst({
+      where: { personProfileId: profile, userId, isPrimary: true }
+    });
+    if (existing) {
+      await prisma.personName.update({
+        where: { id: existing.id },
+        data: {
+          givenName: parts.givenName,
+          surname: parts.surname
+        }
+      });
+      return;
+    }
+    if (!parts.givenName && !parts.surname) {
+      return;
+    }
+    await prisma.personName.create({
+      data: {
+        userId,
+        personProfileId: profile,
+        type: "BIRTH",
+        givenName: parts.givenName,
+        surname: parts.surname,
+        isPrimary: true
+      }
+    });
+  }
+
   async listByPersonId(userId: string, personId: string) {
     const profile = await this.resolveProfileOrNull(userId, personId);
     if (!profile) {
@@ -148,6 +202,12 @@ export class PersonNameService {
         isPrimary: body.isPrimary ?? false
       }
     });
+    if (created.isPrimary) {
+      await this.syncProfileFromNameParts(profile, {
+        givenName: created.givenName,
+        surname: created.surname
+      });
+    }
     return personNameToJson(created);
   }
 
@@ -184,6 +244,12 @@ export class PersonNameService {
       });
     }
     const updated = await prisma.personName.findFirstOrThrow({ where: { id: nameId } });
+    if (updated.isPrimary) {
+      await this.syncProfileFromNameParts(profile, {
+        givenName: updated.givenName,
+        surname: updated.surname
+      });
+    }
     return personNameToJson(updated);
   }
 
@@ -256,6 +322,10 @@ export class PersonNameService {
       prisma.personName.update({ where: { id: nameId }, data: { isPrimary: true } })
     ]);
     const updated = await prisma.personName.findFirstOrThrow({ where: { id: nameId } });
+    await this.syncProfileFromNameParts(profile, {
+      givenName: updated.givenName,
+      surname: updated.surname
+    });
     return personNameToJson(updated);
   }
 }

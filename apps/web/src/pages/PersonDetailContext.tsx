@@ -75,7 +75,7 @@ type ProfileEventFields = {
   birthCountry: string;
 };
 
-type PersonDetailContextValue = {
+export type PersonDetailContextValue = {
   genders: Gender[];
   genderByPersonId: Record<string, Gender>;
   givenNameByPersonId: Record<string, string>;
@@ -98,6 +98,8 @@ type PersonDetailContextValue = {
   handleBirthCityChange: (birthCity: string) => void;
   handleBirthCountryChange: (birthCountry: string) => void;
   onProfileSave: () => Promise<void>;
+  /** Incremented after profile save so Names section reloads synced primary PersonName. */
+  personNamesReloadToken: number;
   onUpdateExistingRelationship: (
     relationship: RelationshipRecord,
     relatedPersonId: string,
@@ -151,6 +153,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
   const [familyLifeEventsById, setFamilyLifeEventsById] = useState<
     Partial<Record<string, LifeEventRecord[]>>
   >({});
+  const [personNamesReloadToken, setPersonNamesReloadToken] = useState(0);
 
   const genderByPersonIdRef = useRef(genderByPersonId);
   const givenNameByPersonIdRef = useRef(givenNameByPersonId);
@@ -559,31 +562,63 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      const savedProfile = await updatePersonProfile(personToSave.id, {
+      const savedPerson = await updatePersonProfile(personToSave.id, {
         gender: selectedGender,
         givenName: selectedGivenName,
         surname: selectedSurname,
         nicknames: selectedNicknames
       });
+      // PATCH returns a PersonRecord; draft maps must read nested profile fields, not the record root.
+      const savedProfile = savedPerson.profile ?? {
+        id: personToSave.id,
+        gender: selectedGender,
+        givenName: selectedGivenName,
+        surname: selectedSurname,
+        nicknames: selectedNicknames
+      };
       const displayValues = deriveProfileDisplayValuesFromLifeEvents(nextLifeEvents);
+      // Prefer the values just saved so place/date fields do not flash empty if the API omits locality.
+      const retainedEventFields: ProfileEventFields = {
+        birthDate: displayValues.birthDate || eventFormFields.birthDate,
+        deathDate: displayValues.deathDate || eventFormFields.deathDate,
+        birthCity: displayValues.birthCity || eventFormFields.birthCity,
+        birthCountry: displayValues.birthCountry || eventFormFields.birthCountry
+      };
       graph.setPeople((current) =>
         current.map((person) =>
           person.id === personToSave.id
             ? {
                 ...person,
+                name: savedPerson.name || person.name,
+                displayName: savedPerson.displayName ?? person.displayName ?? null,
                 ...profileNamePatchForPerson(savedProfile),
-                birthDate: displayValues.birthDate || null,
-                profile: savedProfile
+                birthDate: retainedEventFields.birthDate || null,
+                profile: savedProfile,
+                externalIdentities: savedPerson.externalIdentities ?? person.externalIdentities,
+                thumbnail: savedPerson.thumbnail ?? person.thumbnail,
+                thumbnailPath: savedPerson.thumbnailPath ?? person.thumbnailPath
               }
             : person
         )
       );
       setLifeEventsByPersonId((current) => ({ ...current, [personToSave.id]: nextLifeEvents }));
       setGenderByPersonId((current) => ({ ...current, [personToSave.id]: savedProfile.gender }));
-      setGivenNameByPersonId((current) => ({ ...current, [personToSave.id]: savedProfile.givenName ?? "" }));
-      setSurnameByPersonId((current) => ({ ...current, [personToSave.id]: savedProfile.surname ?? "" }));
-      setNicknamesByPersonId((current) => ({ ...current, [personToSave.id]: savedProfile.nicknames ?? "" }));
-      setProfileEventFieldsByPersonId((current) => ({ ...current, [personToSave.id]: displayValues }));
+      setGivenNameByPersonId((current) => ({
+        ...current,
+        [personToSave.id]: savedProfile.givenName ?? selectedGivenName ?? ""
+      }));
+      setSurnameByPersonId((current) => ({
+        ...current,
+        [personToSave.id]: savedProfile.surname ?? selectedSurname ?? ""
+      }));
+      setNicknamesByPersonId((current) => ({
+        ...current,
+        [personToSave.id]: savedProfile.nicknames ?? selectedNicknames ?? ""
+      }));
+      setProfileEventFieldsByPersonId((current) => ({
+        ...current,
+        [personToSave.id]: retainedEventFields
+      }));
       setPersonTimelineById((current) => {
         if (!(personToSave.id in current)) {
           return current;
@@ -593,6 +628,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
         return next;
       });
       graph.setProfileDraftDirty(false);
+      setPersonNamesReloadToken((token) => token + 1);
       setStatus("Profile saved");
     } catch (error: unknown) {
       setStatus(getErrorMessage(error));
@@ -992,6 +1028,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       handleBirthCityChange,
       handleBirthCountryChange,
       onProfileSave,
+      personNamesReloadToken,
       onUpdateExistingRelationship,
       handlePersonLifeEventCreate,
       handlePersonLifeEventPatch,
@@ -1039,6 +1076,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
       nicknamesByPersonId,
       onProfileSave,
       onUpdateExistingRelationship,
+      personNamesReloadToken,
       personTimelineById,
       relationshipLifeEventsById,
       selectedProfileEventFields,
@@ -1049,7 +1087,7 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
   return <PersonDetailContext.Provider value={value}>{children}</PersonDetailContext.Provider>;
 };
 
-export const usePersonDetail = () => {
+export const usePersonDetail = (): PersonDetailContextValue => {
   const context = useContext(PersonDetailContext);
   if (!context) {
     throw new Error("usePersonDetail must be used within PersonDetailProvider");
