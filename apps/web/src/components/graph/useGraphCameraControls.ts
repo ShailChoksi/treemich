@@ -78,10 +78,19 @@ export const useGraphCameraControls = ({
         frameAllNodes();
         return;
       }
-      const pose = getFocusCameraPose(target);
+      const camera = cameraRef.current;
+      const controls = orbitControlsRef.current;
+      const currentCameraPosition: NodePosition | null = camera
+        ? [camera.position.x, camera.position.y, camera.position.z]
+        : null;
+      const currentTarget: NodePosition | null = controls
+        ? [controls.target.x, controls.target.y, controls.target.z]
+        : null;
+      // Preserve orbit angle/distance so selection only retargets (no snap to default view).
+      const pose = getFocusCameraPose(target, currentCameraPosition, currentTarget);
       applyCameraPose(pose.position, pose.target);
     },
-    [applyCameraPose, frameAllNodes, visiblePositionsById]
+    [applyCameraPose, cameraRef, frameAllNodes, orbitControlsRef, visiblePositionsById]
   );
 
   const focusActiveNode = useCallback(() => {
