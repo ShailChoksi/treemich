@@ -11,7 +11,7 @@ import { createLayoutStateHookProps } from "./hooksTestFixtures";
 import {
   filterRelationshipsByLayer,
   pickNearest,
-  pickSingleFamilyTreeIds,
+  pickFocusMembershipIds,
   useGraphLayoutState
 } from "./useGraphLayoutState";
 
@@ -62,7 +62,43 @@ describe("filterRelationshipsByLayer", () => {
 });
 
 describe("useGraphLayoutState", () => {
-  it("keeps disconnected named faces visible in family view", () => {
+  it("keeps disconnected named faces visible when Focus mode is off", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root: Root = createRoot(container);
+    let visibleIds: string[] = [];
+
+    const Probe = () => {
+      const state = useGraphLayoutState(
+        createLayoutStateHookProps({
+          people: [
+            { id: "a", name: "Alpha", hasRelationship: true },
+            { id: "b", name: "Beta", hasRelationship: true },
+            { id: "c", name: "Charlie", hasRelationship: false }
+          ],
+          relationships: [{ fromPersonId: "a", toPersonId: "b", type: "SIBLING_OF" }],
+          showSingleFamilyTree: false,
+          selectedPersonId: "a",
+          renderLimit: 50
+        })
+      );
+      visibleIds = state.displayVisiblePeople.map((item) => item.person.id).sort();
+      return null;
+    };
+
+    act(() => {
+      root.render(createElement(Probe));
+    });
+
+    expect(visibleIds).toEqual(["a", "b", "c"]);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("relayouts Focus membership subset and drops people outside the cone", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root: Root = createRoot(container);
@@ -78,7 +114,7 @@ describe("useGraphLayoutState", () => {
           ],
           relationships: [{ fromPersonId: "a", toPersonId: "b", type: "SIBLING_OF" }],
           showSingleFamilyTree: true,
-          singleFamilyTreeAnchorId: "a",
+          focusAnchorId: "a",
           selectedPersonId: "a",
           renderLimit: 50
         })
@@ -91,7 +127,7 @@ describe("useGraphLayoutState", () => {
       root.render(createElement(Probe));
     });
 
-    expect(visibleIds).toEqual(["a", "b", "c"]);
+    expect(visibleIds).toEqual(["a", "b"]);
 
     act(() => {
       root.unmount();
@@ -115,7 +151,7 @@ describe("useGraphLayoutState", () => {
           ],
           relationships: [{ fromPersonId: "a", toPersonId: "b", type: "SIBLING_OF" }],
           showSingleFamilyTree: true,
-          singleFamilyTreeAnchorId: "a",
+          focusAnchorId: "a",
           selectedPersonId: "a",
           renderLimit: 50
         })
@@ -746,34 +782,14 @@ describe("useGraphLayoutState", () => {
   });
 });
 
-describe("pickSingleFamilyTreeIds", () => {
-  it("returns largest component when no person is selected", () => {
-    const ids = pickSingleFamilyTreeIds(
-      [
-        { fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" },
-        { fromPersonId: "b", toPersonId: "c", type: "SPOUSE_OF" },
-        { fromPersonId: "x", toPersonId: "y", type: "PARENT_OF" }
-      ],
-      null
-    );
-
-    expect(ids).toEqual(new Set(["a", "b", "c"]));
-  });
-
-  it("returns selected person's component when selected", () => {
-    const ids = pickSingleFamilyTreeIds(
-      [
-        { fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" },
-        { fromPersonId: "x", toPersonId: "y", type: "PARENT_OF" }
-      ],
-      "x"
-    );
-
-    expect(ids).toEqual(new Set(["x", "y"]));
-  });
-
-  it("returns selected person when graph has no relationships", () => {
-    const ids = pickSingleFamilyTreeIds([], "solo");
-    expect(ids).toEqual(new Set(["solo"]));
+describe("pickFocusMembershipIds via layout export", () => {
+  it("returns empty without an anchor", () => {
+    const ids = pickFocusMembershipIds([{ fromPersonId: "a", toPersonId: "b", type: "PARENT_OF" } as never], {
+      anchorId: null,
+      ancestorDepth: 3,
+      descendantDepth: 3,
+      collateralDepth: 0
+    });
+    expect(ids.size).toBe(0);
   });
 });

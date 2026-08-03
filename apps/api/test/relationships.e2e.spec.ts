@@ -163,6 +163,9 @@ describe("Treemich API routes", () => {
   };
   const defaultGraphRenderLimit = 120;
   const defaultShowSingleFamilyTree = false;
+  const defaultFocusAncestorDepth = 3;
+  const defaultFocusDescendantDepth = 3;
+  const defaultFocusCollateralDepth = 0;
   const authContext = {
     user: {
       id: "user-1",
@@ -1577,6 +1580,9 @@ describe("Treemich API routes", () => {
       expect(response.json()).toEqual({
         graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
         searchIncludeAlternateNames: true
@@ -1607,6 +1613,9 @@ describe("Treemich API routes", () => {
         familyViewStyle: "centeredRelationshipMap",
         graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         graphFilterVisibility: {
           parentChild: true,
@@ -1634,6 +1643,9 @@ describe("Treemich API routes", () => {
       expect(response.json()).toEqual({
         graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
         searchIncludeAlternateNames: true
@@ -1665,6 +1677,9 @@ describe("Treemich API routes", () => {
         ...savedPrefs,
         graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
         searchIncludeAlternateNames: true
@@ -1705,6 +1720,9 @@ describe("Treemich API routes", () => {
         ...merged,
         graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
         searchIncludeAlternateNames: true
@@ -1764,6 +1782,9 @@ describe("Treemich API routes", () => {
         familyViewStyle: "generationTree",
         graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
         searchIncludeAlternateNames: true,
@@ -1789,6 +1810,9 @@ describe("Treemich API routes", () => {
       expect(response.json()).toEqual({
         graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
         searchIncludeAlternateNames: true,
@@ -1853,6 +1877,9 @@ describe("Treemich API routes", () => {
       expect(response.json()).toEqual({
         ...merged,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
         searchIncludeAlternateNames: true
@@ -1893,6 +1920,9 @@ describe("Treemich API routes", () => {
         ...merged,
         graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
         searchIncludeAlternateNames: true
@@ -1938,6 +1968,9 @@ describe("Treemich API routes", () => {
         ...merged,
         graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
         searchIncludeAlternateNames: true
@@ -1962,6 +1995,9 @@ describe("Treemich API routes", () => {
         ...cleared,
         graphRenderLimit: defaultGraphRenderLimit,
         showSingleFamilyTree: defaultShowSingleFamilyTree,
+        focusAncestorDepth: defaultFocusAncestorDepth,
+        focusDescendantDepth: defaultFocusDescendantDepth,
+        focusCollateralDepth: defaultFocusCollateralDepth,
         primaryFamilyUnitByPersonId: {},
         cooccurrence: defaultCooccurrencePreferences,
         searchIncludeAlternateNames: true

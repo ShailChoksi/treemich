@@ -1,5 +1,8 @@
 import {
   defaultCooccurrencePreferences,
+  defaultFocusAncestorDepth,
+  defaultFocusCollateralDepth,
+  defaultFocusDescendantDepth,
   defaultGraphRenderLimit,
   defaultShowSingleFamilyTree,
   userPreferencesSchema,
@@ -28,6 +31,9 @@ export const withUserPreferenceDefaults = (
     ...parsed,
     graphRenderLimit: parsed.graphRenderLimit ?? defaultGraphRenderLimit,
     showSingleFamilyTree: parsed.showSingleFamilyTree ?? defaultShowSingleFamilyTree,
+    focusAncestorDepth: parsed.focusAncestorDepth ?? defaultFocusAncestorDepth,
+    focusDescendantDepth: parsed.focusDescendantDepth ?? defaultFocusDescendantDepth,
+    focusCollateralDepth: parsed.focusCollateralDepth ?? defaultFocusCollateralDepth,
     primaryFamilyUnitByPersonId: parsed.primaryFamilyUnitByPersonId ?? {},
     cooccurrence: getCooccurrencePreferences(parsed),
     searchIncludeAlternateNames: parsed.searchIncludeAlternateNames ?? true
@@ -44,6 +50,9 @@ export const mergeUserPreferences = (
   familyViewStyle: incoming.familyViewStyle ?? current.familyViewStyle,
   graphRenderLimit: incoming.graphRenderLimit ?? current.graphRenderLimit,
   showSingleFamilyTree: incoming.showSingleFamilyTree ?? current.showSingleFamilyTree,
+  focusAncestorDepth: incoming.focusAncestorDepth ?? current.focusAncestorDepth,
+  focusDescendantDepth: incoming.focusDescendantDepth ?? current.focusDescendantDepth,
+  focusCollateralDepth: incoming.focusCollateralDepth ?? current.focusCollateralDepth,
   lastSelectedPersonId:
     incoming.lastSelectedPersonId !== undefined
       ? incoming.lastSelectedPersonId

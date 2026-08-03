@@ -17,6 +17,7 @@ import {
 } from "three";
 import type { Person } from "../../lib/api";
 import { personThumbnailUrl } from "../../lib/api";
+import { FocusLockBadge } from "./FocusLockBadge";
 import { applyCoverCrop } from "./useThumbnailLoader";
 import { useFrame, useThree } from "@react-three/fiber";
 import { resolvePersonInitials } from "./personNodeText";
@@ -29,6 +30,7 @@ export type PersonNodeProps = {
   isHovered: boolean;
   isHighlighted: boolean;
   showLabel?: boolean;
+  showFocusLock?: boolean;
   instancedVisuals?: boolean;
   preloadedTexture?: Texture | null;
   onClick: (personId: string, event: { stopPropagation: () => void }) => void;
@@ -177,6 +179,7 @@ const PersonNodeComponent = ({
   isHovered,
   isHighlighted,
   showLabel = true,
+  showFocusLock = false,
   instancedVisuals = false,
   preloadedTexture,
   onClick,
@@ -286,6 +289,7 @@ const PersonNodeComponent = ({
           {truncateName(person.name)}
         </Text>
       ) : null}
+      {showFocusLock ? <FocusLockBadge /> : null}
     </Billboard>
   );
 };
@@ -298,6 +302,7 @@ const PersonNodeFallbackComponent = ({
   isHovered,
   isHighlighted,
   showLabel = true,
+  showFocusLock = false,
   instancedVisuals = false,
   onClick,
   onHover
@@ -360,6 +365,7 @@ const PersonNodeFallbackComponent = ({
           {truncateName(person.name)}
         </Text>
       ) : null}
+      {showFocusLock ? <FocusLockBadge /> : null}
     </Billboard>
   );
 };
@@ -372,6 +378,7 @@ const PersonNodeMinimalComponent = ({
   isHovered,
   isHighlighted,
   showLabel = false,
+  showFocusLock = false,
   instancedVisuals = false,
   onClick,
   onHover
@@ -424,6 +431,7 @@ const PersonNodeMinimalComponent = ({
           {truncateName(person.name)}
         </Text>
       ) : null}
+      {showFocusLock ? <FocusLockBadge /> : null}
     </Billboard>
   );
 };
