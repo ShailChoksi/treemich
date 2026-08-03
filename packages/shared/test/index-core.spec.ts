@@ -87,6 +87,22 @@ describe("shared enums and preference schemas", () => {
     expect(prefs.searchIncludeAlternateNames).toBe(true);
   });
 
+  it("parses Focus depth preferences within bounds", () => {
+    const prefs = userPreferencesSchema.parse({
+      showSingleFamilyTree: true,
+      focusAncestorDepth: 5,
+      focusDescendantDepth: 2,
+      focusCollateralDepth: 1
+    });
+    expect(prefs.focusAncestorDepth).toBe(5);
+    expect(prefs.focusDescendantDepth).toBe(2);
+    expect(prefs.focusCollateralDepth).toBe(1);
+  });
+
+  it("rejects Focus collateral depth above max", () => {
+    expect(() => userPreferencesSchema.parse({ focusCollateralDepth: 6 })).toThrow();
+  });
+
   it("parses onboardingTutorial when both dismissed fields are present", () => {
     const prefs = userPreferencesSchema.parse({
       onboardingTutorial: {

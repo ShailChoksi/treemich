@@ -38,6 +38,8 @@ type Props = {
   showNodeActionButtons: boolean;
   hoveredPersonId: string | null;
   highlightedPersonIds: Set<string>;
+  /** Person id currently locked as Focus Anchor, or null when unlocked. */
+  focusLockedPersonId?: string | null;
   thumbnailNodeIds: Set<string>;
   thumbnailTextures: Map<string, Texture>;
   onNodeClick: (personId: string, event: { stopPropagation: () => void }) => void;
@@ -51,6 +53,7 @@ export const AnimatedNodes = ({
   showNodeActionButtons,
   hoveredPersonId,
   highlightedPersonIds,
+  focusLockedPersonId = null,
   thumbnailNodeIds,
   thumbnailTextures,
   onNodeClick,
@@ -169,7 +172,9 @@ export const AnimatedNodes = ({
         const isSelected = selectedPersonId === person.id;
         const isHovered = hoveredPersonId === person.id;
         const isHighlighted = highlightedPersonIds.has(person.id);
-        const isPriorityNode = isSelected || isHovered || isHighlighted || prioritizedNodeIds.has(person.id);
+        const showFocusLock = focusLockedPersonId === person.id;
+        const isPriorityNode =
+          isSelected || isHovered || isHighlighted || showFocusLock || prioritizedNodeIds.has(person.id);
         const visibilityBucket = renderVisibilityBucketByPersonId.get(person.id) ?? "near";
         const showThumbnail = thumbnailNodeIds.has(person.id);
         const renderTier = resolveNodeRenderTier({
@@ -189,6 +194,7 @@ export const AnimatedNodes = ({
                 isHovered={isHovered}
                 isHighlighted={isHighlighted}
                 showLabel={showLabel}
+                showFocusLock={showFocusLock}
                 instancedVisuals
                 onClick={onNodeClick}
                 onHover={onNodeHover}
@@ -202,6 +208,7 @@ export const AnimatedNodes = ({
                     isHovered={isHovered}
                     isHighlighted={isHighlighted}
                     showLabel={showLabel}
+                    showFocusLock={showFocusLock}
                     instancedVisuals
                     onClick={onNodeClick}
                     onHover={onNodeHover}
@@ -214,6 +221,7 @@ export const AnimatedNodes = ({
                   isHovered={isHovered}
                   isHighlighted={isHighlighted}
                   showLabel={showLabel}
+                  showFocusLock={showFocusLock}
                   preloadedTexture={thumbnailTextures.get(person.id)}
                   instancedVisuals
                   onClick={onNodeClick}
@@ -227,6 +235,7 @@ export const AnimatedNodes = ({
                 isHovered={isHovered}
                 isHighlighted={isHighlighted}
                 showLabel={showLabel}
+                showFocusLock={showFocusLock}
                 instancedVisuals
                 onClick={onNodeClick}
                 onHover={onNodeHover}

@@ -132,6 +132,8 @@ type Props = {
   showNodeActionButtons: boolean;
   hoveredPersonId: string | null;
   highlightedPersonIds: Set<string>;
+  /** Person id currently locked as Focus Anchor, or null when unlocked. */
+  focusLockedPersonId?: string | null;
   /** When false, the graph is not visible (e.g. another workspace active) */
   isVisible: boolean;
   setHoveredPersonId: (updater: (current: string | null) => string | null) => void;
@@ -163,6 +165,7 @@ export const GraphCanvasScene = ({
   showNodeActionButtons,
   hoveredPersonId,
   highlightedPersonIds,
+  focusLockedPersonId = null,
   isVisible,
   setHoveredPersonId,
   onNodeClick,
@@ -349,6 +352,7 @@ export const GraphCanvasScene = ({
         showNodeActionButtons={showNodeActionButtons}
         hoveredPersonId={hoveredPersonId}
         highlightedPersonIds={highlightedPersonIds}
+        focusLockedPersonId={focusLockedPersonId}
         thumbnailNodeIds={thumbnailNodeIds}
         thumbnailTextures={thumbnailTextures}
         onNodeClick={handleNodeClick}
