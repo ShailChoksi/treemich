@@ -8,6 +8,7 @@ export class InMemoryPersonOwnership implements PersonOwnership {
   constructor(private readonly ownedByUser: Map<string, Set<string>> = new Map()) {}
 
   with(_db: PersonOwnershipDb): PersonOwnership {
+    void _db;
     return this;
   }
 
