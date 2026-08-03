@@ -18,9 +18,18 @@ export const AuthScreen = ({ busy, error, onSubmit }: Props) => {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (
+      provider === "immich" &&
+      !window.confirm(
+        "Legacy Immich migration login should only be used once. Using it again can clear or overwrite your Treemich data and force a start over. Continue?"
+      )
+    ) {
+      return;
+    }
     await onSubmit(email, password, provider);
   };
   const errorId = error ? "auth-screen-error" : undefined;
+  const immichWarningId = provider === "immich" ? "auth-immich-migration-warning" : undefined;
 
   return (
     <main className="auth-screen">
@@ -32,11 +41,15 @@ export const AuthScreen = ({ busy, error, onSubmit }: Props) => {
             standalone Treemich account.
           </p>
           <p className="hint">
-            Existing legacy Immich-login users can choose the Immich migration login below, then manage Immich
-            linking from inside Treemich.
+            Existing legacy Immich-login users can choose the Immich migration login below once, then sign in
+            with Treemich afterward and manage Immich linking from inside the app.
           </p>
         </div>
-        <form className="stack" onSubmit={(event) => void handleSubmit(event)} aria-describedby={errorId}>
+        <form
+          className="stack"
+          onSubmit={(event) => void handleSubmit(event)}
+          aria-describedby={[errorId, immichWarningId].filter(Boolean).join(" ") || undefined}
+        >
           <label className="field-group">
             <span className="field-label">Sign-in method</span>
             <select value={provider} onChange={(event) => setProvider(event.target.value as LoginProvider)}>
@@ -44,6 +57,12 @@ export const AuthScreen = ({ busy, error, onSubmit }: Props) => {
               <option value="immich">Legacy Immich migration login</option>
             </select>
           </label>
+          {provider === "immich" ? (
+            <p id={immichWarningId} className="hint hint--danger" role="status">
+              Use Immich migration login only once. Selecting it again can clear or overwrite your Treemich
+              data and force you to start over. After migrating, sign in with your Treemich account.
+            </p>
+          ) : null}
           <label className="field-group">
             <span className="field-label">Email</span>
             <input

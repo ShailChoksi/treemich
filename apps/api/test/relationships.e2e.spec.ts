@@ -95,6 +95,7 @@ const personNameServiceMock = {
   listByPersonId: vi.fn().mockResolvedValue([]),
   getPrimaryMapForProfileIds: vi.fn().mockResolvedValue(new Map()),
   getAllFormattedForUser: vi.fn().mockResolvedValue(new Map()),
+  syncPrimaryFromProfile: vi.fn().mockResolvedValue(undefined),
   create: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
@@ -281,6 +282,7 @@ describe("Treemich API routes", () => {
     personNameServiceMock.listByPersonId.mockResolvedValue([]);
     personNameServiceMock.getPrimaryMapForProfileIds.mockResolvedValue(new Map());
     personNameServiceMock.getAllFormattedForUser.mockResolvedValue(new Map());
+    personNameServiceMock.syncPrimaryFromProfile.mockResolvedValue(undefined);
     researchTaskServiceMock.list.mockResolvedValue([]);
     process.env.NODE_ENV = "test";
     process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:54321/treemich_test";
@@ -646,10 +648,17 @@ describe("Treemich API routes", () => {
   it("updates extended person profile fields", async () => {
     updatePersonServiceMock.mockResolvedValueOnce({
       id: "pp1",
-      gender: "FEMALE",
-      givenName: "Alex",
-      surname: "Johnson",
-      nicknames: "AJ"
+      name: "Alex Johnson",
+      profile: {
+        id: "pp1",
+        gender: "FEMALE",
+        givenName: "Alex",
+        surname: "Johnson",
+        nicknames: "AJ"
+      },
+      externalIdentities: [],
+      thumbnail: null,
+      hasRelationship: false
     });
 
     const response = await app.inject({
@@ -672,6 +681,10 @@ describe("Treemich API routes", () => {
     });
     expect(lifeEventServiceMock.syncPersonProfileFieldsToLifeEvents).toHaveBeenCalledWith("user-1", "pp1", {
       deathDate: null
+    });
+    expect(personNameServiceMock.syncPrimaryFromProfile).toHaveBeenCalledWith("user-1", "pp1", {
+      givenName: "Alex",
+      surname: "Johnson"
     });
   });
 
@@ -1389,6 +1402,10 @@ describe("Treemich API routes", () => {
       "pp-new",
       expect.objectContaining({ birthDate: "1990-05-15" })
     );
+    expect(personNameServiceMock.syncPrimaryFromProfile).toHaveBeenCalledWith("user-1", "pp-new", {
+      givenName: "Carol",
+      surname: "Jones"
+    });
     expect(response.json().id).toBe("pp-new");
   });
 

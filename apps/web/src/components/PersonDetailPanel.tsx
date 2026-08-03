@@ -63,7 +63,6 @@ const DEFAULT_COLLAPSED_SECTIONS = {
   friends: false,
   pets: false,
   editRelationship: false,
-  removeRelationship: false,
   lifeEvents: true,
   timeline: true,
   researchTasks: true,
@@ -137,6 +136,7 @@ export type PersonDetailPanelProps = {
   ) => Promise<void>;
   onRelationshipLifeEventDelete?: (relationshipId: string, eventId: string) => Promise<void>;
   onPersonNamesChanged?: () => void;
+  personNamesReloadToken?: number;
   personTimeline?: TimelineEventRecord[];
   researchTasks?: ResearchTaskRecord[];
   /** Loaded family unions for this person; omit until fetched from `GET /people/:id/families`. */
@@ -219,6 +219,7 @@ const PersonDetailPanelComponent = ({
   onRelationshipLifeEventPatch,
   onRelationshipLifeEventDelete,
   onPersonNamesChanged,
+  personNamesReloadToken = 0,
   personTimeline,
   researchTasks,
   families,
@@ -256,7 +257,6 @@ const PersonDetailPanelComponent = ({
     ...sectionCollapsedOverrides
   }));
   const relationshipEditorFirstFieldRef = useRef<HTMLSelectElement | null>(null);
-  const relationshipDeleteConfirmRef = useRef<HTMLButtonElement | null>(null);
   const relationshipActionReturnFocusRef = useRef<HTMLElement | null>(null);
   const peopleById = useMemo(() => new Map(people.map((entry) => [entry.id, entry])), [people]);
   const relationshipsByPersonId = useMemo(() => indexRelationshipsByPersonId(relationships), [relationships]);
@@ -428,12 +428,6 @@ const PersonDetailPanelComponent = ({
       relationshipEditorFirstFieldRef.current?.focus();
     }
   }, [activeRelationship]);
-
-  useEffect(() => {
-    if (pendingDeleteRelationship) {
-      relationshipDeleteConfirmRef.current?.focus();
-    }
-  }, [pendingDeleteRelationship]);
 
   const startEditingRelationship = (relationship: RelativeItem) => {
     relationshipActionReturnFocusRef.current = document.activeElement as HTMLElement | null;
@@ -607,16 +601,6 @@ const PersonDetailPanelComponent = ({
                 </span>
               </div>
             </div>
-            {onDeletePerson ? (
-              <button
-                type="button"
-                className="secondary-button danger-button"
-                onClick={() => setShowDeletePersonConfirm(true)}
-                disabled={isSavingProfile || isSavingRelationship || isDeletingPerson}
-              >
-                Delete person
-              </button>
-            ) : null}
           </div>
           <DestructiveConfirmDialog
             open={showDeletePersonConfirm}
@@ -628,6 +612,24 @@ const PersonDetailPanelComponent = ({
             busy={isDeletingPerson}
             onConfirm={handleDeletePerson}
             onCancel={() => setShowDeletePersonConfirm(false)}
+          />
+          <DestructiveConfirmDialog
+            open={pendingDeleteRelationship !== null}
+            title="Remove relationship?"
+            description={
+              pendingDeleteRelationship
+                ? `Remove the relationship between ${person.name} and ${pendingDeleteRelationship.relatedName}. This will remove the link in both directions for this pair.`
+                : ""
+            }
+            confirmLabel="Remove relationship"
+            cancelLabel="Cancel"
+            busy={isSavingRelationship}
+            onConfirm={() => {
+              if (pendingDeleteRelationship) {
+                return handleRelationshipDelete(pendingDeleteRelationship);
+              }
+            }}
+            onCancel={stopDeletingRelationship}
           />
           <CollapsibleSection
             sectionKey="profile"
@@ -819,6 +821,7 @@ const PersonDetailPanelComponent = ({
               <PersonNamesSection
                 personId={person.id}
                 onNamesChanged={onPersonNamesChanged}
+                reloadToken={personNamesReloadToken}
                 disabled={isSavingProfile || isSavingRelationship}
               />
             </CollapsibleSection>
@@ -1108,44 +1111,22 @@ const PersonDetailPanelComponent = ({
               </div>
             </CollapsibleSection>
           ) : null}
-          {pendingDeleteRelationship ? (
-            <CollapsibleSection
-              sectionKey="remove-relationship"
-              title="Remove relationship"
-              subtitle={`Remove the relationship between ${person.name} and ${pendingDeleteRelationship.relatedName}.`}
-              isCollapsed={collapsedSections.removeRelationship}
-              onToggleCollapsed={() => toggleSectionCollapsed("removeRelationship")}
-              className="relationship-editor danger-surface"
-            >
+          {onDeletePerson ? (
+            <details className="person-detail-danger-zone">
+              <summary className="person-detail-danger-zone-summary">Danger zone</summary>
+              <p className="hint">
+                Permanently remove this person and their life events, relationships, and research notes from
+                Treemich.
+              </p>
               <button
                 type="button"
-                className="text-link-button"
-                onClick={stopDeletingRelationship}
-                disabled={isSavingRelationship}
+                className="secondary-button danger-ghost-button"
+                onClick={() => setShowDeletePersonConfirm(true)}
+                disabled={isSavingProfile || isSavingRelationship || isDeletingPerson}
               >
-                Close
+                Delete person
               </button>
-              <p className="hint">This will remove the link in both directions for this pair.</p>
-              <div className="add-relative-actions">
-                <button
-                  ref={relationshipDeleteConfirmRef}
-                  type="button"
-                  className="secondary-button danger-button"
-                  disabled={isSavingRelationship}
-                  onClick={() => void handleRelationshipDelete(pendingDeleteRelationship)}
-                >
-                  {isSavingRelationship ? "Removing..." : "Remove relationship"}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={stopDeletingRelationship}
-                  disabled={isSavingRelationship}
-                >
-                  Cancel
-                </button>
-              </div>
-            </CollapsibleSection>
+            </details>
           ) : null}
         </div>
       ) : (

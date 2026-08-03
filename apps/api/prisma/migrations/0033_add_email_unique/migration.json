@@ -1,0 +1,10 @@
+{
+  "version": "5.2",
+  "steps": [
+    {
+      "tag": "CreateIndex",
+      "model": "TreemichUser",
+      "field": "email"
+    }
+  ]
+}

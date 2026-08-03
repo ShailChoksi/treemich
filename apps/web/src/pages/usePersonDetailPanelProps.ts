@@ -72,6 +72,7 @@ export const usePersonDetailPanelProps = (): PersonDetailPanelProps => {
       onRelationshipLifeEventPatch: detail.handleRelationshipLifeEventPatch,
       onRelationshipLifeEventDelete: detail.handleRelationshipLifeEventDelete,
       onPersonNamesChanged: graph.refreshPeopleOnly,
+      personNamesReloadToken: detail.personNamesReloadToken,
       personTimeline: graph.selectedPerson ? detail.personTimelineById[graph.selectedPerson.id] : undefined,
       families: graph.selectedPerson ? detail.familiesByPersonId[graph.selectedPerson.id] : undefined,
       onFamilyPatch: detail.handleFamilyPatch,

@@ -483,6 +483,68 @@ describe("PersonDetailPanelWithProps", () => {
     container.remove();
   });
 
+  it("keeps Delete person out of the header behind a collapsed danger zone", () => {
+    const onDeletePerson = vi.fn().mockResolvedValue(undefined);
+    const { container, root } = renderPanel({
+      panelProps: { onDeletePerson }
+    });
+
+    const header = container.querySelector(".person-detail-header");
+    expect(header?.textContent).not.toContain("Delete person");
+
+    const dangerZone = container.querySelector(
+      "details.person-detail-danger-zone"
+    ) as HTMLDetailsElement | null;
+    expect(dangerZone).toBeTruthy();
+    expect(dangerZone?.open).toBe(false);
+    expect(dangerZone?.textContent).toContain("Danger zone");
+
+    const deleteButton = dangerZone?.querySelector("button.danger-ghost-button");
+    expect(deleteButton?.textContent).toContain("Delete person");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("opens a centered confirm dialog for remove relationship instead of an inline section", async () => {
+    const onDeleteRelationship = vi.fn().mockResolvedValue(undefined);
+    const { container, root } = renderPanel({
+      panelProps: { onDeleteRelationship }
+    });
+
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(container.textContent).not.toContain("Remove the relationship between");
+
+    const removeButton = [...container.querySelectorAll("button")].find((button) =>
+      button.getAttribute("aria-label")?.includes("Remove relationship with Spouse")
+    );
+    expect(removeButton).toBeDefined();
+    await act(async () => {
+      removeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const dialog = container.querySelector('[role="alertdialog"]');
+    expect(dialog).toBeTruthy();
+    expect(dialog?.textContent).toContain("Remove relationship?");
+    expect(dialog?.textContent).toContain("Remove the relationship between Me and Spouse");
+    expect(dialog?.classList.contains("confirm-dialog")).toBe(true);
+
+    const confirmButton = dialog!.querySelector(".danger-button") as HTMLButtonElement | null;
+    expect(confirmButton?.textContent).toContain("Remove relationship");
+    await act(async () => {
+      confirmButton!.click();
+    });
+
+    expect(onDeleteRelationship).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it("supports thumbnail upload and Immich provider link actions", async () => {
     const onThumbnailUpload = vi.fn().mockResolvedValue(undefined);
     const onImmichIdentityLink = vi.fn().mockResolvedValue(undefined);

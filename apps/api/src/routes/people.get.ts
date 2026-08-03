@@ -74,6 +74,12 @@ export const registerPeopleGetRoute = (app: FastifyInstance) => {
         ...(body.deathDate !== undefined ? { deathDate: body.deathDate } : {})
       });
     }
+    if (person.profile?.givenName || person.profile?.surname) {
+      await app.services.personNameService.syncPrimaryFromProfile(auth.user.id, person.id, {
+        givenName: person.profile.givenName ?? null,
+        surname: person.profile.surname ?? null
+      });
+    }
     return reply.code(201).send(person);
   });
 
@@ -93,6 +99,12 @@ export const registerPeopleGetRoute = (app: FastifyInstance) => {
       await app.services.lifeEventService.syncPersonProfileFieldsToLifeEvents(auth.user.id, person.id, {
         ...(body.birthDate !== undefined ? { birthDate: body.birthDate } : {}),
         ...(body.deathDate !== undefined ? { deathDate: body.deathDate } : {})
+      });
+    }
+    if (body.givenName !== undefined || body.surname !== undefined) {
+      await app.services.personNameService.syncPrimaryFromProfile(auth.user.id, person.id, {
+        givenName: person.profile?.givenName ?? null,
+        surname: person.profile?.surname ?? null
       });
     }
     return person;

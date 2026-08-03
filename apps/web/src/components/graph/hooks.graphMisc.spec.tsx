@@ -327,8 +327,28 @@ describe("animation loop helpers", () => {
 });
 
 describe("useGraphCameraControls helpers", () => {
-  it("builds a focus pose around the target", () => {
+  it("builds a default focus pose around the target when no orbit is provided", () => {
     const pose = getFocusCameraPose([10, 4, -3]);
+    expect(pose).toEqual({
+      position: [10, 7.8, 4.4],
+      target: [10, 4, -3]
+    });
+  });
+
+  it("preserves the current orbit offset when retargeting focus", () => {
+    const pose = getFocusCameraPose(
+      [20, 1, 5],
+      [12, 9, -1], // camera
+      [10, 4, -3] // previous target → offset [2, 5, 2]
+    );
+    expect(pose).toEqual({
+      position: [22, 6, 7],
+      target: [20, 1, 5]
+    });
+  });
+
+  it("falls back to the default offset when the current orbit is degenerate", () => {
+    const pose = getFocusCameraPose([10, 4, -3], [10, 4, -3], [10, 4, -3]);
     expect(pose).toEqual({
       position: [10, 7.8, 4.4],
       target: [10, 4, -3]

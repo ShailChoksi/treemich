@@ -227,6 +227,10 @@ body {
   color: #fecaca;
 }
 
+.auth-card .hint--danger {
+  color: #fca5a5;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -2252,6 +2256,33 @@ body {
   align-items: center;
   gap: 12px;
   padding: 2px 0 6px;
+}
+
+.person-detail-danger-zone {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+.person-detail-danger-zone-summary {
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 0.86rem;
+  font-weight: 600;
+  list-style: none;
+}
+
+.person-detail-danger-zone-summary::-webkit-details-marker {
+  display: none;
+}
+
+.person-detail-danger-zone[open] .person-detail-danger-zone-summary {
+  margin-bottom: 8px;
+  color: #fca5a5;
+}
+
+.person-detail-danger-zone .danger-ghost-button {
+  margin-top: 4px;
 }
 
 .person-detail-heading {

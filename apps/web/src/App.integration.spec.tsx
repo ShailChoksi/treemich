@@ -304,9 +304,17 @@ const setInputValue = (element: HTMLInputElement, value: string) => {
 describe("App Immich post-login sync (integration)", () => {
   const originalFetch = globalThis.fetch;
 
+  beforeEach(() => {
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true)
+    );
+  });
+
   afterEach(() => {
     globalThis.fetch = originalFetch;
     document.body.innerHTML = "";
+    vi.unstubAllGlobals();
   });
 
   const prefsDismissedTutorial = {

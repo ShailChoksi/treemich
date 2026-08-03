@@ -17,11 +17,13 @@ type Props = {
   personId: string;
   disabled?: boolean;
   onNamesChanged?: () => void;
+  /** Bump to force a reload (e.g. after Save profile syncs the primary PersonName). */
+  reloadToken?: number;
 };
 
 const nameTypes: PersonNameTypeValue[] = ["BIRTH", "MARRIED", "AKA", "MAIDEN", "RELIGIOUS", "OTHER"];
 
-export const PersonNamesSection = ({ personId, disabled, onNamesChanged }: Props) => {
+export const PersonNamesSection = ({ personId, disabled, onNamesChanged, reloadToken = 0 }: Props) => {
   const [names, setNames] = useState<PersonNameRecord[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,7 +47,7 @@ export const PersonNamesSection = ({ personId, disabled, onNamesChanged }: Props
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, reloadToken]);
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
