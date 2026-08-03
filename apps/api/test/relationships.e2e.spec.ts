@@ -293,8 +293,7 @@ describe("Treemich API routes", () => {
     personProfileFindManyMock.mockImplementation(async (args?: { include?: Record<string, unknown> }) => {
       if (args?.include && "externalIdentities" in args.include && "personNames" in args.include) {
         const people = (await listPeopleMock()) as
-          | Array<{ id: string; name: string; gender?: string }>
-          | undefined;
+          Array<{ id: string; name: string; gender?: string }> | undefined;
         return (people ?? []).map(makeSearchPersonRow);
       }
       return [];
