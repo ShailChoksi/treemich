@@ -167,6 +167,99 @@ describe("PersonDetailContext", () => {
     });
   });
 
+  it("keeps profile form values after save when PATCH returns a PersonRecord", async () => {
+    let detail: ReturnType<typeof usePersonDetail> | null = null;
+    let selectedId: string | null = null;
+    const Probe = () => {
+      const graph = usePeopleGraphData();
+      detail = usePersonDetail();
+      selectedId = graph.selectedPersonId;
+      return null;
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          ToastProvider,
+          null,
+          createElement(
+            PeopleGraphDataProvider,
+            { immichBaseUrl: null, currentUserName: null },
+            createElement(PersonDetailProvider, null, createElement(Probe))
+          )
+        )
+      );
+    });
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (selectedId === "p1" && detail?.selectedProfileEventFields.birthDate) {
+        break;
+      }
+    }
+    expect(selectedId).toBe("p1");
+
+    await act(async () => {
+      detail?.handleGivenNameChange("Alexandra");
+      detail?.handleSurnameChange("Smithson");
+      detail?.handleBirthCityChange("Berlin");
+      detail?.handleBirthCountryChange("Germany");
+    });
+
+    vi.mocked(globalThis.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
+      if (method === "PATCH" && /\/people\/p1$/.test(url)) {
+        return jsonResponse({
+          id: "p1",
+          name: "Alexandra Smithson",
+          birthDate: null,
+          profile: {
+            id: "p1",
+            gender: "MALE",
+            givenName: "Alexandra",
+            surname: "Smithson",
+            nicknames: "Al"
+          }
+        });
+      }
+      if (method === "PATCH" && url.includes("/people/p1/life-events/")) {
+        return jsonResponse({
+          ...birthEvent,
+          place: {
+            id: "place-1",
+            name: "Berlin, Germany",
+            locality: "Berlin",
+            adminArea: "Germany",
+            countryCode: null
+          }
+        });
+      }
+      if (method === "GET" && url.includes("/people/p1/life-events")) {
+        return jsonResponse({ lifeEvents: [birthEvent] });
+      }
+      return jsonResponse({ error: `unmocked ${method} ${url}` }, 404);
+    });
+
+    await act(async () => {
+      await detail?.onProfileSave();
+    });
+
+    expect(detail?.givenNameByPersonId.p1).toBe("Alexandra");
+    expect(detail?.surnameByPersonId.p1).toBe("Smithson");
+    expect(detail?.selectedProfileEventFields.birthDate).toBe("1991-05-06");
+    expect(detail?.selectedProfileEventFields.birthCity).toBe("Berlin");
+    expect(detail?.selectedProfileEventFields.birthCountry).toBe("Germany");
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
   it("uses Tier B relationship refresh after relationship life-event edits", async () => {
     let detail: ReturnType<typeof usePersonDetail> | null = null;
     const Probe = () => {

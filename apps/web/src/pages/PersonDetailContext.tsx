@@ -559,31 +559,63 @@ export const PersonDetailProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      const savedProfile = await updatePersonProfile(personToSave.id, {
+      const savedPerson = await updatePersonProfile(personToSave.id, {
         gender: selectedGender,
         givenName: selectedGivenName,
         surname: selectedSurname,
         nicknames: selectedNicknames
       });
+      // PATCH returns a PersonRecord; draft maps must read nested profile fields, not the record root.
+      const savedProfile = savedPerson.profile ?? {
+        id: personToSave.id,
+        gender: selectedGender,
+        givenName: selectedGivenName,
+        surname: selectedSurname,
+        nicknames: selectedNicknames
+      };
       const displayValues = deriveProfileDisplayValuesFromLifeEvents(nextLifeEvents);
+      // Prefer the values just saved so place/date fields do not flash empty if the API omits locality.
+      const retainedEventFields: ProfileEventFields = {
+        birthDate: displayValues.birthDate || eventFormFields.birthDate,
+        deathDate: displayValues.deathDate || eventFormFields.deathDate,
+        birthCity: displayValues.birthCity || eventFormFields.birthCity,
+        birthCountry: displayValues.birthCountry || eventFormFields.birthCountry
+      };
       graph.setPeople((current) =>
         current.map((person) =>
           person.id === personToSave.id
             ? {
                 ...person,
+                name: savedPerson.name || person.name,
+                displayName: savedPerson.displayName ?? person.displayName ?? null,
                 ...profileNamePatchForPerson(savedProfile),
-                birthDate: displayValues.birthDate || null,
-                profile: savedProfile
+                birthDate: retainedEventFields.birthDate || null,
+                profile: savedProfile,
+                externalIdentities: savedPerson.externalIdentities ?? person.externalIdentities,
+                thumbnail: savedPerson.thumbnail ?? person.thumbnail,
+                thumbnailPath: savedPerson.thumbnailPath ?? person.thumbnailPath
               }
             : person
         )
       );
       setLifeEventsByPersonId((current) => ({ ...current, [personToSave.id]: nextLifeEvents }));
       setGenderByPersonId((current) => ({ ...current, [personToSave.id]: savedProfile.gender }));
-      setGivenNameByPersonId((current) => ({ ...current, [personToSave.id]: savedProfile.givenName ?? "" }));
-      setSurnameByPersonId((current) => ({ ...current, [personToSave.id]: savedProfile.surname ?? "" }));
-      setNicknamesByPersonId((current) => ({ ...current, [personToSave.id]: savedProfile.nicknames ?? "" }));
-      setProfileEventFieldsByPersonId((current) => ({ ...current, [personToSave.id]: displayValues }));
+      setGivenNameByPersonId((current) => ({
+        ...current,
+        [personToSave.id]: savedProfile.givenName ?? selectedGivenName ?? ""
+      }));
+      setSurnameByPersonId((current) => ({
+        ...current,
+        [personToSave.id]: savedProfile.surname ?? selectedSurname ?? ""
+      }));
+      setNicknamesByPersonId((current) => ({
+        ...current,
+        [personToSave.id]: savedProfile.nicknames ?? selectedNicknames ?? ""
+      }));
+      setProfileEventFieldsByPersonId((current) => ({
+        ...current,
+        [personToSave.id]: retainedEventFields
+      }));
       setPersonTimelineById((current) => {
         if (!(personToSave.id in current)) {
           return current;
