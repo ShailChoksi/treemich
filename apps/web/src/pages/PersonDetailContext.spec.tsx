@@ -2,11 +2,7 @@ import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PeopleGraphDataProvider, usePeopleGraphData } from "./PeopleGraphDataContext";
-import {
-  PersonDetailProvider,
-  usePersonDetail,
-  type PersonDetailContextValue
-} from "./PersonDetailContext";
+import { PersonDetailProvider, usePersonDetail, type PersonDetailContextValue } from "./PersonDetailContext";
 import { ToastProvider } from "./ToastContext";
 
 const reactTestEnvironment = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
