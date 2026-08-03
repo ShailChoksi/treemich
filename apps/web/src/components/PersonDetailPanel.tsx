@@ -601,16 +601,6 @@ const PersonDetailPanelComponent = ({
                 </span>
               </div>
             </div>
-            {onDeletePerson ? (
-              <button
-                type="button"
-                className="secondary-button danger-button"
-                onClick={() => setShowDeletePersonConfirm(true)}
-                disabled={isSavingProfile || isSavingRelationship || isDeletingPerson}
-              >
-                Delete person
-              </button>
-            ) : null}
           </div>
           <DestructiveConfirmDialog
             open={showDeletePersonConfirm}
@@ -1120,6 +1110,23 @@ const PersonDetailPanelComponent = ({
                 </button>
               </div>
             </CollapsibleSection>
+          ) : null}
+          {onDeletePerson ? (
+            <details className="person-detail-danger-zone">
+              <summary className="person-detail-danger-zone-summary">Danger zone</summary>
+              <p className="hint">
+                Permanently remove this person and their life events, relationships, and research notes from
+                Treemich.
+              </p>
+              <button
+                type="button"
+                className="secondary-button danger-ghost-button"
+                onClick={() => setShowDeletePersonConfirm(true)}
+                disabled={isSavingProfile || isSavingRelationship || isDeletingPerson}
+              >
+                Delete person
+              </button>
+            </details>
           ) : null}
         </div>
       ) : (
