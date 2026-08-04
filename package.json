@@ -22,7 +22,7 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "overrides": {
-    "tar": "7.5.13",
+    "tar": "7.5.21",
     "minimatch": "10.2.5",
     "vite": "8.0.9",
     "react": "19.2.5",
@@ -35,12 +35,12 @@
     "@eslint/js": "^9.39.0",
     "@typescript-eslint/eslint-plugin": "^8.46.1",
     "@typescript-eslint/parser": "^8.46.1",
-    "concurrently": "^10.0.3",
+    "concurrently": "^10.0.4",
     "eslint": "^9.37.0",
     "prettier": "^3.6.2",
     "react": "19.2.5",
     "react-dom": "19.2.5",
-    "tar": "7.5.13"
+    "tar": "7.5.21"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.34",
