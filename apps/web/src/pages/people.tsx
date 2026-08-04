@@ -30,6 +30,7 @@ import { ProfileInfoPane } from "../components/profile/ProfileInfoPane";
 import { ProfileWorkspace } from "../components/profile/ProfileWorkspace";
 import { WorkspaceSkeleton } from "../components/WorkspaceSkeleton";
 import { DestructiveConfirmDialog } from "../components/DestructiveConfirmDialog";
+import { SharedLinksSettingsPanel } from "../components/SharedLinksSettingsPanel";
 import { PeopleGraphDataProvider, usePeopleGraphData } from "./PeopleGraphDataContext";
 import { PeopleReviewProvider, usePeopleReview } from "./PeopleReviewContext";
 import { PersonDetailProviderTree } from "./PersonDetailProviderTree";
@@ -757,6 +758,7 @@ const PeoplePageShell = ({ onReplayOnboardingTutorial }: PeoplePageShellProps) =
               </div>
             </section>
           )}
+          <SharedLinksSettingsPanel people={graph.people} />
         </section>
       );
     }

@@ -7,6 +7,13 @@
 import type {
   AuthState,
   AuthUser,
+  CreateFocusShareBody,
+  FocusShareGuestGraphResponse,
+  FocusShareGuestUnlockResponse,
+  GuestFocusShareGraphQuery,
+  PatchFocusShareBody,
+  RotateFocusSharePasswordBody,
+  UnlockFocusShareBody,
   CreateFamilyBody,
   CreateFamilyLifeEventBody,
   CreateLifeEventBody,
@@ -18,6 +25,7 @@ import type {
   CreateRepositoryBody,
   CreateResearchTaskBody,
   CreateSourceBody,
+  FocusShareRecord,
   FamilyRecord,
   GraphLayoutRequest,
   GraphLayoutResponse,
@@ -72,9 +80,17 @@ import type {
 export type {
   AuthState,
   AuthUser,
+  CreateFocusShareBody,
+  FocusShareGuestGraphResponse,
+  FocusShareGuestUnlockResponse,
+  GuestFocusShareGraphQuery,
+  PatchFocusShareBody,
+  RotateFocusSharePasswordBody,
+  UnlockFocusShareBody,
   CreateFamilyBody,
   CreateFamilyLifeEventBody,
   CreateLifeEventBody,
+  FocusShareRecord,
   CreateMediaLinkBody,
   CreateMediaObjectBody,
   CreatePersonBody,
@@ -1820,3 +1836,133 @@ export const fetchGedcomExportDownload = async (format: "ged" | "zip" = "ged"): 
   await ensureOk(response, "GEDCOM export download failed");
   return response.blob();
 };
+
+/** `POST /focus-shares` — create a password-gated Focus Share of the current cone. */
+export const createFocusShare = async (body: CreateFocusShareBody): Promise<FocusShareRecord> => {
+  const response = await fetch(
+    `${treemichApi}/focus-shares`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to create Focus Share");
+  return (await response.json()) as FocusShareRecord;
+};
+
+/** `GET /focus-shares` — list the signed-in owner's Focus Shares. */
+export const listFocusShares = async (): Promise<FocusShareRecord[]> => {
+  const response = await fetch(`${treemichApi}/focus-shares`, withSession({ cache: "no-store" }));
+  await ensureOk(response, "Failed to load Focus Shares");
+  const body = (await response.json()) as { shares: FocusShareRecord[] };
+  return body.shares;
+};
+
+/** `PATCH /focus-shares/:shareId` — update label, Focus Anchor, or max depths. */
+export const patchFocusShare = async (
+  shareId: string,
+  body: PatchFocusShareBody
+): Promise<FocusShareRecord> => {
+  const response = await fetch(
+    `${treemichApi}/focus-shares/${encodeURIComponent(shareId)}`,
+    withSession({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to update Focus Share");
+  return (await response.json()) as FocusShareRecord;
+};
+
+/** `POST /focus-shares/:shareId/rotate-password` — set a new password; kills guest sessions. */
+export const rotateFocusSharePassword = async (
+  shareId: string,
+  body: RotateFocusSharePasswordBody
+): Promise<FocusShareRecord> => {
+  const response = await fetch(
+    `${treemichApi}/focus-shares/${encodeURIComponent(shareId)}/rotate-password`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Failed to rotate Focus Share password");
+  return (await response.json()) as FocusShareRecord;
+};
+
+/** `DELETE /focus-shares/:shareId` — revoke (hard delete) a Focus Share. */
+export const deleteFocusShare = async (shareId: string): Promise<void> => {
+  const response = await fetch(
+    `${treemichApi}/focus-shares/${encodeURIComponent(shareId)}`,
+    withSession({ method: "DELETE" })
+  );
+  await ensureOk(response, "Failed to revoke Focus Share");
+};
+
+/** Absolute public URL for a Focus Share path (e.g. `/share/{publicId}`). */
+export const focusShareAbsoluteUrl = (publicPath: string) => {
+  if (typeof window === "undefined") {
+    return publicPath;
+  }
+  return `${window.location.origin}${publicPath.startsWith("/") ? publicPath : `/${publicPath}`}`;
+};
+
+/** Parse `/share/:publicId` from a browser pathname (not API `/share/guest/...`). */
+export const parseFocusSharePublicIdFromPath = (pathname: string): string | null => {
+  const match = pathname.match(/^\/share\/([^/]+)\/?$/i);
+  if (!match?.[1]) {
+    return null;
+  }
+  const segment = match[1];
+  if (segment.toLowerCase() === "guest") {
+    return null;
+  }
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+};
+
+/** `POST /share/:publicId/unlock` — sets the guest share-session cookie. */
+export const unlockFocusShare = async (
+  publicId: string,
+  body: UnlockFocusShareBody
+): Promise<FocusShareGuestUnlockResponse> => {
+  const response = await fetch(
+    `${treemichApi}/share/${encodeURIComponent(publicId)}/unlock`,
+    withSession({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+  );
+  await ensureOk(response, "Could not unlock this shared link");
+  return (await response.json()) as FocusShareGuestUnlockResponse;
+};
+
+/** `GET /share/guest/graph` — membership-scoped read-only Focus cone for the guest session. */
+export const fetchGuestFocusShareGraph = async (
+  query: GuestFocusShareGraphQuery = {}
+): Promise<FocusShareGuestGraphResponse> => {
+  const url = new URL(`${treemichApi}/share/guest/graph`, window.location.href);
+  if (query.ancestorDepth != null) {
+    url.searchParams.set("ancestorDepth", String(query.ancestorDepth));
+  }
+  if (query.descendantDepth != null) {
+    url.searchParams.set("descendantDepth", String(query.descendantDepth));
+  }
+  if (query.collateralDepth != null) {
+    url.searchParams.set("collateralDepth", String(query.collateralDepth));
+  }
+  const response = await fetch(url, withSession({ cache: "no-store" }));
+  await ensureOk(response, "Failed to load shared graph");
+  return (await response.json()) as FocusShareGuestGraphResponse;
+};
+
+/** Guest thumbnail URL (requires share-session cookie). */
+export const guestFocusShareThumbnailUrl = (personId: string) =>
+  `${treemichApi}/share/guest/people/${encodeURIComponent(personId)}/thumbnail`;

@@ -203,7 +203,8 @@ export const useThumbnailLoader = ({
   renderNearPersonIds,
   displayVisiblePeople,
   cameraSampleRef,
-  visible
+  visible,
+  resolveThumbnailUrl = personThumbnailUrl
 }: {
   peopleIds: string[];
   thumbnailCacheKeys?: Record<string, string | undefined>;
@@ -213,6 +214,8 @@ export const useThumbnailLoader = ({
   cameraSampleRef: MutableRefObject<Vector3>;
   /** When false, the thumbnail loading loop is paused (graph not visible). */
   visible?: boolean;
+  /** Thumbnail URL factory; defaults to the owner session route. */
+  resolveThumbnailUrl?: (personId: string, cacheKey?: string) => string;
 }) => {
   // Seed the React state from the module-level cache on every mount so cached
   // textures are immediately available.
@@ -379,7 +382,7 @@ export const useThumbnailLoader = ({
       try {
         const items = batch.map((personId) => ({
           personId,
-          url: personThumbnailUrl(personId, thumbnailCacheKeys[personId])
+          url: resolveThumbnailUrl(personId, thumbnailCacheKeys[personId])
         }));
         const results = await loadThumbnailBatch(items);
 
@@ -437,7 +440,7 @@ export const useThumbnailLoader = ({
       isDisposed = true;
       window.clearInterval(interval);
     };
-  }, [backoffUntilMs, thumbnailLoadOrder, isPaused, thumbnailCacheKeys]);
+  }, [backoffUntilMs, thumbnailLoadOrder, isPaused, thumbnailCacheKeys, resolveThumbnailUrl]);
 
   const thumbnailNodeIds = useMemo(() => new Set(thumbnailTextures.keys()), [thumbnailTextures]);
 

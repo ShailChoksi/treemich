@@ -20,6 +20,10 @@ import { registerAuthLinkStatusRoute } from "./routes/auth.link-status.js";
 import { registerAuthLoginRoute } from "./routes/auth.login.js";
 import { registerAuthLogoutRoute } from "./routes/auth.logout.js";
 import { registerAuthMeRoute } from "./routes/auth.me.js";
+import { registerFocusShareRoutes } from "./routes/focus-shares.js";
+import { registerFocusShareUnlockRoute } from "./routes/focus-share-unlock.js";
+import { registerFocusShareGuestGraphRoute } from "./routes/focus-share-guest-graph.js";
+import { registerFocusShareGuestThumbnailRoute } from "./routes/focus-share-guest-thumbnail.js";
 import { registerExportAccountGetRoute } from "./routes/export-account.get.js";
 import { registerExportGedcomGetRoute } from "./routes/export-gedcom.get.js";
 import { registerExportGedcomJobRoutes } from "./routes/export-gedcom-jobs.js";
@@ -136,6 +140,9 @@ export const buildApp = (options: BuildAppOptions = {}) => {
       routePath === "/auth/login" ||
       routePath === "/auth/me" ||
       routePath === "/auth/logout" ||
+      routePath === "/share/:publicId/unlock" ||
+      routePath === "/share/guest/graph" ||
+      routePath === "/share/guest/people/:personId/thumbnail" ||
       request.method === "OPTIONS"
     ) {
       return;
@@ -243,6 +250,10 @@ export const buildApp = (options: BuildAppOptions = {}) => {
   app.register(registerRelationshipsLifeEventsRoutes);
   app.register(registerPlacesMapGetRoute);
   app.register(registerResearchTaskRoutes);
+  app.register(registerFocusShareRoutes);
+  app.register(registerFocusShareUnlockRoute);
+  app.register(registerFocusShareGuestGraphRoute);
+  app.register(registerFocusShareGuestThumbnailRoute);
   app.register(registerEvidenceRoutes);
   app.register(registerReportRoutes);
   app.register(registerSearchGetRoute);

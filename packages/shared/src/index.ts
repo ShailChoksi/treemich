@@ -199,6 +199,8 @@ export * from "./lifeEvents.js";
 export * from "./personNames.js";
 export * from "./personDuplicates.js";
 export * from "./researchTasks.js";
+export * from "./focusShares.js";
+export * from "./focusMembership.js";
 export * from "./evidence.js";
 export * from "./validationFindings.js";
 export * from "./reports.js";

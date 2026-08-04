@@ -57,6 +57,36 @@ export const clearSessionCookie = (reply: FastifyReply) => {
   reply.header("Set-Cookie", parts.join("; "));
 };
 
+const shareSessionCookieName = () => env.TREEMICH_SHARE_SESSION_COOKIE_NAME;
+
+export const readShareSessionCookie = (request: FastifyRequest) =>
+  readCookie(request, shareSessionCookieName());
+
+export const setShareSessionCookie = (reply: FastifyReply, token: string) => {
+  const parts = [
+    `${shareSessionCookieName()}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${Math.floor(env.TREEMICH_SHARE_SESSION_TTL_MS / 1000)}`
+  ];
+  appendCookieAttribute(parts, isCookieSecure(), "Secure");
+  reply.header("Set-Cookie", parts.join("; "));
+};
+
+export const clearShareSessionCookie = (reply: FastifyReply) => {
+  const parts = [
+    `${shareSessionCookieName()}=`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    "Max-Age=0",
+    "Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+  ];
+  appendCookieAttribute(parts, isCookieSecure(), "Secure");
+  reply.header("Set-Cookie", parts.join("; "));
+};
+
 export const getRequiredAuth = (request: FastifyRequest): AuthenticatedRequestContext => {
   if (!request.auth) {
     throw new TreemichAuthError("Unauthorized");
