@@ -71,6 +71,8 @@ const envSchema = z
       .regex(/^[0-9a-fA-F]{64}$/, "TREEMICH_ENCRYPTION_KEY must be a 64-character hex string"),
     TREEMICH_ADMIN_PASSWORD: z.string().min(1).default("treemich-pass!"),
     TREEMICH_SESSION_COOKIE_NAME: z.string().min(1).default("treemich_session"),
+    /** Dedicated Guest Session cookie for Focus Shares (never the owner session cookie). */
+    TREEMICH_SHARE_SESSION_COOKIE_NAME: z.string().min(1).default("treemich_share_session"),
     /** When false, omit the Secure attribute on session cookies (required when serving over HTTP). */
     TREEMICH_COOKIE_SECURE: z.string().optional(),
     TREEMICH_SESSION_TTL_MS: z.coerce
@@ -78,6 +80,12 @@ const envSchema = z
       .int()
       .positive()
       .default(1000 * 60 * 60 * 24 * 30),
+    /** Guest Session TTL for Focus Share unlock (default 4 hours). */
+    TREEMICH_SHARE_SESSION_TTL_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(1000 * 60 * 60 * 4),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
     RATE_LIMIT_TIME_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
     /** Stale GEDCOM import/export jobs may be reclaimed after this age (default: 24 hours). */

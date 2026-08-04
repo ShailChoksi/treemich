@@ -923,6 +923,8 @@ const PeopleGraph3DComponent = ({
           />
           {showSingleFamilyTree ? (
             <FocusSelectionChrome
+              focusAnchorPersonId={focusAnchorId}
+              focusAnchorLabel={lockedAnchorLabel}
               ancestorDepth={focusAncestorDepth}
               descendantDepth={focusDescendantDepth}
               collateralDepth={focusCollateralDepth}

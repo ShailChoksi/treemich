@@ -17,6 +17,7 @@ import {
 } from "three";
 import type { Person } from "../../lib/api";
 import { personThumbnailUrl } from "../../lib/api";
+import { useGraphScene } from "./GraphSceneContext";
 import { FocusLockBadge } from "./FocusLockBadge";
 import { applyCoverCrop } from "./useThumbnailLoader";
 import { useFrame, useThree } from "@react-three/fiber";
@@ -185,7 +186,11 @@ const PersonNodeComponent = ({
   onClick,
   onHover
 }: PersonNodeProps) => {
-  const thumbnailUrl = useMemo(() => personThumbnailUrl(person.id), [person.id]);
+  const { resolveThumbnailUrl } = useGraphScene();
+  const thumbnailUrl = useMemo(
+    () => (resolveThumbnailUrl ?? personThumbnailUrl)(person.id),
+    [person.id, resolveThumbnailUrl]
+  );
   const [localTexture, setLocalTexture] = useState<Texture | null>(null);
   const texture = preloadedTexture !== undefined ? preloadedTexture : localTexture;
   const scale = nodeScale(isSelected, isHovered, isHighlighted);

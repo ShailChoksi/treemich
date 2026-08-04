@@ -19,6 +19,7 @@ import { PersonDuplicateService } from "./personDuplicates/service.js";
 import { PersonNameService } from "./personNames/service.js";
 import { EvidenceService } from "./evidence/service.js";
 import { FamilyService } from "./families/service.js";
+import { FocusShareService } from "./focusShares/service.js";
 import { PersonService } from "./people/service.js";
 import { ReportDataService } from "./reports/reportDataService.js";
 import { ResearchTaskService } from "./researchTasks/service.js";
@@ -34,6 +35,7 @@ export type AppServices = {
   personService: PersonService;
   personDuplicateService?: PersonDuplicateService;
   familyService: FamilyService;
+  focusShareService: FocusShareService;
   lifeEventService: LifeEventService;
   personNameService: PersonNameService;
   researchTaskService: ResearchTaskService;
@@ -55,6 +57,7 @@ export const buildServices = (): AppServices => {
     personDuplicateService: new PersonDuplicateService(),
     relationshipService,
     familyService: new FamilyService(relationshipService, personService),
+    focusShareService: new FocusShareService(personService),
     lifeEventService,
     personNameService: new PersonNameService(personService),
     researchTaskService: new ResearchTaskService(personService),

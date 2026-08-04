@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AuthScreen } from "./components/AuthScreen";
 import { SetPasswordScreen } from "./components/SetPasswordScreen";
@@ -15,6 +15,7 @@ import {
   linkImmichAccount,
   login,
   logout,
+  parseFocusSharePublicIdFromPath,
   syncImmichLabelledPeople,
   unlinkImmichAccount,
   updateUserPreferences,
@@ -22,6 +23,7 @@ import {
   type LoginProvider,
   type UserPreferences
 } from "./lib/api";
+import { FocusShareGuestPage } from "./pages/FocusShareGuestPage";
 
 const PeoplePage = lazy(async () => {
   const mod = await import("./pages/people");
@@ -29,6 +31,7 @@ const PeoplePage = lazy(async () => {
 });
 
 export const App = () => {
+  const focusSharePublicId = useMemo(() => parseFocusSharePublicIdFromPath(window.location.pathname), []);
   const [authState, setAuthState] = useState<AuthState | null>(null);
   const [isBooting, setIsBooting] = useState(true);
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
@@ -271,6 +274,24 @@ export const App = () => {
       setIsSubmittingAuth(false);
     }
   };
+
+  if (focusSharePublicId) {
+    return (
+      <ErrorBoundary
+        errorContext="Focus Share guest viewer"
+        fallback={
+          <main className="guest-share-page">
+            <section className="card guest-share-card stack">
+              <h1>Something went wrong</h1>
+              <p className="hint">This shared link hit an unexpected error. Reload the page to try again.</p>
+            </section>
+          </main>
+        }
+      >
+        <FocusShareGuestPage publicId={focusSharePublicId} />
+      </ErrorBoundary>
+    );
+  }
 
   if (isBooting) {
     return (
