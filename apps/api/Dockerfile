@@ -1,4 +1,4 @@
-FROM node:22-alpine AS base
+FROM node:24-alpine AS base
 # Patch Alpine packages (may include refreshed runtimes flagged by image scanners).
 RUN apk upgrade --no-cache
 WORKDIR /app

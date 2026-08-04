@@ -149,7 +149,7 @@ Image publishing from this repo (tags and GitHub Releases) is defined in [`.gith
 
 ### Prerequisites
 
-- Node.js **20.19+** or **22.12+** (required by Vite 8 / Rolldown; see root `package.json` `engines`)
+- Node.js **20.19+**, **22.12+**, or **24+** (CI/Docker use 24; see root `package.json` `engines`)
 - PostgreSQL (or use `docker compose up -d postgres` for a containerized instance)
 - An [Immich](https://immich.app/) instance _(optional — only needed for Immich login, thumbnail import, and photo co-occurrence)_
 
