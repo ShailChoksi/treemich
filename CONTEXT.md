@@ -29,3 +29,11 @@ _Avoid_: cousin mode, extended family (vague)
 **Family**:
 A GEDCOM-style union of up to two parents with children and pedigree types — a stored record, not a graph viewing mode.
 _Avoid_: using Family to mean Focus mode or the whole tree
+
+**Focus Share**:
+A named, password-gated public link that exposes a live Focus-mode cone of the owner's tree as a read-only 3D graph (with a read-only person summary) to recipients without accounts.
+_Avoid_: public tree, invite link, collaborator share
+
+**Guest Session**:
+Short-lived, Focus-Share-scoped read-only access after a correct share password, carried in a dedicated guest cookie separate from the owner's session.
+_Avoid_: anonymous user, public session

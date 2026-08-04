@@ -454,6 +454,319 @@ body {
   margin-top: 4px;
 }
 
+.shared-links-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.shared-links-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.shared-links-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.shared-links-item-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shared-links-actions {
+  flex-wrap: wrap;
+}
+
+.shared-links-url,
+.shared-links-edit label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+}
+
+.shared-links-url input,
+.shared-links-edit input,
+.shared-links-edit select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.shared-links-edit {
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.shared-links-depths {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.guest-share-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 40%),
+    radial-gradient(circle at bottom right, rgba(148, 163, 184, 0.12), transparent 45%), #0f172a;
+  color: #e2e8f0;
+}
+
+.guest-share-page--ready {
+  padding-bottom: 0;
+}
+
+.guest-share-card {
+  width: min(420px, 100%);
+  margin: 12vh auto 0;
+}
+
+.guest-share-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.guest-share-quiet-label {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.guest-share-depths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.guest-share-depth {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.guest-share-depth-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guest-share-depth-controls .secondary-button {
+  min-width: 36px;
+  padding: 6px 10px;
+}
+
+.guest-share-error {
+  margin: 0;
+}
+
+.guest-share-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.guest-share-layout:has(.guest-person-detail-panel) {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+}
+
+.guest-people-graph-3d {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: min(78vh, 820px);
+  height: min(78vh, 820px);
+}
+
+.guest-people-graph-3d .graph-bottom-left-controls,
+.guest-people-graph-3d .graph-bottom-right-controls {
+  z-index: 2;
+}
+
+.guest-graph-camera-controls {
+  z-index: 2;
+}
+
+.guest-person-detail-panel {
+  align-self: stretch;
+  max-height: min(70vh, 720px);
+  overflow: auto;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.guest-person-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.guest-person-detail-identity {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.guest-person-detail-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+  background: #1e293b;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.guest-person-detail-avatar--placeholder {
+  display: grid;
+  place-items: center;
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.guest-person-detail-panel h2,
+.guest-person-detail-panel h3 {
+  margin: 0;
+  color: #f8fafc;
+}
+
+.guest-person-vital-dates {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+.guest-person-relative-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guest-person-relative-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(30, 41, 59, 0.65);
+  color: inherit;
+  cursor: pointer;
+}
+
+.guest-person-relative-button:hover {
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.guest-person-relative-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+  background: #0f172a;
+}
+
+.guest-person-relative-thumb--placeholder {
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  color: #cbd5e1;
+}
+
+.guest-person-relative-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.guest-person-relative-meta strong {
+  color: #f8fafc;
+}
+
+@media (max-width: 900px) {
+  .guest-share-layout,
+  .guest-share-layout:has(.guest-person-detail-panel) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .guest-people-graph-3d {
+    height: min(58vh, 520px);
+    min-height: min(58vh, 520px);
+  }
+
+  .guest-person-detail-panel {
+    max-height: none;
+  }
+}
+
+/* Legacy 2D guest SVG (kept for optional rollback / tests) */
+.guest-focus-graph {
+  flex: 1 1 auto;
+  min-height: 420px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.55);
+  overflow: auto;
+}
+
+.guest-focus-edge {
+  stroke: rgba(148, 163, 184, 0.55);
+  stroke-width: 2;
+}
+
+.guest-focus-edge--spouse_of {
+  stroke: rgba(251, 191, 36, 0.65);
+}
+
+.guest-focus-node {
+  fill: #1e293b;
+  stroke: #64748b;
+  stroke-width: 2;
+}
+
+.guest-focus-node--anchor {
+  stroke: #38bdf8;
+  stroke-width: 3;
+}
+
+.guest-focus-label {
+  fill: #e2e8f0;
+  font-size: 12px;
+  font-family: inherit;
+}
+
 .workspace-main {
   min-width: 0;
   min-height: 0;
@@ -1789,6 +2102,11 @@ body {
   cursor: not-allowed;
 }
 
+.graph-focus-share-button {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.55rem;
+}
+
 .graph-focus-lock-button {
   min-width: 32px;
   min-height: 32px;
@@ -2081,7 +2399,8 @@ body {
 .confirm-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 55;
+  /* Above R3F Html node chrome (zIndexRange ~20–25) and graph HUD panels. */
+  z-index: 200;
   margin: 0;
   padding: 0;
   border: none;
@@ -2102,7 +2421,7 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  z-index: 60;
+  z-index: 210;
   width: min(380px, calc(100vw - 32px));
   display: flex;
   flex-direction: column;

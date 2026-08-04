@@ -414,7 +414,8 @@ describe("Treemich API routes", () => {
         patchFamily: vi.fn(),
         deleteFamily: vi.fn(),
         findAdoptedChildPersonIds: findAdoptedChildPersonIdsMock
-      } as unknown as AppServices["familyService"]
+      } as unknown as AppServices["familyService"],
+      focusShareService: {} as unknown as AppServices["focusShareService"]
     };
 
     app = buildApp({ services });

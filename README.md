@@ -9,6 +9,7 @@ Optionally link an [Immich](https://immich.app/) account to import face thumbnai
 - **Standalone, private trees** -- sign in with a Treemich email/password and keep people, relationships, media links, reports, and imports scoped to your account.
 - **People, families, and evidence** -- manage profiles, alternate names, life events, places, family units, sources, repositories, media, and relationship types for family, friends, and pets.
 - **Interactive tree view** -- navigate a 3D family graph with search, layer filters, single-tree focus, layout controls, thumbnails, and suggested relationships.
+- **Focus Shares** -- create a password-protected public link to a live Focus-mode cone; recipients unlock a read-only guest graph (no account required). Manage links under Settings → Shared links.
 - **Plain-English relationship search** -- search for relatives such as `cousins of Mike`, `female grandchildren of Sue`, or `aunts of Mike born after 1980`.
 - **GEDCOM interoperability** -- preview/import `.ged` files or ZIP media bundles, create missing people during import, and export GEDCOM 5.5.1 as `.ged`, ZIP, or async jobs. Import is gated by `TREEMICH_GEDCOM_IMPORT_ENABLED=true`; export is enabled by default.
 - **Review tools** -- inspect duplicate-person candidates, merge confirmed duplicates, validate tree data, and generate printable pedigree, descendant, family group, and register reports.

@@ -1,15 +1,19 @@
 /**
- * @file Focus depths and lock controls shown next to selection when Focus mode is on.
+ * @file Focus depths, lock, and create-share controls shown when Focus mode is on.
  */
 
+import { useState } from "react";
 import {
   maxFocusBloodlineDepth,
   maxFocusCollateralDepth,
   minFocusBloodlineDepth,
   minFocusCollateralDepth
 } from "@treemich/shared";
+import { CreateFocusShareDialog } from "./CreateFocusShareDialog";
 
 type Props = {
+  focusAnchorPersonId: string | null;
+  focusAnchorLabel: string | null;
   ancestorDepth: number;
   descendantDepth: number;
   collateralDepth: number;
@@ -19,9 +23,20 @@ type Props = {
   onDescendantDepthChange: (value: number) => void;
   onCollateralDepthChange: (value: number) => void;
   onToggleLock: () => void;
+  /** Override max ancestor depth (e.g. Focus Share guest caps). */
+  maxAncestorDepth?: number;
+  /** Override max descendant depth (e.g. Focus Share guest caps). */
+  maxDescendantDepth?: number;
+  /** Override max sibling/collateral depth (e.g. Focus Share guest caps). */
+  maxCollateralDepth?: number;
+  /** Hide the create-share control (guest viewers). Default true. */
+  showShareButton?: boolean;
+  /** When true, lock button is shown locked and cannot be toggled. */
+  lockDisabled?: boolean;
 };
 
 const LOCK_FOCUS_TOOLTIP = "Lock Focus on Person";
+const SHARE_FOCUS_TOOLTIP = "Share this Focus view";
 
 const DEPTH_CONTROLS = {
   ancestors: {
@@ -100,6 +115,8 @@ const DepthStepper = ({
 );
 
 export const FocusSelectionChrome = ({
+  focusAnchorPersonId,
+  focusAnchorLabel,
   ancestorDepth,
   descendantDepth,
   collateralDepth,
@@ -108,48 +125,81 @@ export const FocusSelectionChrome = ({
   onAncestorDepthChange,
   onDescendantDepthChange,
   onCollateralDepthChange,
-  onToggleLock
-}: Props) => (
-  <div className="graph-focus-selection-chrome" role="group" aria-label="Focus mode depths">
-    <DepthStepper
-      label={DEPTH_CONTROLS.ancestors.label}
-      tooltip={DEPTH_CONTROLS.ancestors.tooltip}
-      value={ancestorDepth}
-      min={minFocusBloodlineDepth}
-      max={maxFocusBloodlineDepth}
-      onChange={onAncestorDepthChange}
-    />
-    <DepthStepper
-      label={DEPTH_CONTROLS.descendants.label}
-      tooltip={DEPTH_CONTROLS.descendants.tooltip}
-      value={descendantDepth}
-      min={minFocusBloodlineDepth}
-      max={maxFocusBloodlineDepth}
-      onChange={onDescendantDepthChange}
-    />
-    <DepthStepper
-      label={DEPTH_CONTROLS.siblings.label}
-      tooltip={DEPTH_CONTROLS.siblings.tooltip}
-      value={collateralDepth}
-      min={minFocusCollateralDepth}
-      max={maxFocusCollateralDepth}
-      onChange={onCollateralDepthChange}
-    />
-    <button
-      type="button"
-      className={
-        locked
-          ? "icon-action-button graph-focus-lock-button graph-focus-lock-on"
-          : "icon-action-button graph-focus-lock-button"
-      }
-      onClick={onToggleLock}
-      aria-pressed={locked}
-      aria-label={
-        locked && lockedAnchorLabel ? `${LOCK_FOCUS_TOOLTIP} (${lockedAnchorLabel})` : LOCK_FOCUS_TOOLTIP
-      }
-      title={LOCK_FOCUS_TOOLTIP}
-    >
-      <LockIcon locked={locked} />
-    </button>
-  </div>
-);
+  onToggleLock,
+  maxAncestorDepth = maxFocusBloodlineDepth,
+  maxDescendantDepth = maxFocusBloodlineDepth,
+  maxCollateralDepth: maxCollateralDepthProp = maxFocusCollateralDepth,
+  showShareButton = true,
+  lockDisabled = false
+}: Props) => {
+  const [shareOpen, setShareOpen] = useState(false);
+  const canShare = Boolean(focusAnchorPersonId);
+  const lockTooltip = lockDisabled ? "Focus person is fixed for this shared link" : LOCK_FOCUS_TOOLTIP;
+
+  return (
+    <div className="graph-focus-selection-chrome" role="group" aria-label="Focus mode depths">
+      <DepthStepper
+        label={DEPTH_CONTROLS.ancestors.label}
+        tooltip={DEPTH_CONTROLS.ancestors.tooltip}
+        value={ancestorDepth}
+        min={minFocusBloodlineDepth}
+        max={maxAncestorDepth}
+        onChange={onAncestorDepthChange}
+      />
+      <DepthStepper
+        label={DEPTH_CONTROLS.descendants.label}
+        tooltip={DEPTH_CONTROLS.descendants.tooltip}
+        value={descendantDepth}
+        min={minFocusBloodlineDepth}
+        max={maxDescendantDepth}
+        onChange={onDescendantDepthChange}
+      />
+      <DepthStepper
+        label={DEPTH_CONTROLS.siblings.label}
+        tooltip={DEPTH_CONTROLS.siblings.tooltip}
+        value={collateralDepth}
+        min={minFocusCollateralDepth}
+        max={maxCollateralDepthProp}
+        onChange={onCollateralDepthChange}
+      />
+      <button
+        type="button"
+        className={
+          locked
+            ? "icon-action-button graph-focus-lock-button graph-focus-lock-on"
+            : "icon-action-button graph-focus-lock-button"
+        }
+        onClick={onToggleLock}
+        disabled={lockDisabled}
+        aria-pressed={locked}
+        aria-label={locked && lockedAnchorLabel ? `${lockTooltip} (${lockedAnchorLabel})` : lockTooltip}
+        title={lockTooltip}
+      >
+        <LockIcon locked={locked} />
+      </button>
+      {showShareButton ? (
+        <button
+          type="button"
+          className="secondary-button graph-focus-share-button"
+          disabled={!canShare}
+          onClick={() => setShareOpen(true)}
+          title={SHARE_FOCUS_TOOLTIP}
+          aria-label={SHARE_FOCUS_TOOLTIP}
+        >
+          Share
+        </button>
+      ) : null}
+      {showShareButton && focusAnchorPersonId ? (
+        <CreateFocusShareDialog
+          open={shareOpen}
+          focusAnchorPersonId={focusAnchorPersonId}
+          focusAnchorLabel={focusAnchorLabel ?? "Focus person"}
+          maxAncestorDepth={ancestorDepth}
+          maxDescendantDepth={descendantDepth}
+          maxCollateralDepth={collateralDepth}
+          onClose={() => setShareOpen(false)}
+        />
+      ) : null}
+    </div>
+  );
+};

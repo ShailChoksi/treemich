@@ -11,6 +11,8 @@ type Props = {
   showFocusMode: boolean;
   onShowFocusModeChange: (next: boolean) => void;
   canEnableFocus: boolean;
+  /** When true, Focus mode stays on and the checkbox cannot be toggled (guest Focus Shares). */
+  focusModeLocked?: boolean;
 };
 
 const legendItems: Array<{ label: string; color: string; filter: GraphFilter }> = [
@@ -26,9 +28,10 @@ export const GraphLayerControls = ({
   onToggleFilter,
   showFocusMode,
   onShowFocusModeChange,
-  canEnableFocus
+  canEnableFocus,
+  focusModeLocked = false
 }: Props) => {
-  const focusDisabled = !showFocusMode && !canEnableFocus;
+  const focusDisabled = focusModeLocked || (!showFocusMode && !canEnableFocus);
 
   return (
     <div className="graph-view-mode-selector">
@@ -71,11 +74,17 @@ export const GraphLayerControls = ({
         </label>
         <label
           className="graph-focus-mode-toggle"
-          title={focusDisabled ? "Select a person first" : undefined}
+          title={
+            focusModeLocked
+              ? "Focus mode is fixed for this shared link"
+              : focusDisabled
+                ? "Select a person first"
+                : undefined
+          }
         >
           <input
             type="checkbox"
-            checked={showFocusMode}
+            checked={showFocusMode || focusModeLocked}
             disabled={focusDisabled}
             onChange={(event) => onShowFocusModeChange(event.target.checked)}
           />

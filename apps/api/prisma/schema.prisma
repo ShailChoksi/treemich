@@ -163,6 +163,7 @@ model TreemichUser {
   duplicateCandidates      PersonDuplicateCandidate[]
   personMergeAudits        PersonMergeAudit[]
   families                 Family[]
+  focusShares              FocusShare[]
   gedcomImportJobs              GedcomImportJob[]
   gedcomExportJobs              GedcomExportJob[]
   gedcomImportPreviewSessions   GedcomImportPreviewSession[]
@@ -230,10 +231,45 @@ model PersonProfile {
   duplicateCandidateAsA     PersonDuplicateCandidate[] @relation("DuplicateCandidatePersonA")
   duplicateCandidateAsB     PersonDuplicateCandidate[] @relation("DuplicateCandidatePersonB")
   canonicalMergeAudits      PersonMergeAudit[]         @relation("PersonMergeAuditCanonical")
+  focusSharesAsAnchor       FocusShare[]               @relation("FocusShareAnchor")
 
   @@index([userId])
   @@index([userId, givenName])
   @@index([userId, surname])
+}
+
+/// Password-gated public link to a live Focus-mode cone (owner-managed).
+model FocusShare {
+  id                   String                   @id @default(cuid())
+  userId               String
+  publicId             String                   @unique
+  passwordHash         String
+  label                String?
+  focusAnchorPersonId  String
+  maxAncestorDepth     Int
+  maxDescendantDepth   Int
+  maxCollateralDepth   Int
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  user                 TreemichUser             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  focusAnchor          PersonProfile            @relation("FocusShareAnchor", fields: [focusAnchorPersonId], references: [id], onDelete: Restrict)
+  guestSessions        FocusShareGuestSession[]
+
+  @@index([userId])
+}
+
+/// Short-lived guest cookie session for a Focus Share (not an account session).
+model FocusShareGuestSession {
+  id           String     @id @default(cuid())
+  focusShareId String
+  tokenHash    String     @unique
+  expiresAt    DateTime
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  focusShare   FocusShare @relation(fields: [focusShareId], references: [id], onDelete: Cascade)
+
+  @@index([focusShareId])
+  @@index([expiresAt])
 }
 
 model PersonExternalIdentity {

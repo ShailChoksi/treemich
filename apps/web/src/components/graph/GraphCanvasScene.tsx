@@ -180,9 +180,14 @@ export const GraphCanvasScene = ({
   onCanvasCameraSystemReady,
   applyPersistedSnapshotRestore = true
 }: Props) => {
-  const { peopleIds, thumbnailCacheKeys, prioritizedNodeIds, renderNearPersonIds } = useGraphScene();
+  const { peopleIds, thumbnailCacheKeys, prioritizedNodeIds, renderNearPersonIds, resolveThumbnailUrl } =
+    useGraphScene();
   const hasRestoredCameraRef = useRef(false);
   const cameraSystemReadyFiredRef = useRef(false);
+  // Keep latest callback without re-running the ready poll when the parent identity churns
+  // (e.g. guest layer checkboxes recreating frameAllNodes).
+  const onCanvasCameraSystemReadyRef = useRef(onCanvasCameraSystemReady);
+  onCanvasCameraSystemReadyRef.current = onCanvasCameraSystemReady;
   const partitionedLines = useMemo(
     () => partitionLinesByStyle(visibleRelationshipLines),
     [visibleRelationshipLines]
@@ -231,7 +236,8 @@ export const GraphCanvasScene = ({
     renderNearPersonIds,
     displayVisiblePeople,
     cameraSampleRef: lastCameraSampleRef,
-    visible: isVisible
+    visible: isVisible,
+    resolveThumbnailUrl
   });
 
   // Report thumbnail progress to parent (PeopleGraph3D) for the progress indicator.
@@ -240,32 +246,28 @@ export const GraphCanvasScene = ({
   }, [thumbnailProgress, onThumbnailProgress]);
 
   useLayoutEffect(() => {
-    if (!onCanvasCameraSystemReady || cameraSystemReadyFiredRef.current) {
+    if (cameraSystemReadyFiredRef.current) {
       return;
     }
     let cancelled = false;
-    let frames = 0;
-    const maxFrames = 45;
     const tick = () => {
       if (cancelled || cameraSystemReadyFiredRef.current) {
         return;
       }
       if (cameraRef.current && orbitControlsRef.current) {
         cameraSystemReadyFiredRef.current = true;
-        onCanvasCameraSystemReady();
+        onCanvasCameraSystemReadyRef.current?.();
         return;
       }
-      frames += 1;
-      if (frames >= maxFrames) {
-        return;
-      }
+      // Keep polling until the R3F camera + OrbitControls refs attach. Giving up early
+      // left guests unframed until the next parent callback identity change (first checkbox).
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
     return () => {
       cancelled = true;
     };
-  }, [cameraRef, onCanvasCameraSystemReady, orbitControlsRef]);
+  }, [cameraRef, orbitControlsRef]);
 
   useEffect(() => {
     if (
