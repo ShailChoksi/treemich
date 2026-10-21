@@ -25,11 +25,12 @@
     "tar": "7.5.21",
     "minimatch": "10.2.5",
     "vite": "8.2.0",
+    "deepmerge-ts": "8.0.2",
     "react": "19.2.5",
     "react-dom": "19.2.5",
-    "fast-uri": "3.1.5",
+    "fast-uri": "3.1.9",
     "find-my-way": "9.7.0",
-    "adm-zip": "0.6.0"
+    "adm-zip": "0.6.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
@@ -47,7 +48,7 @@
     "@prisma/client": "^6.19.3",
     "bidi-js": "^1.0.3",
     "estree-walker": "^3.0.3",
-    "fast-uri": "3.1.5",
+    "fast-uri": "3.1.9",
     "find-my-way": "9.7.0",
     "react-use-measure": "^2.1.7",
     "troika-worker-utils": "^0.52.0",
