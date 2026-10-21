@@ -1,4 +1,10 @@
-import type { Person, RelationshipRecord, RelationshipType, UserPreferences } from "../lib/api";
+import type {
+  CreatePersonBody,
+  Person,
+  RelationshipRecord,
+  RelationshipType,
+  UserPreferences
+} from "../lib/api";
 import type { GraphCameraSessionKind } from "./graph/graphCameraPolicy";
 import type { GraphUiSnapshot } from "../lib/workspaceUiState";
 
@@ -42,6 +48,7 @@ export type PeopleGraph3DHandlersBundle = {
     targetPersonId: string,
     relationshipType: RelationshipType
   ) => Promise<void>;
+  onCreatePerson: (body: CreatePersonBody) => Promise<Person>;
   onNewPerson?: () => void;
   onPreferencesChange: (prefs: Partial<UserPreferences>) => Promise<boolean>;
   onRetryGraphLoad?: () => void;

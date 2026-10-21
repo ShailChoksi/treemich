@@ -24,13 +24,7 @@ import {
 } from "../lib/workspaceUiState";
 import { PerspectiveCamera, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import {
-  createPerson,
-  searchRelationships,
-  type Person,
-  type RelationshipType,
-  type UserPreferences
-} from "../lib/api";
+import { searchRelationships, type Person, type RelationshipType, type UserPreferences } from "../lib/api";
 import type { PeopleGraph3DBundledProps } from "./peopleGraph3dSceneBundles";
 import { AddRelativePopup } from "./graph/AddRelativePopup";
 import type { AddRelativeSubmitPayload } from "./graph/AddRelativePopup";
@@ -200,6 +194,7 @@ const PeopleGraph3DComponent = ({
     onCameraFocusPersonConsumed,
     onSelectedPersonChange,
     onCreateRelationship,
+    onCreatePerson,
     onNewPerson,
     onPreferencesChange,
     onRetryGraphLoad,
@@ -671,7 +666,7 @@ const PeopleGraph3DComponent = ({
     let targetId: string;
     let targetName: string;
     if (payload.type === "new") {
-      const newPerson = await createPerson({
+      const newPerson = await onCreatePerson({
         givenName: payload.givenName,
         surname: payload.surname,
         gender: payload.gender
