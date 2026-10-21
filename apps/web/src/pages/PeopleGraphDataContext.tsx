@@ -107,6 +107,7 @@ type PeopleGraphDataContextValue = {
     targetPersonId: string,
     type: RelationshipType
   ) => Promise<void>;
+  createPersonInGraph: (body: CreatePersonBody) => Promise<PersonRecord>;
   handleCreatePerson: (body: CreatePersonBody) => Promise<void>;
   handleDeletePerson: () => Promise<void>;
   onDeleteExistingRelationship: (relationship: RelationshipRecord) => Promise<void>;
@@ -297,6 +298,15 @@ export const PeopleGraphDataProvider = ({
       return sortPeopleStable([...without, person]);
     });
   }, []);
+
+  const createPersonInGraph = useCallback(
+    async (body: CreatePersonBody) => {
+      const newPerson = await createPerson(body);
+      mergePersonIntoPeople(newPerson);
+      return newPerson;
+    },
+    [mergePersonIntoPeople]
+  );
 
   const refreshPeopleOnly = useCallback(async () => {
     const peopleResponse = await getPeople();
@@ -567,7 +577,7 @@ export const PeopleGraphDataProvider = ({
         return;
       }
       try {
-        const newPerson = await createPerson(body);
+        const newPerson = await createPersonInGraph(body);
         selectedPersonIdRef.current = newPerson.id;
         setSelectedPersonId(newPerson.id);
         setGraphCameraFocusPersonId(newPerson.id);
@@ -578,7 +588,7 @@ export const PeopleGraphDataProvider = ({
         throw error;
       }
     },
-    [refreshGraphData, setSelectedPersonId, setStatus]
+    [createPersonInGraph, refreshGraphData, setSelectedPersonId, setStatus]
   );
 
   const handleDeletePerson = useCallback(async () => {
@@ -787,6 +797,7 @@ export const PeopleGraphDataProvider = ({
       onPrimaryFamilyUnitChange,
       onDismissSuggestion,
       onCreateRelationship,
+      createPersonInGraph,
       handleCreatePerson,
       handleDeletePerson,
       onDeleteExistingRelationship,
@@ -801,6 +812,7 @@ export const PeopleGraphDataProvider = ({
     [
       clearGraphCameraFocus,
       clearGraphFocus,
+      createPersonInGraph,
       dataRevision,
       focusPersonInGraph,
       graphCameraFocusPersonId,

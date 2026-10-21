@@ -51,6 +51,15 @@ describe("PeopleGraphDataContext", () => {
       if (method === "POST" && url.includes("/graph/layout")) {
         return jsonResponse({ layoutRevision: "lr1", algorithmVersion: "alg1", positionsByPersonId: {} });
       }
+      if (method === "POST" && /\/people$/.test(url)) {
+        return jsonResponse({
+          id: "p2",
+          name: "Blair Smith",
+          hasRelationship: false,
+          birthDate: null,
+          profile: { id: "p2", gender: "UNKNOWN", givenName: "Blair", surname: "Smith", nicknames: null }
+        });
+      }
       if (method === "POST" && url.includes("/people/p1/relationships")) {
         return jsonResponse({
           direct: { id: "r2", fromPersonId: "p1", toPersonId: "p2", type: "SIBLING_OF" },
@@ -326,6 +335,64 @@ describe("PeopleGraphDataContext", () => {
       { id: "r2", fromPersonId: "p1", toPersonId: "p2", type: "SIBLING_OF" },
       { id: "r3", fromPersonId: "p2", toPersonId: "p1", type: "SIBLING_OF" }
     ]);
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("keeps a newly created relative in graph state without a full refresh", async () => {
+    const graphBox: { current: ReturnType<typeof usePeopleGraphData> | null } = { current: null };
+    const Probe = () => {
+      graphBox.current = usePeopleGraphData();
+      return null;
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          ToastProvider,
+          null,
+          createElement(
+            PeopleGraphDataProvider,
+            { immichBaseUrl: null, currentUserName: null },
+            createElement(Probe)
+          )
+        )
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    vi.mocked(globalThis.fetch).mockClear();
+
+    await act(async () => {
+      const newPerson = await graphBox.current?.createPersonInGraph({
+        givenName: "Blair",
+        surname: "Smith",
+        gender: "UNKNOWN"
+      });
+      expect(newPerson?.id).toBe("p2");
+      await graphBox.current?.onCreateRelationship("p1", "p2", "SIBLING_OF");
+      await Promise.resolve();
+    });
+
+    const calls = vi.mocked(globalThis.fetch).mock.calls.map(([input, init]) => ({
+      url: typeof input === "string" ? input : input.toString(),
+      method: init?.method ?? "GET"
+    }));
+    expect(calls.filter((call) => call.method === "POST" && /\/people$/.test(call.url))).toHaveLength(1);
+    expect(
+      calls.filter((call) => call.method === "POST" && call.url.includes("/people/p1/relationships"))
+    ).toHaveLength(1);
+    expect(calls.some((call) => call.method === "GET")).toBe(false);
+    expect(graphBox.current?.people).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "p2", name: "Blair Smith", hasRelationship: true })
+      ])
+    );
 
     act(() => {
       root.unmount();

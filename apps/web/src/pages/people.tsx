@@ -275,6 +275,7 @@ const GraphContainer = memo(
         onCameraFocusPersonConsumed: graph.clearGraphCameraFocus,
         onSelectedPersonChange: graph.setSelectedPersonId,
         onCreateRelationship: graph.onCreateRelationship,
+        onCreatePerson: graph.createPersonInGraph,
         onNewPerson,
         onPreferencesChange: graph.onPreferencesChange,
         onRetryGraphLoad: graph.retryGraphData,
@@ -285,6 +286,7 @@ const GraphContainer = memo(
         graph.clearGraphCameraFocus,
         graph.setSelectedPersonId,
         graph.onCreateRelationship,
+        graph.createPersonInGraph,
         graph.onPreferencesChange,
         graph.retryGraphData,
         onNewPerson
