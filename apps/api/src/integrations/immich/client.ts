@@ -54,6 +54,17 @@ export class ImmichAuthenticationError extends Error {
   }
 }
 
+/** Immich returned a non-auth failure. The message carries the status code and not the response body. */
+export class ImmichUpstreamError extends Error {
+  readonly immichStatus: number;
+
+  constructor(action: string, immichStatus: number) {
+    super(`Immich ${action} failed with status ${immichStatus}`);
+    this.name = "ImmichUpstreamError";
+    this.immichStatus = immichStatus;
+  }
+}
+
 const normalizeBaseUrl = (baseUrl: string) => baseUrl.replace(/\/$/, "");
 
 const sleep = async (ms: number) =>
@@ -184,7 +195,7 @@ export class ImmichClient {
     }
 
     if (!response.ok) {
-      throw new Error(`Immich ${action} failed with ${response.status}`);
+      throw new ImmichUpstreamError(action, response.status);
     }
   }
 

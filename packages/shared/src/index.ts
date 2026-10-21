@@ -166,12 +166,47 @@ export type ImmichPeopleSyncDuplicateRecompute =
   | { status: "ok"; summary: PersonDuplicateRecomputeResponse["summary"] }
   | { status: "error"; message: string };
 
+/** How one Immich person was applied during import or re-sync. */
+export const immichPersonResultValues = ["skipped", "created", "linked", "alreadyLinked", "error"] as const;
+export type ImmichPersonResult = (typeof immichPersonResultValues)[number];
+
+/** What happened to that person's canonical birth. Omitted for `skipped` and `error`. */
+export const immichBirthdayResultValues = ["filled", "equal", "conflict", "malformed", "absent"] as const;
+export type ImmichBirthdayResult = (typeof immichBirthdayResultValues)[number];
+
+/** Counts of rows that have a birthday result. */
+export type ImmichBirthdayTotals = {
+  filled: number;
+  equal: number;
+  conflict: number;
+  malformed: number;
+  absent: number;
+};
+
+/** One Immich person after apply or re-sync. */
+export type ImmichBirthdayPersonRow = {
+  providerPersonId: string;
+  personResult: ImmichPersonResult;
+  personId?: string;
+  birthdayResult?: ImmichBirthdayResult;
+  /** Normalized Immich date, or null when absent or malformed. */
+  birthDate: string | null;
+  /** Present only when `birthdayResult` is `malformed`. */
+  rawBirthDate?: string;
+  birthYear: number | null;
+  birthMonth: number | null;
+  birthDay: number | null;
+  message?: string;
+};
+
 /** Counts from `PersonService.syncImmichLabelledPeople` (no duplicate recompute). */
 export type ImmichPeopleSyncSummary = {
   created: number;
   updated: number;
   alreadyLinked: number;
   skippedUnnamed: number;
+  birthdays: ImmichBirthdayTotals;
+  results: ImmichBirthdayPersonRow[];
 };
 
 /** `POST /providers/immich/people/sync` response body. */
@@ -265,7 +300,21 @@ export type ImmichImportCandidate = {
 export type ImmichImportPreviewRow = {
   providerPersonId: string;
   name: string;
+  /** Normalized Immich date (`YYYY-MM-DD`), or null when absent or malformed. */
   birthDate?: string | null;
+  /** Present only when `birthdayResult` is `malformed`. */
+  rawBirthDate?: string;
+  /** Current canonical birth. Null parts mean that part is empty. */
+  birthYear?: number | null;
+  birthMonth?: number | null;
+  birthDay?: number | null;
+  /**
+   * Set only when the server already knows it: `alreadyLinked` or `skipped`.
+   * A named person who is not linked yet has no person result on the preview.
+   */
+  personResult?: "alreadyLinked" | "skipped";
+  /** Predicted birthday outcome for a named person. Omitted when `personResult` is `skipped`. */
+  birthdayResult?: ImmichBirthdayResult;
   thumbnailPath?: string | null;
   linkedPersonId?: string | null;
   linkedPersonName?: string | null;
@@ -279,6 +328,7 @@ export type ImmichImportPreviewResponse = {
     immichPeople: number;
     linkedPeople: number;
     unlinkedPeople: number;
+    birthdays: ImmichBirthdayTotals;
   };
 };
 
@@ -318,7 +368,15 @@ export type ImmichImportApplyResult = {
   providerPersonId: string;
   action: ImmichImportDecision["action"];
   personId?: string;
-  status: "created" | "linked" | "skipped" | "alreadyLinked" | "error";
+  /** Same value as `personResult`. */
+  status: ImmichPersonResult;
+  personResult: ImmichPersonResult;
+  birthdayResult?: ImmichBirthdayResult;
+  birthDate: string | null;
+  rawBirthDate?: string;
+  birthYear: number | null;
+  birthMonth: number | null;
+  birthDay: number | null;
   message?: string;
 };
 
@@ -331,6 +389,7 @@ export type ImmichPeopleImportResponse = {
     alreadyLinked: number;
     errors: number;
     thumbnailsImported: number;
+    birthdays: ImmichBirthdayTotals;
     duplicateRecompute?: ImmichPeopleSyncDuplicateRecompute;
   };
 };
