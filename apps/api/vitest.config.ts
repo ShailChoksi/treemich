@@ -7,8 +7,12 @@ export default defineConfig({
     /** Cold `import()` of large route graphs can exceed defaults on slow disks (e.g. WSL + `/mnt`). */
     testTimeout: 30_000,
     hookTimeout: 30_000,
-    /** Vitest 4: replaces `poolOptions.threads` (removed). Default pool is `forks`; keep thread pool + worker cap. */
-    pool: "threads",
+    /**
+     * Prisma's query engine aborts the process (`Failed to deserialize constructor options`)
+     * when several workers construct `PrismaClient` inside `worker_threads`. Forks keep the
+     * engine in separate processes. Vitest 4's default pool is forks; cap the worker count.
+     */
+    pool: "forks",
     maxWorkers: 4,
     setupFiles: ["./test/setup-env.ts"],
     coverage: {

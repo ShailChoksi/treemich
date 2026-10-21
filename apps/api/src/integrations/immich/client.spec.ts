@@ -61,6 +61,25 @@ describe("ImmichClient.listPeople", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("copies a timestamp birthDate through unchanged", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          total: 1,
+          people: [{ id: "p1", name: "Ada", birthDate: "1815-12-10T00:00:00.000Z" }]
+        })
+      )
+    );
+    const client = new ImmichClient({
+      baseUrl: "http://immich.local",
+      accessToken: "token"
+    });
+
+    const people = await client.listPeople();
+    expect(people[0]?.birthDate).toBe("1815-12-10T00:00:00.000Z");
+  });
+
   it("retries transient failures before succeeding", async () => {
     const fetchMock = vi
       .fn()

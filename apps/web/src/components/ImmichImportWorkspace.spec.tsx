@@ -146,7 +146,7 @@ describe("ImmichImportWorkspace", () => {
     expect(apiMocks.syncImmichLabelledPeople).toHaveBeenCalledTimes(1);
     expect(apiMocks.getImmichImportPreview.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(onImported).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("No new Immich people added");
+    expect(container.textContent).toContain("No new people");
 
     act(() => {
       root.unmount();
@@ -173,11 +173,11 @@ describe("ImmichImportWorkspace", () => {
       await act(async () => {
         await Promise.resolve();
       });
-      if (container.textContent?.includes("new Immich people added")) {
+      if (container.textContent?.includes("3 new people added")) {
         break;
       }
     }
-    expect(container.textContent).toContain("3 new Immich people added");
+    expect(container.textContent).toContain("3 new people added");
     act(() => {
       root.unmount();
     });
@@ -202,6 +202,153 @@ describe("ImmichImportWorkspace", () => {
       }
     }
     expect(container.querySelector(".error-text")?.textContent).toContain("network boom");
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("filters birthday results, shows dates, and keeps an already-linked row on its preview result", async () => {
+    apiMocks.getImmichImportPreview.mockResolvedValue({
+      linked: true,
+      people: [
+        {
+          providerPersonId: "immich-new",
+          name: "New Person",
+          birthDate: "1815-12-10",
+          birthdayResult: "filled",
+          birthYear: null,
+          birthMonth: null,
+          birthDay: null,
+          thumbnailPath: null,
+          linkedPersonId: null,
+          linkedPersonName: null,
+          candidates: []
+        },
+        {
+          providerPersonId: "immich-linked",
+          name: "Linked Person",
+          birthDate: "1900-01-02",
+          personResult: "alreadyLinked",
+          birthdayResult: "equal",
+          birthYear: 1900,
+          birthMonth: 1,
+          birthDay: 2,
+          thumbnailPath: null,
+          linkedPersonId: "p1",
+          linkedPersonName: "Existing Person",
+          candidates: []
+        },
+        {
+          providerPersonId: "immich-bad",
+          name: "Bad Date",
+          birthDate: null,
+          birthdayResult: "malformed",
+          rawBirthDate: "not-a-date",
+          birthYear: null,
+          birthMonth: null,
+          birthDay: null,
+          thumbnailPath: null,
+          linkedPersonId: null,
+          linkedPersonName: null,
+          candidates: []
+        }
+      ],
+      totals: { immichPeople: 3, linkedPeople: 1, unlinkedPeople: 2 }
+    });
+    apiMocks.importImmichPeople.mockResolvedValue({
+      results: [
+        {
+          providerPersonId: "immich-bad",
+          action: "skip",
+          status: "skipped",
+          personResult: "skipped",
+          birthDate: null,
+          birthYear: null,
+          birthMonth: null,
+          birthDay: null
+        }
+      ],
+      summary: {
+        created: 0,
+        linked: 0,
+        skipped: 1,
+        alreadyLinked: 0,
+        errors: 0,
+        thumbnailsImported: 0,
+        birthdays: { filled: 0, equal: 0, conflict: 0, malformed: 0, absent: 0 }
+      }
+    });
+
+    const { container, root } = renderWorkspace();
+    const loadPreviewButton = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Load Immich Preview")
+    );
+    await act(async () => {
+      loadPreviewButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain("New Person");
+    expect(container.textContent).toContain("Bad Date");
+    expect(container.textContent).not.toContain("Linked Person");
+    expect(container.textContent).toContain("Immich birthday: 1815-12-10");
+    expect(container.textContent).toContain("Immich birthday: invalid");
+    expect(container.textContent).toContain("Raw Immich birthday: not-a-date");
+    expect(container.textContent).toContain("Treemich birthday: none");
+
+    const unchanged = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Unchanged")
+    );
+    await act(async () => {
+      unchanged?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Linked Person");
+    expect(container.textContent).toContain("Treemich birthday: 1900-01-02");
+    expect(container.textContent).not.toContain("New Person");
+
+    const all = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.startsWith("All")
+    );
+    await act(async () => {
+      all?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const decision = container.querySelector(
+      'select[aria-label="Decision for New Person"]'
+    ) as HTMLSelectElement;
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+    await act(async () => {
+      valueSetter?.call(decision, "skip");
+      decision.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    const skipped = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.startsWith("Skipped")
+    );
+    await act(async () => {
+      skipped?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("New Person");
+    expect(container.textContent).not.toContain("Bad Date");
+
+    const applyButton = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Apply Visible Decisions")
+    );
+    await act(async () => {
+      applyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    for (let i = 0; i < 20; i += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+      if (container.textContent?.includes("No new people")) {
+        break;
+      }
+    }
+    expect(container.textContent).toContain(
+      "No new people, 0 imported, 0 unchanged, 0 conflicts kept, 0 invalid, 0 with no Immich birthday, 1 skipped, 0 failed."
+    );
+
     act(() => {
       root.unmount();
     });
