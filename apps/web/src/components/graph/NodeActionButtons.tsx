@@ -17,10 +17,10 @@ const stop = (event: { stopPropagation: () => void }) => {
 export const NodeActionButtons = ({ onOpen }: Props) => {
   return (
     <>
-      <Html position={[0, 1.3, 0.1]} center zIndexRange={[20, 0]}>
+      <Html position={[0, 1.3, 0.1]} center zIndexRange={[9, 0]}>
         <button
           type="button"
-          className="node-action-btn"
+          className="node-action-btn node-action-btn--parent"
           title="Add parent"
           aria-label="Add parent"
           onMouseDown={stop}
@@ -32,10 +32,10 @@ export const NodeActionButtons = ({ onOpen }: Props) => {
           +
         </button>
       </Html>
-      <Html position={[1.3, 0, 0.1]} center zIndexRange={[20, 0]}>
+      <Html position={[1.3, 0, 0.1]} center zIndexRange={[9, 0]}>
         <button
           type="button"
-          className="node-action-btn"
+          className="node-action-btn node-action-btn--connection"
           title="Add connection"
           aria-label="Add connection"
           onMouseDown={stop}
@@ -47,10 +47,10 @@ export const NodeActionButtons = ({ onOpen }: Props) => {
           +
         </button>
       </Html>
-      <Html position={[0, -1.5, 0.1]} center zIndexRange={[20, 0]}>
+      <Html position={[0, -1.5, 0.1]} center zIndexRange={[9, 0]}>
         <button
           type="button"
-          className="node-action-btn"
+          className="node-action-btn node-action-btn--child"
           title="Add child"
           aria-label="Add child"
           onMouseDown={stop}

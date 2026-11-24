@@ -5,7 +5,7 @@
 import { Html } from "@react-three/drei";
 
 export const FocusLockBadge = () => (
-  <Html position={[0.52, 0.52, 0.08]} center zIndexRange={[25, 0]} style={{ pointerEvents: "none" }}>
+  <Html position={[0.52, 0.52, 0.08]} center zIndexRange={[9, 0]} style={{ pointerEvents: "none" }}>
     <span className="graph-focus-lock-badge" title="Lock Focus on Person" aria-hidden="true">
       <svg
         viewBox="0 0 24 24"

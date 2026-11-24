@@ -18,6 +18,9 @@ type Props = {
   onPreferenceReset: (key: TreeLayoutPreferenceKey) => void;
   disabled?: boolean;
   disabledReason?: string;
+  /** Controlled expanded state. When omitted the component manages its own state. */
+  expanded?: boolean;
+  onExpandedChange?: (next: boolean) => void;
 };
 
 const sliderStep = 0.05;
@@ -56,9 +59,18 @@ export const TreeLayoutControls = ({
   onPreferenceChange,
   onPreferenceReset,
   disabled = false,
-  disabledReason
+  disabledReason,
+  expanded,
+  onExpandedChange
 }: Props) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false);
+  const isExpanded = expanded ?? uncontrolledExpanded;
+  const setIsExpanded = (next: boolean) => {
+    if (expanded === undefined) {
+      setUncontrolledExpanded(next);
+    }
+    onExpandedChange?.(next);
+  };
 
   return (
     <div
@@ -71,10 +83,15 @@ export const TreeLayoutControls = ({
         className="tree-layout-controls-toggle"
         aria-label={isExpanded ? "Collapse tree layout controls" : "Expand tree layout controls"}
         aria-expanded={isExpanded}
-        onClick={() => setIsExpanded((current) => !current)}
+        onClick={() => setIsExpanded(!isExpanded)}
       >
-        <span>Tree layout</span>
-        <span aria-hidden="true">{isExpanded ? "Hide" : "Show"}</span>
+        <span className="tree-layout-controls-toggle-label">Tree layout</span>
+        <span className="tree-layout-controls-toggle-label-short" aria-hidden="true">
+          Layout
+        </span>
+        <span className="tree-layout-controls-toggle-state" aria-hidden="true">
+          {isExpanded ? "Hide" : "Show"}
+        </span>
       </button>
       {isExpanded ? (
         <>

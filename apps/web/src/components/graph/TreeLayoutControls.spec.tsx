@@ -130,4 +130,31 @@ describe("TreeLayoutControls", () => {
 
     act(() => root.unmount());
   });
+
+  it("follows the expanded prop when controlled and reports toggle requests", () => {
+    const onExpandedChange = vi.fn();
+    const { container, root } = renderControls({ expanded: true, onExpandedChange });
+
+    expect(container.querySelectorAll('input[type="range"]')).toHaveLength(4);
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Collapse tree layout controls"]'
+    );
+    act(() => toggle!.click());
+
+    expect(onExpandedChange).toHaveBeenCalledWith(false);
+    // Controlled: stays expanded until the parent changes the prop.
+    expect(container.querySelectorAll('input[type="range"]')).toHaveLength(4);
+
+    act(() => root.unmount());
+  });
+
+  it("keeps a short toolbar label alongside the full label", () => {
+    const { container, root } = renderControls();
+
+    expect(container.querySelector(".tree-layout-controls-toggle-label")?.textContent).toBe("Tree layout");
+    expect(container.querySelector(".tree-layout-controls-toggle-label-short")?.textContent).toBe("Layout");
+
+    act(() => root.unmount());
+  });
 });

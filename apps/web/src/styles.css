@@ -2188,9 +2188,14 @@ body {
   bottom: 12px;
   z-index: 11;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: 8px;
   align-items: flex-end;
+}
+
+/* Only shown on narrow screens, where the filters panel collapses behind it. */
+.graph-filters-toggle {
+  display: none;
 }
 
 .graph-add-person-button {
@@ -2246,6 +2251,11 @@ body {
 .tree-layout-controls-toggle span:last-child {
   color: #7dd3fc;
   font-size: 11px;
+}
+
+/* Short label is for the narrow-screen toolbar only. */
+.tree-layout-controls-toggle-label-short {
+  display: none;
 }
 
 .tree-layout-controls-header {
@@ -3416,5 +3426,351 @@ textarea:disabled {
   .add-relative-popup,
   .node-action-btn {
     transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Narrow screens: stacked layout that scrolls as a page.
+ *
+ * Below 1024px the three workspace columns stack vertically. The desktop shell
+ * is pinned to the viewport height, which squeezed the stacked rows into one
+ * screen and made the nav, graph and person panel overlap. Let it grow instead.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 1024px) {
+  #root,
+  .app-shell,
+  .people-layout,
+  .workspace-main,
+  .workspace-main-views,
+  .workspace-context-pane {
+    height: auto;
+  }
+
+  .app-shell > .people-layout {
+    flex: none;
+  }
+
+  .workspace-nav,
+  .workspace-context-pane,
+  .people-sidebar {
+    overflow: visible;
+  }
+
+  /* The column toggles are hidden here, so a pane closed on desktop must not stay hidden. */
+  .workspace-pane--closed {
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .toast-viewport {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    max-width: none;
+    align-items: center;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Phones (portrait, or landscape via the short-viewport query): compact chrome,
+ * swipeable workspace tabs, and a graph toolbar.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 768px), (max-width: 1024px) and (max-height: 520px) {
+  .app-shell {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .session-bar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    padding: 8px 12px;
+  }
+
+  /* One row for title + account actions; the Immich provider disclosure drops below it. */
+  .session-bar-left {
+    display: contents;
+  }
+
+  .session-bar .app-title {
+    order: 1;
+    margin-right: auto;
+  }
+
+  .session-bar-right {
+    order: 2;
+    gap: 8px;
+  }
+
+  .session-bar-left > :not(.app-title) {
+    order: 3;
+    flex: 1 1 100%;
+  }
+
+  .app-title {
+    font-size: 1.1rem;
+  }
+
+  .account-provider-panel > summary {
+    font-size: 0.82rem;
+    color: #cbd5e1;
+  }
+
+  .session-user-name {
+    font-size: 0.85rem;
+  }
+
+  .session-bar-right .secondary-button {
+    min-height: 34px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+
+  .people-layout--workspace {
+    gap: 8px;
+  }
+
+  /* Workspace nav: one swipeable row of tabs that stays reachable while the page scrolls. */
+  .workspace-nav {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding: 6px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.94);
+    backdrop-filter: blur(10px);
+  }
+
+  .workspace-nav-list {
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .workspace-nav-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .workspace-nav-item,
+  .workspace-nav--collapsed .workspace-nav-item {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: auto;
+    height: 38px;
+    min-height: 38px;
+    padding: 0 14px;
+    gap: 0;
+    border-radius: 999px;
+  }
+
+  .workspace-nav-icon,
+  .workspace-nav-status {
+    display: none;
+  }
+
+  .workspace-nav-label,
+  .workspace-nav--collapsed .workspace-nav-label {
+    display: inline;
+    font-size: 0.88rem;
+    white-space: nowrap;
+  }
+
+  /* Empty "context will appear here" placeholders only make sense beside the main view on desktop. */
+  .workspace-context-placeholder {
+    display: none;
+  }
+
+  /* Graph: give the canvas most of the screen and leave room above and below to scroll the page. */
+  .graph-card {
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .graph-surface {
+    height: clamp(300px, 68dvh, 680px);
+    border-radius: 12px;
+  }
+
+  .graph-search-overlay {
+    top: 8px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 12px;
+  }
+
+  .graph-search-form input {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  .graph-search-helper {
+    display: none;
+  }
+
+  .graph-search-feedback {
+    max-height: 4.6em;
+    overflow-y: auto;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+
+  /* Filters collapse behind the toolbar toggle and open as a sheet above it. */
+  .graph-bottom-left-controls--collapsible {
+    display: none;
+    right: 8px;
+    bottom: 58px;
+    left: 8px;
+    width: auto;
+    max-height: calc(100% - 132px);
+    overflow-y: auto;
+    padding: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.94);
+    box-shadow: 0 10px 25px rgba(2, 6, 23, 0.45);
+  }
+
+  .graph-bottom-left-controls--collapsible.graph-bottom-left-controls--open {
+    display: flex;
+  }
+
+  .graph-bottom-left-controls--collapsible .graph-provider-filter-control,
+  .graph-bottom-left-controls--collapsible .graph-view-mode-selector {
+    width: 100%;
+    box-sizing: border-box;
+    box-shadow: none;
+  }
+
+  .graph-provider-filter-control select {
+    max-width: none;
+  }
+
+  .graph-layer-toggles {
+    gap: 8px 14px;
+  }
+
+  .graph-layer-toggles label {
+    min-height: 32px;
+    font-size: 13px;
+  }
+
+  .graph-layer-toggles input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Bottom toolbar: Filters on the left, view actions and Add Person on the right. */
+  .graph-bottom-right-controls {
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .graph-filters-toggle {
+    display: inline-flex;
+    align-items: center;
+    margin-right: auto;
+  }
+
+  .graph-bottom-right-controls > button,
+  .graph-bottom-right-controls .tree-layout-controls-collapsed .tree-layout-controls-toggle {
+    width: auto;
+    min-height: 40px;
+    padding: 8px 11px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 800;
+    box-shadow: 0 6px 16px rgba(2, 6, 23, 0.4);
+  }
+
+  .graph-bottom-right-controls .tree-layout-controls-collapsed {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .graph-bottom-right-controls .tree-layout-controls-collapsed .tree-layout-controls-toggle {
+    background: #334155;
+    color: #f8fafc;
+  }
+
+  .graph-button-label-extra,
+  .tree-layout-controls-collapsed .tree-layout-controls-toggle-label,
+  .tree-layout-controls-collapsed .tree-layout-controls-toggle-state {
+    display: none;
+  }
+
+  .tree-layout-controls-collapsed .tree-layout-controls-toggle-label-short {
+    display: inline;
+  }
+
+  /* Fits between the toolbar and the search bar inside the 68dvh graph surface. */
+  .graph-bottom-right-controls .tree-layout-controls-expanded {
+    order: -1;
+    flex: 1 1 100%;
+    width: auto;
+    max-height: clamp(160px, calc(68dvh - 190px), 480px);
+  }
+
+  .graph-bottom-right-controls .tree-layout-controls-status {
+    order: -2;
+    flex: 1 1 100%;
+  }
+
+  /* Padding was added on top of `calc(100vw - 32px)`, pushing dialogs past the screen edge. */
+  .confirm-dialog {
+    box-sizing: border-box;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+  }
+
+  /* iOS Safari zooms the page when a focused field is under 16px. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Touch screens: the add-relative buttons sit at fixed 3D offsets from the selected person, so they
+   pile up when the camera is zoomed out. Push each one outward by a fixed pixel distance so they
+   never overlap. Uses `translate` so the shared button hover `transform` cannot cancel it. */
+@media (pointer: coarse) {
+  .node-action-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .node-action-btn--parent {
+    translate: 0 -26px;
+  }
+
+  .node-action-btn--connection {
+    translate: 26px 0;
+  }
+
+  .node-action-btn--child {
+    translate: 0 26px;
   }
 }

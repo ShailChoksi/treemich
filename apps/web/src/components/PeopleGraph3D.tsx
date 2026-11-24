@@ -15,7 +15,7 @@ import {
   resolveTreeLayoutPreferences,
   type ResolvedTreeLayoutPreferences
 } from "@treemich/shared";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_GRAPH_UI_SNAPSHOT,
   type GraphCameraIntent,
@@ -33,6 +33,7 @@ import { useGraphCamera } from "./graph/useGraphCamera";
 import { useGraphSelection } from "./graph/useGraphSelection";
 import { GraphCanvasScene } from "./graph/GraphCanvasScene";
 import { GraphSearchOverlay } from "./graph/GraphSearchOverlay";
+import { GraphFiltersToggle, useGraphControlPanels } from "./graph/GraphControlPanels";
 import type { AddRelativeSlot } from "./graph/NodeActionButtons";
 import {
   defaultGraphFilterVisibility,
@@ -226,6 +227,8 @@ const PeopleGraph3DComponent = ({
     resolveTreeLayoutPreferences(savedPreferences?.treeLayoutPreferences)
   );
   const [treeLayoutSaveError, setTreeLayoutSaveError] = useState<string | null>(null);
+  const { filtersOpen, layoutExpanded, toggleFilters, setLayoutExpanded } = useGraphControlPanels();
+  const filtersPanelId = useId();
   const { filterVisibility, showSingleFamilyTree } = graphViewPreferences;
   const [focusAnchorId, setFocusAnchorId] = useState<string | null>(null);
   const [focusAnchorLocked, setFocusAnchorLocked] = useState(false);
@@ -894,7 +897,12 @@ const PeopleGraph3DComponent = ({
           treeValidationIssueCount={treeValidationIssueCount}
           treeValidationEngineDisabled={treeValidationEngineDisabled}
         />
-        <div className="graph-bottom-left-controls">
+        <div
+          id={filtersPanelId}
+          className={`graph-bottom-left-controls graph-bottom-left-controls--collapsible ${
+            filtersOpen ? "graph-bottom-left-controls--open" : ""
+          }`}
+        >
           <label className="graph-provider-filter-control">
             <span>People</span>
             <select
@@ -932,7 +940,25 @@ const PeopleGraph3DComponent = ({
             />
           ) : null}
         </div>
+        {/* DOM order is the narrow-screen toolbar order; wide screens reverse it into a column. */}
         <div className="graph-bottom-right-controls">
+          <GraphFiltersToggle expanded={filtersOpen} controlsId={filtersPanelId} onToggle={toggleFilters} />
+          {treeLayoutSaveError ? <p className="tree-layout-controls-status">{treeLayoutSaveError}</p> : null}
+          <TreeLayoutControls
+            value={treeLayoutPreferences}
+            onPreferenceChange={handleTreeLayoutPreferenceChange}
+            onPreferenceReset={handleTreeLayoutPreferenceReset}
+            expanded={layoutExpanded}
+            onExpandedChange={setLayoutExpanded}
+          />
+          <button
+            type="button"
+            className="secondary-button graph-center-view-button"
+            onClick={frameAllNodesWithIntent}
+            aria-label="Center graph view"
+          >
+            Center<span className="graph-button-label-extra"> view (F)</span>
+          </button>
           {onNewPerson ? (
             <button
               type="button"
@@ -943,20 +969,6 @@ const PeopleGraph3DComponent = ({
               Add Person
             </button>
           ) : null}
-          <button
-            type="button"
-            className="secondary-button graph-center-view-button"
-            onClick={frameAllNodesWithIntent}
-            aria-label="Center graph view"
-          >
-            Center view (F)
-          </button>
-          <TreeLayoutControls
-            value={treeLayoutPreferences}
-            onPreferenceChange={handleTreeLayoutPreferenceChange}
-            onPreferenceReset={handleTreeLayoutPreferenceReset}
-          />
-          {treeLayoutSaveError ? <p className="tree-layout-controls-status">{treeLayoutSaveError}</p> : null}
         </div>
         <GraphSurfaceOverlays
           isLoading={isLoading}
