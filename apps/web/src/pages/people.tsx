@@ -159,45 +159,53 @@ const WorkspaceNav = memo(
     workspaceButtonRefs,
     onWorkspaceChange,
     onWorkspaceKeyDown
-  }: WorkspaceNavProps) => (
-    <aside
-      className={`workspace-nav ${leftPaneOpen ? "workspace-nav--expanded" : "workspace-nav--collapsed"}`}
-    >
-      <nav aria-label="Workspace navigation" className="workspace-nav-list">
-        {WORKSPACE_ITEMS.map((workspace, index) => {
-          const isActive = workspace.id === activeWorkspace;
-          const isDisabled = workspace.disabledReason != null;
-          return (
-            <button
-              key={workspace.id}
-              data-workspace={workspace.id}
-              data-onboarding-target={workspace.id === "interchange" ? "workspace-interchange" : undefined}
-              ref={(node) => {
-                workspaceButtonRefs.current[index] = node;
-              }}
-              type="button"
-              className={`workspace-nav-item ${isActive ? "workspace-nav-item--active" : ""} ${
-                isDisabled ? "workspace-nav-item--disabled" : ""
-              }`}
-              aria-current={isActive ? "page" : undefined}
-              disabled={isDisabled}
-              title={workspace.disabledReason}
-              onKeyDown={(event) => onWorkspaceKeyDown(event, index)}
-              onClick={() => onWorkspaceChange(workspace.id)}
-            >
-              <span className="workspace-nav-icon" aria-hidden="true">
-                {workspace.iconLabel}
-              </span>
-              <span className="workspace-nav-label">{workspace.label}</span>
-              {isDisabled && leftPaneOpen ? (
-                <span className="workspace-nav-status">{workspace.disabledReason}</span>
-              ) : null}
-            </button>
-          );
-        })}
-      </nav>
-    </aside>
-  )
+  }: WorkspaceNavProps) => {
+    useEffect(() => {
+      // On narrow screens the nav is a horizontally scrolling tab row; keep the active tab visible.
+      const activeIndex = WORKSPACE_ITEMS.findIndex((item) => item.id === activeWorkspace);
+      workspaceButtonRefs.current[activeIndex]?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    }, [activeWorkspace, workspaceButtonRefs]);
+
+    return (
+      <aside
+        className={`workspace-nav ${leftPaneOpen ? "workspace-nav--expanded" : "workspace-nav--collapsed"}`}
+      >
+        <nav aria-label="Workspace navigation" className="workspace-nav-list">
+          {WORKSPACE_ITEMS.map((workspace, index) => {
+            const isActive = workspace.id === activeWorkspace;
+            const isDisabled = workspace.disabledReason != null;
+            return (
+              <button
+                key={workspace.id}
+                data-workspace={workspace.id}
+                data-onboarding-target={workspace.id === "interchange" ? "workspace-interchange" : undefined}
+                ref={(node) => {
+                  workspaceButtonRefs.current[index] = node;
+                }}
+                type="button"
+                className={`workspace-nav-item ${isActive ? "workspace-nav-item--active" : ""} ${
+                  isDisabled ? "workspace-nav-item--disabled" : ""
+                }`}
+                aria-current={isActive ? "page" : undefined}
+                disabled={isDisabled}
+                title={workspace.disabledReason}
+                onKeyDown={(event) => onWorkspaceKeyDown(event, index)}
+                onClick={() => onWorkspaceChange(workspace.id)}
+              >
+                <span className="workspace-nav-icon" aria-hidden="true">
+                  {workspace.iconLabel}
+                </span>
+                <span className="workspace-nav-label">{workspace.label}</span>
+                {isDisabled && leftPaneOpen ? (
+                  <span className="workspace-nav-status">{workspace.disabledReason}</span>
+                ) : null}
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+    );
+  }
 );
 
 const GraphContainer = memo(

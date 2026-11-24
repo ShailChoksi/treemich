@@ -1,7 +1,7 @@
 /**
  * @file Thin read-only 3D Focus Share graph — reuses owner scene/camera stack + chrome.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   defaultTreeLayoutPreferences,
   resolveTreeLayoutPreferences,
@@ -16,6 +16,7 @@ import { guestFocusShareThumbnailUrl } from "../../lib/api";
 import { ErrorBoundary } from "../ErrorBoundary";
 import { FocusSelectionChrome } from "../graph/FocusSelectionChrome";
 import { GraphCanvasScene } from "../graph/GraphCanvasScene";
+import { GraphFiltersToggle, useGraphControlPanels } from "../graph/GraphControlPanels";
 import { GraphLayerControls } from "../graph/GraphLayerControls";
 import { GraphSceneProvider } from "../graph/GraphSceneContext";
 import type { GraphVisibilityBucket } from "../graph/graphVisibility";
@@ -72,6 +73,8 @@ export const GuestPeopleGraph3D = ({
     defaultGraphFilterVisibility
   );
   const [peopleViewFilter, setPeopleViewFilter] = useState<GuestPeopleViewFilter>("all");
+  const { filtersOpen, layoutExpanded, toggleFilters, setLayoutExpanded } = useGraphControlPanels();
+  const filtersPanelId = useId();
   const [treeLayoutPreferences, setTreeLayoutPreferences] = useState<ResolvedTreeLayoutPreferences>(() =>
     resolveTreeLayoutPreferences(layout.treeLayoutPreferences)
   );
@@ -235,7 +238,12 @@ export const GuestPeopleGraph3D = ({
   }
   return (
     <div className="guest-people-graph-3d graph-surface" data-testid="guest-graph-3d">
-      <div className="graph-bottom-left-controls">
+      <div
+        id={filtersPanelId}
+        className={`graph-bottom-left-controls graph-bottom-left-controls--collapsible ${
+          filtersOpen ? "graph-bottom-left-controls--open" : ""
+        }`}
+      >
         <label className="graph-provider-filter-control">
           <span>People</span>
           <select
@@ -276,19 +284,22 @@ export const GuestPeopleGraph3D = ({
         />
       </div>
       <div className="graph-bottom-right-controls guest-graph-camera-controls">
+        <GraphFiltersToggle expanded={filtersOpen} controlsId={filtersPanelId} onToggle={toggleFilters} />
+        <TreeLayoutControls
+          value={treeLayoutPreferences}
+          onPreferenceChange={handleTreeLayoutPreferenceChange}
+          onPreferenceReset={handleTreeLayoutPreferenceReset}
+          expanded={layoutExpanded}
+          onExpandedChange={setLayoutExpanded}
+        />
         <button
           type="button"
           className="secondary-button graph-center-view-button"
           onClick={frameAllNodes}
           aria-label="Center graph view"
         >
-          Center view (F)
+          Center<span className="graph-button-label-extra"> view (F)</span>
         </button>
-        <TreeLayoutControls
-          value={treeLayoutPreferences}
-          onPreferenceChange={handleTreeLayoutPreferenceChange}
-          onPreferenceReset={handleTreeLayoutPreferenceReset}
-        />
       </div>
       <ErrorBoundary
         errorContext="Guest graph canvas"
